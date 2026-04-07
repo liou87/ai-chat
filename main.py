@@ -1,34 +1,10 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
+from fastapi import FastAPI
+from routers.chat import router as chat_router
 
-load_dotenv()
+# 创建主应用
+app = FastAPI()
 
-client = OpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com"
-)
-
-def chat(messages):
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=messages
-    )
-    return response.choices[0].message.content
-
-def main():
-    messages = []
-    print("开始对话，输入 quit 退出")
-    
-    while True:
-        user_input = input("你：")
-        if user_input == "quit":
-            break
-        
-        messages.append({"role": "user", "content": user_input})
-        reply = chat(messages)
-        messages.append({"role": "assistant", "content": reply})
-        
-        print(f"AI：{reply}\n")
-
-main()
+# 把 chat 路由挂载到主 app
+# prefix="/api" 表示所有 chat 路由前面加 /api
+# 所以接口地址变成 /api/chat
+app.include_router(chat_router, prefix="/api")
