@@ -1,17 +1,23 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from services.llm import ask_deepseek
+from typing import List
 
-# APIRouter 是 FastAPI 的路由模块
-# 作用和 app 一样可以注册接口，但它是"子路由"，最终挂载到主 app 上
+
 router = APIRouter()
 
-# 定义请求体结构，message 必须是字符串
+# 单条消息的结构
+class Message(BaseModel):
+    role: str
+    content: str
+
+# 请求体：消息列表
 class ChatRequest(BaseModel):
-    message: str
+    messages: List[Message]
 
 @router.post("/chat")
 def chat(request: ChatRequest):
-    # 调用 service 层，不在这里写业务逻辑
-    reply = ask_deepseek(request.message)
+    # 把 Pydantic 对象转成字典列表，DeepSeek 需要的格式
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    reply = ask_deepseek(messages)
     return {"reply": reply}
