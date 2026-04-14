@@ -1,23 +1,57 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from services.llm import ask_deepseek
 from typing import List
-
+from services.llm import ask_deepseek
+from database import SessionLocal, ChatSession, Message
+from typing import List, Optional
 
 router = APIRouter()
 
-# 单条消息的结构
-class Message(BaseModel):
+class MessageSchema(BaseModel):
     role: str
     content: str
 
-# 请求体：消息列表
 class ChatRequest(BaseModel):
-    messages: List[Message]
+    session_id: Optional[int] = None   # 可选，没有就新建会话
+    messages: List[MessageSchema]
 
 @router.post("/chat")
 async def chat(request: ChatRequest):
-    # 把 Pydantic 对象转成字典列表，DeepSeek 需要的格式
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    reply = await ask_deepseek(messages)
-    return {"reply": reply}
+    db = SessionLocal()
+    
+    try:
+        # 没有 session_id 就新建一个会话
+        if request.session_id is None:
+            session = ChatSession(title=request.messages[0].content[:20])
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+            session_id = session.id
+        else:
+            session_id = request.session_id
+
+        # 把用户最新一条消息存库（最后一条 role=user 的消息）
+        last_user_msg = request.messages[-1]
+        db.add(Message(
+            session_id=session_id,
+            role=last_user_msg.role,
+            content=last_user_msg.content
+        ))
+        db.commit()
+
+        # 调用 AI
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        reply = await ask_deepseek(messages)
+
+        # 把 AI 回复存库
+        db.add(Message(
+            session_id=session_id,
+            role="assistant",
+            content=reply
+        ))
+        db.commit()
+
+        return {"session_id": session_id, "reply": reply}
+    
+    finally:
+        db.close()  # 无论成功失败都关闭数据库连接
