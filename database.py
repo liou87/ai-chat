@@ -19,6 +19,8 @@ class ChatSession(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(100), default="新对话")          # 会话标题
     created_at = Column(DateTime, default=datetime.now)    # 创建时间
+    def __repr__(self):
+        return f"ChatSession(id={self.id}, title={self.title!r})"
 
 # messages 表：存储每条消息
 class Message(Base):
@@ -29,6 +31,8 @@ class Message(Base):
     role = Column(String(20))                              # user 或 assistant
     content = Column(Text)                                 # 消息内容
     created_at = Column(DateTime, default=datetime.now)    # 创建时间
+    def __repr__(self):
+        return f"Message(id={self.id}, session_id={self.session_id}, role={self.role!r}, content={self.content!r})"
 
 # 创建所有表
 def init_db():
