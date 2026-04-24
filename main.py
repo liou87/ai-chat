@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers.chat import router as chat_router
 from database import init_db
 from routers.sessions import router as sessions_router
+import logging
 
 app = FastAPI()
 
@@ -17,3 +18,10 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api")
 init_db()
 app.include_router(sessions_router, prefix="/api")
+
+# using logging to record 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
