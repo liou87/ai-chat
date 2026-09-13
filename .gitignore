@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 chat.db
+.venv/
 
 # frontend
 frontend/node_modules

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
-
-const API = "https://ai-chat-production-5293.up.railway.app/api"
+import { API, authHeaders } from "./api"
+import TaskPanel from "./components/TaskPanel"
+import NotePanel from "./components/NotePanel"
 
 function App() {
   const [sessions, setSessions] = useState([])          // 会话列表
@@ -9,6 +10,7 @@ function App() {
   const [messages, setMessages] = useState([])          // 当前对话消息
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [workbenchRefreshKey, setWorkbenchRefreshKey] = useState(0)  // agent 用过工具后 +1，触发任务/笔记面板刷新
 
   // 页面加载时获取所有会话
   useEffect(() => {
@@ -16,7 +18,7 @@ function App() {
   }, [])
 
   const fetchSessions = async () => {
-    const res = await fetch(`${API}/sessions`)
+    const res = await fetch(`${API}/sessions`, { headers: authHeaders })
     const data = await res.json()
     setSessions(data)
   }
@@ -24,7 +26,7 @@ function App() {
   // 点击会话，加载该会话的消息
   const loadSession = async (sessionId) => {
     setCurrentSession(sessionId)
-    const res = await fetch(`${API}/sessions/${sessionId}/messages`)
+    const res = await fetch(`${API}/sessions/${sessionId}/messages`, { headers: authHeaders })
     const data = await res.json()
     setMessages(data)
   }
@@ -42,12 +44,25 @@ function App() {
 
   const res = await fetch(`${API}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify({
       session_id: currentSession,
       messages: newMessages
     })
   })
+
+  if (!res.ok) {
+    setMessages(prev => {
+      const updated = [...prev]
+      updated[updated.length - 1] = { role: "assistant", content: "[请求失败，请稍后再试]" }
+      return updated
+    })
+    setLoading(false)
+    return
+  }
+
+  const newSessionId = res.headers.get("X-Session-Id")
+  const toolUsed = res.headers.get("X-Tool-Used") === "true"
 
   // 读取流式响应
   const reader = res.body.getReader()
@@ -69,9 +84,14 @@ function App() {
     })
   }
 
-  // 流结束后刷新侧边栏
+  // 流结束后刷新侧边栏，并记录新会话 id
   if (!currentSession) {
+    if (newSessionId) setCurrentSession(Number(newSessionId))
     fetchSessions()
+  }
+  // agent 这一轮调用过工具（比如改了任务/笔记），刷新工作台面板
+  if (toolUsed) {
+    setWorkbenchRefreshKey(k => k + 1)
   }
   setLoading(false)
 }
@@ -174,6 +194,10 @@ const exportChat = (format) => {
           </button>
         </div>
       </div>
+
+      {/* 工作台面板 */}
+      <TaskPanel refreshKey={workbenchRefreshKey} />
+      <NotePanel refreshKey={workbenchRefreshKey} />
     </div>
   )
 }
