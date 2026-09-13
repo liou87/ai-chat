@@ -1,1 +1,10 @@
 .env
+__pycache__/
+*.pyc
+chat.db
+
+# frontend
+frontend/node_modules
+frontend/dist
+frontend/dist-ssr
+frontend/*.local
