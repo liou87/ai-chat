@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { API, authHeaders } from "../api"
+import { colors, inputStyle, primaryButtonStyle, iconButtonStyle } from "../theme"
 
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
@@ -45,23 +46,28 @@ function TaskPanel({ refreshKey }) {
     fetchTasks()
   }
 
-  return (
-    <div style={{ width: 280, borderLeft: "1px solid #ddd", padding: 16, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-      <h3 style={{ marginTop: 0, marginBottom: 12 }}>任务</h3>
+  const pendingCount = tasks.filter(t => !t.done).length
 
+  return (
+    <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         <input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
           onKeyDown={e => e.key === "Enter" && addTask()}
           placeholder="新任务..."
-          style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1px solid #ccc" }}
+          style={{ ...inputStyle, flex: 1 }}
         />
-        <button onClick={addTask} style={{ padding: "6px 10px", borderRadius: 6 }}>+</button>
+        <button onClick={addTask} style={primaryButtonStyle}>+</button>
       </div>
 
-      {loading && tasks.length === 0 && <div style={{ color: "#999" }}>加载中...</div>}
-      {!loading && tasks.length === 0 && <div style={{ color: "#999" }}>暂无任务</div>}
+      {!loading && tasks.length > 0 && (
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
+          {pendingCount} 条未完成 / 共 {tasks.length} 条
+        </div>
+      )}
+      {loading && tasks.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
+      {!loading && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
 
       {tasks.map(t => (
         <div
@@ -70,31 +76,25 @@ function TaskPanel({ refreshKey }) {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            padding: "6px 0",
-            borderBottom: "1px solid #f0f0f0",
+            padding: "8px 0",
+            borderBottom: `1px solid ${colors.borderLight}`,
           }}
         >
           <input type="checkbox" checked={t.done} onChange={() => !t.done && completeTask(t.id)} disabled={t.done} />
           <span style={{
             flex: 1,
             textDecoration: t.done ? "line-through" : "none",
-            color: t.done ? "#999" : "#000",
+            color: t.done ? colors.textMuted : "#000",
             fontSize: 14,
           }}>
             {t.title}
             {t.due_at && (
-              <div style={{ fontSize: 11, color: "#999" }}>
+              <div style={{ fontSize: 11, color: colors.textMuted }}>
                 截止：{new Date(t.due_at).toLocaleString()}
               </div>
             )}
           </span>
-          <button
-            onClick={() => deleteTask(t.id)}
-            style={{ border: "none", background: "none", color: "#c00", cursor: "pointer" }}
-            title="删除"
-          >
-            ×
-          </button>
+          <button onClick={() => deleteTask(t.id)} style={iconButtonStyle} title="删除">×</button>
         </div>
       ))}
     </div>

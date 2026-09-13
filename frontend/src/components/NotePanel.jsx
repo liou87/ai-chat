@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react"
 import { API, authHeaders } from "../api"
+import { colors, inputStyle, buttonStyle, primaryButtonStyle, iconButtonStyle } from "../theme"
 
-// 笔记 / 日记复盘面板：两个 tab 共用同一套笔记数据（category 区分），
-// 搜索框走语义检索并展示相似度分数，日记 tab 下额外提供"生成本周复盘"入口。
-function NotePanel({ refreshKey, onRequestWeeklyReview }) {
-  const [category, setCategory] = useState("note")  // note | journal
+// 笔记 / 日记复盘共用的内容面板，category 由外层 WorkbenchPanel 的 tab 决定。
+// 搜索框走语义检索并展示相似度分数，journal 分类下额外提供"生成本周复盘"入口。
+function NotePanel({ refreshKey, category, onRequestWeeklyReview }) {
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -46,7 +46,14 @@ function NotePanel({ refreshKey, onRequestWeeklyReview }) {
   }
 
   useEffect(() => {
+    setSearchQuery("")
+    setShowForm(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category])
+
+  useEffect(() => {
     refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, category])
 
   const addNote = async () => {
@@ -72,32 +79,9 @@ function NotePanel({ refreshKey, onRequestWeeklyReview }) {
   }
 
   return (
-    <div style={{ width: 300, borderLeft: "1px solid #ddd", padding: 16, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-        {[["note", "笔记"], ["journal", "日记"]].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => { setCategory(key); setSearchQuery(""); setShowForm(false) }}
-            style={{
-              flex: 1,
-              padding: "6px 0",
-              borderRadius: 6,
-              border: "1px solid #ccc",
-              background: category === key ? "#0084ff" : "white",
-              color: category === key ? "white" : "black",
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
+    <div>
       {category === "journal" && (
-        <button
-          onClick={onRequestWeeklyReview}
-          style={{ marginBottom: 12, padding: "6px 8px", borderRadius: 6, border: "1px solid #0084ff", color: "#0084ff", background: "white" }}
-        >
+        <button onClick={onRequestWeeklyReview} style={{ ...buttonStyle, width: "100%", marginBottom: 12, color: colors.primary, borderColor: colors.primary }}>
           生成本周复盘
         </button>
       )}
@@ -108,13 +92,13 @@ function NotePanel({ refreshKey, onRequestWeeklyReview }) {
           onChange={e => setSearchQuery(e.target.value)}
           onKeyDown={e => e.key === "Enter" && refresh()}
           placeholder={category === "journal" ? "语义搜索日记..." : "语义搜索笔记..."}
-          style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1px solid #ccc" }}
+          style={{ ...inputStyle, flex: 1 }}
         />
-        <button onClick={refresh} style={{ padding: "6px 10px", borderRadius: 6 }}>搜</button>
+        <button onClick={refresh} style={buttonStyle}>搜</button>
       </div>
 
       {!showForm ? (
-        <button onClick={() => setShowForm(true)} style={{ marginBottom: 12, padding: "6px 8px", borderRadius: 6 }}>
+        <button onClick={() => setShowForm(true)} style={{ ...buttonStyle, width: "100%", marginBottom: 12 }}>
           + {category === "journal" ? "写今天的日记" : "新建笔记"}
         </button>
       ) : (
@@ -124,7 +108,7 @@ function NotePanel({ refreshKey, onRequestWeeklyReview }) {
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
               placeholder="标题"
-              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #ccc" }}
+              style={inputStyle}
             />
           )}
           <textarea
@@ -132,36 +116,30 @@ function NotePanel({ refreshKey, onRequestWeeklyReview }) {
             onChange={e => setNewContent(e.target.value)}
             placeholder="正文"
             rows={3}
-            style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #ccc", resize: "vertical" }}
+            style={{ ...inputStyle, resize: "vertical" }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={addNote} style={{ flex: 1, padding: "6px 8px", borderRadius: 6 }}>保存</button>
-            <button onClick={() => setShowForm(false)} style={{ padding: "6px 8px", borderRadius: 6 }}>取消</button>
+            <button onClick={addNote} style={{ ...primaryButtonStyle, flex: 1 }}>保存</button>
+            <button onClick={() => setShowForm(false)} style={buttonStyle}>取消</button>
           </div>
         </div>
       )}
 
-      {loading && <div style={{ color: "#999" }}>加载中...</div>}
-      {!loading && notes.length === 0 && <div style={{ color: "#999" }}>暂无内容</div>}
+      {loading && <div style={{ color: colors.textMuted }}>加载中...</div>}
+      {!loading && notes.length === 0 && <div style={{ color: colors.textMuted }}>暂无内容</div>}
 
       {notes.map(n => (
-        <div key={n.id} style={{ padding: "8px 0", borderBottom: "1px solid #f0f0f0" }}>
+        <div key={n.id} style={{ padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <strong style={{ fontSize: 14 }}>{n.title}</strong>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {n.score !== undefined && (
-                <span style={{ fontSize: 11, color: "#0084ff" }}>{n.score.toFixed(2)}</span>
+                <span style={{ fontSize: 11, color: colors.primary }}>{n.score.toFixed(2)}</span>
               )}
-              <button
-                onClick={() => deleteNote(n.id)}
-                style={{ border: "none", background: "none", color: "#c00", cursor: "pointer" }}
-                title="删除"
-              >
-                ×
-              </button>
+              <button onClick={() => deleteNote(n.id)} style={iconButtonStyle} title="删除">×</button>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: "#666", marginTop: 4, whiteSpace: "pre-wrap" }}>
+          <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4, whiteSpace: "pre-wrap" }}>
             {n.content}
           </div>
         </div>
