@@ -76,6 +76,18 @@ class Note(Base):
     def __repr__(self):
         return f"Note(id={self.id}, title={self.title!r}, category={self.category!r})"
 
+# reminders 表：日程提醒
+class Reminder(Base):
+    __tablename__ = "reminders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    message = Column(String(300))
+    remind_at = Column(DateTime)
+    fired = Column(Boolean, default=False)                    # 到期后由后台任务置 True，前端据此弹提示
+    created_at = Column(DateTime, default=datetime.now)
+    def __repr__(self):
+        return f"Reminder(id={self.id}, message={self.message!r}, remind_at={self.remind_at})"
+
 # 创建所有表
 async def init_db():
     async with engine.begin() as conn:

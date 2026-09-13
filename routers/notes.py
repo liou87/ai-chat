@@ -27,9 +27,9 @@ async def create_note(request: CreateNoteRequest):
 
 
 @router.get("/notes/search")
-async def search_notes(query: str, top_k: int = 5):
+async def search_notes(query: str, top_k: int = 5, category: Optional[str] = None):
     async with SessionLocal() as db:
-        return await notes_service.search_notes(db, query=query, top_k=top_k)
+        return await notes_service.search_notes(db, query=query, top_k=top_k, category=category)
 
 
 @router.delete("/notes/{note_id}")

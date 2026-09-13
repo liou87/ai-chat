@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,13 +20,22 @@ def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
     return data
 
 
-async def create_note(db: AsyncSession, title: str, content: str, category: str = "note") -> dict:
+async def create_note(db: AsyncSession, title: str, content: str, category: str = "note",
+                       created_at: Optional[datetime] = None) -> dict:
     embedding = await embed_text(f"{title}\n{content}")
     note = Note(title=title, content=content, category=category, embedding=json.dumps(embedding))
+    if created_at:
+        note.created_at = created_at
     db.add(note)
     await db.commit()
     await db.refresh(note)
     return _serialize(note)
+
+
+async def create_journal_entry(db: AsyncSession, content: str, entry_date: Optional[datetime] = None) -> dict:
+    entry_date = entry_date or datetime.now()
+    title = f"日记 {entry_date.strftime('%Y-%m-%d')}"
+    return await create_note(db, title=title, content=content, category="journal", created_at=entry_date)
 
 
 async def list_notes(db: AsyncSession, category: Optional[str] = None) -> list[dict]:

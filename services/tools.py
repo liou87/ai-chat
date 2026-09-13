@@ -2,6 +2,9 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import tasks as tasks_service
 from services import notes as notes_service
+from services import review as review_service
+from services import reminders as reminders_service
+from services import websearch as websearch_service
 
 
 async def _create_task(db: AsyncSession, args: dict) -> dict:
@@ -40,6 +43,43 @@ async def _save_note(db: AsyncSession, args: dict) -> dict:
 async def _search_notes(db: AsyncSession, args: dict) -> dict:
     results = await notes_service.search_notes(db, query=args["query"], top_k=args.get("top_k", 5))
     return {"notes": results}
+
+
+async def _add_journal_entry(db: AsyncSession, args: dict) -> dict:
+    entry_date = None
+    if args.get("date"):
+        try:
+            entry_date = datetime.fromisoformat(args["date"])
+        except ValueError:
+            entry_date = None
+    return await notes_service.create_journal_entry(db, content=args["content"], entry_date=entry_date)
+
+
+async def _get_weekly_review(db: AsyncSession, args: dict) -> dict:
+    return await review_service.get_weekly_review(db)
+
+
+async def _set_reminder(db: AsyncSession, args: dict) -> dict:
+    try:
+        remind_at = datetime.fromisoformat(args["remind_at"])
+    except (KeyError, ValueError):
+        return {"error": "remind_at 格式不对，需要 ISO 8601，例如 2026-09-20T18:00:00"}
+    return await reminders_service.create_reminder(db, message=args["message"], remind_at=remind_at)
+
+
+async def _list_reminders(db: AsyncSession, args: dict) -> dict:
+    reminders = await reminders_service.list_reminders(db)
+    return {"reminders": reminders}
+
+
+async def _cancel_reminder(db: AsyncSession, args: dict) -> dict:
+    ok = await reminders_service.cancel_reminder(db, reminder_id=int(args["reminder_id"]))
+    return {"deleted": ok}
+
+
+async def _web_search(db: AsyncSession, args: dict) -> dict:
+    results = await websearch_service.web_search(args["query"], max_results=args.get("max_results", 5))
+    return {"results": results}
 
 
 # 每个工具：OpenAI/DeepSeek function calling 的 JSON Schema 定义 + 对应的异步处理函数
@@ -155,6 +195,106 @@ TOOLS = [
             },
         },
         "handler": _search_notes,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "add_journal_entry",
+                "description": "记一条日记/复盘条目",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string", "description": "日记正文"},
+                        "date": {
+                            "type": "string",
+                            "description": "这条日记对应的日期，ISO 8601 格式，例如 2026-09-14，不确定就留空（默认今天）",
+                        },
+                    },
+                    "required": ["content"],
+                },
+            },
+        },
+        "handler": _add_journal_entry,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_weekly_review",
+                "description": "获取近 7 天的任务完成情况、日记、新增笔记的聚合数据，用于生成周复盘总结",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "handler": _get_weekly_review,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "set_reminder",
+                "description": "设置一条日程提醒，到期后会在前端弹出提示",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": {"type": "string", "description": "提醒内容"},
+                        "remind_at": {
+                            "type": "string",
+                            "description": "提醒时间，ISO 8601 格式，例如 2026-09-20T18:00:00",
+                        },
+                    },
+                    "required": ["message", "remind_at"],
+                },
+            },
+        },
+        "handler": _set_reminder,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "list_reminders",
+                "description": "查询所有设置过的提醒",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "handler": _list_reminders,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "cancel_reminder",
+                "description": "取消某条提醒。如果不知道 id，先调用 list_reminders 查出来",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reminder_id": {"type": "integer", "description": "提醒 id"},
+                    },
+                    "required": ["reminder_id"],
+                },
+            },
+        },
+        "handler": _cancel_reminder,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "联网搜索最新信息。只有当问题涉及实时/最新内容（新闻、版本号、价格等），"
+                                "且不是笔记库里能查到的个人信息时才用这个",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "搜索关键词"},
+                        "max_results": {"type": "integer", "description": "返回结果数，默认 5"},
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        "handler": _web_search,
     },
 ]
 

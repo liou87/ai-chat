@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
@@ -12,12 +13,23 @@ from database import SessionLocal, ChatSession, Message
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
-SYSTEM_PROMPT = (
-    "你是用户的个人工作台助手，可以帮忙管理任务清单，也能帮用户记笔记、检索笔记。"
-    "涉及新建、查询、完成、删除任务时，必须调用对应的工具来操作，不要凭空编造任务数据或直接臆测结果。"
-    "用户让你记点什么、记录下来时，调用 save_note；用户问的问题可能之前记过笔记，"
-    "先调用 search_notes 检索一下，再结合检索结果回答，不要凭记忆瞎编。"
-)
+
+def _build_system_prompt() -> str:
+    now = datetime.now()
+    return (
+        f"你是用户的个人工作台助手，当前时间是 {now.strftime('%Y-%m-%d %H:%M:%S')}（{'周' + '一二三四五六日'[now.weekday()]}）。"
+        "可以帮忙管理任务清单，记笔记、检索笔记，记日记/复盘，设置日程提醒，以及联网搜索。"
+        "涉及新建、查询、完成、删除任务时，必须调用对应的工具来操作，不要凭空编造任务数据或直接臆测结果。"
+        "用户让你记点什么、记录下来时，调用 save_note；用户问的问题可能之前记过笔记，"
+        "先调用 search_notes 检索一下，再结合检索结果回答，不要凭记忆瞎编。"
+        "用户想记日记/复盘/反思时，调用 add_journal_entry；用户想要周复盘、总结这周做了什么时，"
+        "先调用 get_weekly_review 拿到这周的任务/日记/笔记原始数据，再自己组织语言生成总结，"
+        "不要在工具返回的数据之外编造具体的事项。"
+        "用户想要提醒/闹钟时，调用 set_reminder，注意把「明天」「下周三」这类相对时间，"
+        "基于上面给出的当前时间换算成具体的 ISO 8601 时间。"
+        "如果问题涉及实时信息（新闻、最新版本、价格等）且笔记里查不到，调用 web_search，"
+        "并在回答里说明信息来自网络搜索。"
+    )
 
 class MessageSchema(BaseModel):
     role: str
@@ -44,7 +56,7 @@ async def _get_turn_index(db, session_id: int) -> int:
 
 
 def _build_messages(request: ChatRequest) -> list:
-    return [{"role": "system", "content": SYSTEM_PROMPT}] + \
+    return [{"role": "system", "content": _build_system_prompt()}] + \
            [{"role": m.role, "content": m.content} for m in request.messages]
 
 

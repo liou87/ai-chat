@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown"
 import { API, authHeaders } from "./api"
 import TaskPanel from "./components/TaskPanel"
 import NotePanel from "./components/NotePanel"
+import ReminderBanner from "./components/ReminderBanner"
 
 function App() {
   const [sessions, setSessions] = useState([])          // 会话列表
@@ -31,12 +32,13 @@ function App() {
     setMessages(data)
   }
 
- const sendMessage = async () => {
-  if (!input.trim()) return
+ const sendMessage = async (presetText) => {
+  const text = presetText ?? input
+  if (!text.trim()) return
 
-  const newMessages = [...messages, { role: "user", content: input }]
+  const newMessages = [...messages, { role: "user", content: text }]
   setMessages(newMessages)
-  setInput("")
+  if (!presetText) setInput("")
   setLoading(true)
 
   // 先加一条空的 AI 消息占位
@@ -125,8 +127,10 @@ const exportChat = (format) => {
 }
 
   return (
-    <div style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
-      
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif" }}>
+      <ReminderBanner />
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+
       {/* 侧边栏 */}
       <div style={{ width: 240, borderRight: "1px solid #ddd", padding: 16, overflowY: "auto" }}>
         <button
@@ -189,7 +193,7 @@ const exportChat = (format) => {
           <button onClick={() => exportChat("md")} style={{ padding: "8px 12px", borderRadius: 8 }}>
             导出 MD
           </button>
-          <button onClick={sendMessage} style={{ padding: "8px 16px", borderRadius: 8 }}>
+          <button onClick={() => sendMessage()} style={{ padding: "8px 16px", borderRadius: 8 }}>
             发送
           </button>
         </div>
@@ -197,7 +201,11 @@ const exportChat = (format) => {
 
       {/* 工作台面板 */}
       <TaskPanel refreshKey={workbenchRefreshKey} />
-      <NotePanel refreshKey={workbenchRefreshKey} />
+      <NotePanel
+        refreshKey={workbenchRefreshKey}
+        onRequestWeeklyReview={() => sendMessage("请帮我生成这周的复盘总结")}
+      />
+      </div>
     </div>
   )
 }
