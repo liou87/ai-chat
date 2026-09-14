@@ -1,6 +1,6 @@
 # AI Chat
 
-基于 DeepSeek API 的个人工作台 agent 平台：聊天是入口，AI 通过 function calling 管理任务、笔记（语义检索）、日记复盘、日程提醒，并能联网搜索。详细架构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+基于 DeepSeek API 的个人工作台 agent 平台：聊天是入口，AI 通过 function calling 管理任务、笔记（语义检索）、日记复盘、日程提醒，并能联网搜索。详细架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 功能特性
 
@@ -55,4 +55,4 @@ AI-Chat/
 └── requirements.txt
 ```
 
-完整的架构说明、数据模型、agent 工具清单、API 列表、已知限制见 **[ARCHITECTURE.md](ARCHITECTURE.md)**。
+完整的架构说明、数据模型、agent 工具清单、API 列表、已知限制见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
