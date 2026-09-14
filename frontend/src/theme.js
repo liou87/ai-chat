@@ -10,6 +10,7 @@ export const colors = {
   warningBorder: "#ffe69c",
   warningText: "#856404",
   surface: "#ffffff",
+  text: "#000000",
 }
 
 export const radiusSm = 6
@@ -21,6 +22,8 @@ export const inputStyle = {
   fontSize: 14,
   outline: "none",
   fontFamily: "inherit",
+  background: colors.surface,
+  color: colors.text,
 }
 
 export const buttonStyle = {
@@ -28,6 +31,7 @@ export const buttonStyle = {
   borderRadius: radiusSm,
   border: `1px solid ${colors.border}`,
   background: colors.surface,
+  color: colors.text,
   cursor: "pointer",
   fontSize: 14,
 }

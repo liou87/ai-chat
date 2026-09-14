@@ -127,7 +127,7 @@ function App() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif", background: "#fff", color: "#000" }}>
       <ReminderBanner refreshKey={workbenchRefreshKey} />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
