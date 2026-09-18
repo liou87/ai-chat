@@ -1,10 +1,9 @@
-import json
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Note
-from services.embeddings import embed_text, cosine_similarity
+from services.embeddings import embed_text
 
 
 def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
@@ -23,7 +22,7 @@ def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
 async def create_note(db: AsyncSession, title: str, content: str, category: str = "note",
                        created_at: Optional[datetime] = None) -> dict:
     embedding = await embed_text(f"{title}\n{content}")
-    note = Note(title=title, content=content, category=category, embedding=json.dumps(embedding))
+    note = Note(title=title, content=content, category=category, embedding=embedding)
     if created_at:
         note.created_at = created_at
     db.add(note)
@@ -58,18 +57,15 @@ async def delete_note(db: AsyncSession, note_id: int) -> bool:
 
 async def search_notes(db: AsyncSession, query: str, top_k: int = 5, category: Optional[str] = None) -> list[dict]:
     """
-    个人笔记规模（几百条以内）没必要上专门的向量库，
-    直接把这个分类下的笔记都取出来，在内存里算余弦相似度排序即可。
+    语义检索交给 Postgres + pgvector 做：算出 query 的向量后，
+    用余弦距离直接在数据库端排序取 top_k，不用再把全表拉回内存自己算。
     """
-    q = select(Note)
-    if category:
-        q = q.where(Note.category == category)
-    result = await db.execute(q)
-    notes = [n for n in result.scalars().all() if n.embedding]
-    if not notes:
-        return []
-
     query_embedding = await embed_text(query)
-    scored = [(cosine_similarity(query_embedding, json.loads(n.embedding)), n) for n in notes]
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-    return [_serialize(n, with_score=score) for score, n in scored[:top_k]]
+    distance = Note.embedding.cosine_distance(query_embedding).label("distance")
+    stmt = select(Note, distance).where(Note.embedding.is_not(None))
+    if category:
+        stmt = stmt.where(Note.category == category)
+    stmt = stmt.order_by(distance).limit(top_k)
+
+    result = await db.execute(stmt)
+    return [_serialize(note, with_score=1 - dist) for note, dist in result.all()]

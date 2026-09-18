@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import numpy as np
 from fastembed import TextEmbedding
 
 logger = logging.getLogger(__name__)
@@ -27,11 +26,3 @@ def _embed_sync(text: str) -> list:
 async def embed_text(text: str) -> list:
     """在线程池里跑 CPU 密集的 embedding 推理，不阻塞事件循环。"""
     return await asyncio.to_thread(_embed_sync, text)
-
-
-def cosine_similarity(a: list, b: list) -> float:
-    va, vb = np.array(a), np.array(b)
-    denom = np.linalg.norm(va) * np.linalg.norm(vb)
-    if denom == 0:
-        return 0.0
-    return float(np.dot(va, vb) / denom)

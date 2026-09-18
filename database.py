@@ -1,10 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
+import os
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Index, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from pgvector.sqlalchemy import Vector
 from datetime import datetime
 
-# 创建异步 SQLite 引擎，文件保存在当前目录的 chat.db
-engine = create_async_engine("sqlite+aiosqlite:///chat.db", echo=False)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://aichat:aichat@localhost:5432/aichat")
+
+# 异步 Postgres 引擎
+engine = create_async_engine(DATABASE_URL, echo=False)
 
 # 所有数据库模型的基类
 Base = declarative_base()
@@ -62,7 +66,8 @@ class AgentTrace(Base):
     def __repr__(self):
         return f"AgentTrace(session_id={self.session_id}, type={self.type!r}, name={self.name!r})"
 
-# notes 表：笔记 / 知识库（category='note'）和日记复盘（category='journal'）共用
+# notes 表：笔记 / 知识库（category='note'）和日记复盘（category='journal'）共用，
+# 也是 Notion 只读导入（source='notion'）落地的表
 class Note(Base):
     __tablename__ = "notes"
 
@@ -70,11 +75,22 @@ class Note(Base):
     title = Column(String(200))
     content = Column(Text)
     category = Column(String(20), default="note")             # note / journal
-    embedding = Column(Text, nullable=True)                     # JSON 序列化的向量，用于语义检索
+    embedding = Column(Vector(512), nullable=True)             # pgvector 原生向量列，512 维对应 bge-small-zh-v1.5
+    source = Column(String(20), default="local")               # local / notion
+    external_id = Column(String(100), nullable=True, index=True)   # 来源系统里的 id（比如 Notion 页面 id）
+    external_updated_at = Column(DateTime, nullable=True)       # 来源系统的最后编辑时间（UTC），用于增量同步判断
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     def __repr__(self):
         return f"Note(id={self.id}, title={self.title!r}, category={self.category!r})"
+
+# HNSW 向量索引，配合 cosine_distance 查询用；声明在这里方便以后 Alembic 对比出漂移
+Index(
+    "ix_notes_embedding_hnsw",
+    Note.embedding,
+    postgresql_using="hnsw",
+    postgresql_ops={"embedding": "vector_cosine_ops"},
+)
 
 # reminders 表：日程提醒
 class Reminder(Base):
@@ -88,7 +104,10 @@ class Reminder(Base):
     def __repr__(self):
         return f"Reminder(id={self.id}, message={self.message!r}, remind_at={self.remind_at})"
 
-# 创建所有表
+# 只负责确保 pgvector 扩展存在，每次启动跑一遍也没问题（幂等）。
+# 表结构本身不在这里建，改由 Alembic 管理（首次用 alembic upgrade head 建表，
+# 以后任何表结构改动都是改 model 再 alembic revision --autogenerate），
+# 避免 create_all 和迁移工具各管一套、互相打架。
 async def init_db():
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

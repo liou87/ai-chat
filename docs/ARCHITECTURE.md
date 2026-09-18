@@ -15,11 +15,12 @@
 | 后端框架 | FastAPI | 全异步路由 |
 | ASGI Server | Uvicorn | |
 | ORM | SQLAlchemy 2.0 | 用的是异步扩展 sqlalchemy.ext.asyncio |
-| 数据库驱动 | aiosqlite | SQLite 的异步驱动 |
-| 数据库 | SQLite，单文件 chat.db | 个人规模项目，没有上独立数据库服务 |
+| 数据库驱动 | asyncpg | PostgreSQL 的异步驱动 |
+| 数据库 | PostgreSQL，托管在 Supabase | 原计划本地 Docker 跑，Docker Desktop 起不来后改用 Supabase 免费云端实例 |
+| 数据库迁移 | Alembic | 表结构变更走 autogenerate + upgrade，不再手动建表或者删库重建 |
 | LLM | DeepSeek API，deepseek-flash 模型 | 走 OpenAI SDK 兼容协议，AsyncOpenAI 指向 DeepSeek 的 base_url |
 | Embedding | fastembed，本地 ONNX 模型 BAAI/bge-small-zh-v1.5，512 维 | 不依赖外部 embedding API |
-| 向量检索 | 手写的暴力余弦相似度，用 numpy 算 | 没有上向量数据库，见第 14 节 |
+| 向量检索 | pgvector，HNSW 索引 + 余弦距离 | 检索在数据库端完成，不再是 Python 里手写循环 |
 | 后台调度 | APScheduler | AsyncIOScheduler，负责提醒到期扫描 |
 | 联网搜索 | Tavily REST API | 用 httpx 直接调用，没有引入官方 SDK |
 | 前端框架 | React 19 + Vite 8 | 没用状态管理库，纯 useState 和 props |
@@ -46,7 +47,7 @@ flowchart TB
         SCHED[services/scheduler.py 后台任务]
     end
 
-    DB[(SQLite chat.db)]
+    DB[(PostgreSQL + pgvector<br/>Supabase)]
     DEEPSEEK[DeepSeek API]
     TAVILY[Tavily API]
 
@@ -75,8 +76,10 @@ flowchart TB
 
 ```
 AI-Chat/
-├── main.py               FastAPI 入口：CORS 白名单、lifespan（建表、启动调度器）、挂路由
+├── main.py               FastAPI 入口：CORS 白名单、lifespan（确保 pgvector 扩展存在、启动调度器）、挂路由
 ├── database.py           所有 SQLAlchemy 模型，以及异步 engine/session 工厂
+├── alembic.ini           Alembic 配置，数据库连接串从 DATABASE_URL 环境变量读
+├── migrations/           Alembic 迁移脚本，env.py 接了项目的 Base.metadata 和异步引擎
 ├── requirements.txt      后端依赖，注意 numpy 和 onnxruntime 的版本是钉住的，见第 14 节
 ├── .python-version       3.11，配合 Railway 部署用
 ├── vercel.json           让 Vercel 在这个 monorepo 里正确构建 frontend 子目录
@@ -115,11 +118,11 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 ## 6. 数据模型
 
-数据库定义都在 database.py 里，用的是 SQLite 单文件。
+数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
 
-sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，embedding 字段是 fastembed 生成的 512 维向量，序列化成 JSON 字符串存进去。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。
+sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，embedding 字段是 pgvector 原生的向量类型（512 维，对应 fastembed 生成的向量），另外还有 source、external_id、external_updated_at 三个字段，是为以后接入 Notion 只读同步预留的。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。
 
-建表用的是 SQLAlchemy 的 create_all，没有引入 Alembic 做迁移，所以加字段或者改表结构目前只能手动处理，或者删库重建。
+表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及 notes 表 embedding 列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
 
 ## 7. Agent 工具清单
 
@@ -159,7 +162,7 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 
 ## 10. 环境变量
 
-后端的 .env 文件（已经加入 gitignore）需要这几个变量：DEEPSEEK_API_KEY 是必须的；API_KEY 建议设置，是前后端之间简单鉴权用的 key；ALLOWED_ORIGINS 可选，不设的话用代码里写死的默认值；TAVILY_API_KEY 可选，不设置的话联网搜索这个工具会返回未配置的错误提示，不影响其他功能。
+后端的 .env 文件（已经加入 gitignore）需要这几个变量：DEEPSEEK_API_KEY 是必须的；DATABASE_URL 是必须的，指向 PostgreSQL 实例（现在用的是 Supabase 的 Session pooler 连接串，格式是 postgresql+asyncpg://...），本地开发和线上环境都需要配；API_KEY 建议设置，是前后端之间简单鉴权用的 key；ALLOWED_ORIGINS 可选，不设的话用代码里写死的默认值；TAVILY_API_KEY 可选，不设置的话联网搜索这个工具会返回未配置的错误提示，不影响其他功能。
 
 前端对应有自己的 .env 文件，只需要一个 VITE_API_KEY，必须和后端的 API_KEY 保持一致。
 
@@ -175,7 +178,7 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 
 ## 12. 本地开发
 
-后端需要 Python 3.10 以上。建虚拟环境、装依赖、配好 .env 里的几个变量之后，用 uvicorn 启动就行。前端进 frontend 目录，npm install，配好 .env 里的 VITE_API_KEY，然后 npm run dev。具体命令可以直接看仓库根目录的 README。
+后端需要 Python 3.10 以上，还需要一个能连上的 PostgreSQL（推荐直接用 Supabase 免费实例，注册后把连接串填进 DATABASE_URL 就行，不需要本地装数据库）。建虚拟环境、装依赖、配好 .env 里的几个变量、跑一次 alembic upgrade head 建表，之后用 uvicorn 启动。前端进 frontend 目录，npm install，配好 .env 里的 VITE_API_KEY，然后 npm run dev。具体命令可以直接看仓库根目录的 README。
 
 ## 13. 部署
 
@@ -186,8 +189,6 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 ## 14. 已知限制和技术债
 
 onnxruntime 目前钉死在 1.17.3 版本，同时要求 numpy 低于 2.0，这是刻意为之。更高版本的 onnxruntime 在开发机上和 numpy 2.x 之间有 ABI 层面的冲突，会直接导致进程崩溃，不是普通的 Python 异常。以后升级这两个包之前，务必先确认组合仍然兼容。
-
-语义检索目前是暴力算余弦相似度，笔记量级到几千条以上会明显变慢，量大了需要换成专门的向量库。
 
 流式接口是伪流式，前面已经解释过原因，工具调用阶段对用户来说是完全不可见的，只能干等。
 
@@ -201,6 +202,8 @@ web_search 工具返回的网页内容没有做任何 prompt injection 方面的
 
 提醒的到期通知只有前端轮询弹窗这一种方式，没有推送、邮件或者短信，用户必须开着页面才能看到提醒。
 
+本地开发依赖能连上 Supabase 的网络，断网就没法开发，这是当初 Docker 起不来临时改用云端数据库带来的副作用，本机 Docker/WSL2 环境修好之后可以考虑改回本地跑。
+
 ## 15. 可能的后续方向
 
-值得考虑的方向包括：做多 agent 编排，比如用一个 router agent 把任务分发给专门的子 agent；搭一套评测 harness，用一组测试 prompt 加预期的工具调用去自动化跑分；把语义检索换成专门的向量数据库；加限流防止 API 被刷；引入 Alembic 做数据库迁移。
+值得考虑的方向包括：做多 agent 编排，比如用一个 router agent 把任务分发给专门的子 agent；搭一套评测 harness，用一组测试 prompt 加预期的工具调用去自动化跑分；加限流防止 API 被刷；笔记库接入 Notion 只读同步（数据模型已经预留好字段，spec 见 docs/specs/notion-sync.md）。
