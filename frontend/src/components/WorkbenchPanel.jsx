@@ -1,51 +1,60 @@
-import { useState } from "react"
 import TaskPanel from "./TaskPanel"
 import NotePanel from "./NotePanel"
 import ReminderPanel from "./ReminderPanel"
-import { colors } from "../theme"
+import { useTheme } from "../ThemeContext"
+import { moduleAccents } from "../theme"
+import { ModuleIcon } from "../icons"
 
-const TABS = [
-  { key: "tasks", label: "任务" },
-  { key: "notes", label: "笔记" },
-  { key: "journal", label: "日记" },
-  { key: "reminders", label: "提醒" },
-]
-
-// 把 任务/笔记/日记/提醒 收进一个带 tab 的工作台面板，
-// 避免每加一个模块就多占一整列，页面维持"会话 / 聊天 / 工作台"三栏。
-function WorkbenchPanel({ refreshKey, onRequestWeeklyReview }) {
-  const [activeTab, setActiveTab] = useState("tasks")
-
+// 一张模块卡片：带强调色的图标+标题头，内容区自己滚动，卡片本身高度由外层网格决定
+function ModuleCard({ iconName, title, accent, extra, children }) {
+  const { colors, cardStyle, isDark } = useTheme()
   return (
-    <div style={{ width: 320, borderLeft: `1px solid ${colors.border}`, display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", borderBottom: `1px solid ${colors.border}` }}>
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            style={{
-              flex: 1,
-              padding: "10px 0",
-              border: "none",
-              borderBottom: activeTab === t.key ? `2px solid ${colors.primary}` : "2px solid transparent",
-              background: "none",
-              color: activeTab === t.key ? colors.primary : "#333",
-              fontWeight: activeTab === t.key ? 600 : 400,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+    <div style={{ ...cardStyle, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${colors.borderLight}`, flexShrink: 0 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: accent + (isDark ? "33" : "1f"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <ModuleIcon name={iconName} color={accent} />
+        </div>
+        <span style={{ fontWeight: 600, fontSize: 15, color: colors.text }}>{title}</span>
+        {extra}
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-        {activeTab === "tasks" && <TaskPanel refreshKey={refreshKey} />}
-        {activeTab === "notes" && <NotePanel refreshKey={refreshKey} category="note" />}
-        {activeTab === "journal" && (
-          <NotePanel refreshKey={refreshKey} category="journal" onRequestWeeklyReview={onRequestWeeklyReview} />
-        )}
-        {activeTab === "reminders" && <ReminderPanel refreshKey={refreshKey} />}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px" }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// 四个模块摆成 2x2 网格，一屏看到全部概览，不再靠 tab 切换隐藏内容
+function WorkbenchPanel({ refreshKey, onRequestWeeklyReview }) {
+  const { colors } = useTheme()
+  return (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 24, background: colors.pageBg }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16, flexShrink: 0 }}>
+        <span style={{ fontSize: 19, fontWeight: 600, color: colors.text }}>工作台总览</span>
+        <span style={{ fontSize: 13, color: colors.textMuted }}>任务 / 笔记 / 日记 / 提醒，一屏看完</span>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 16 }}>
+        <ModuleCard iconName="tasks" title="任务" accent={moduleAccents.tasks}>
+          <TaskPanel refreshKey={refreshKey} accent={moduleAccents.tasks} />
+        </ModuleCard>
+
+        <ModuleCard iconName="notes" title="笔记" accent={moduleAccents.notes}>
+          <NotePanel refreshKey={refreshKey} category="note" accent={moduleAccents.notes} />
+        </ModuleCard>
+
+        <ModuleCard iconName="journal" title="日记" accent={moduleAccents.journal}>
+          <NotePanel
+            refreshKey={refreshKey}
+            category="journal"
+            accent={moduleAccents.journal}
+            onRequestWeeklyReview={onRequestWeeklyReview}
+          />
+        </ModuleCard>
+
+        <ModuleCard iconName="reminders" title="提醒" accent={moduleAccents.reminders}>
+          <ReminderPanel refreshKey={refreshKey} accent={moduleAccents.reminders} />
+        </ModuleCard>
       </div>
     </div>
   )

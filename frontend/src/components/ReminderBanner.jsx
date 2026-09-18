@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react"
 import { API, authHeaders } from "../api"
-import { colors } from "../theme"
+import { useTheme } from "../ThemeContext"
 
 // 定时轮询到期提醒（后台 APScheduler 每 60s 扫描一次并标记 fired），
 // 有到期的就在顶部弹条幅，点"知道了"直接删除该提醒。
 // refreshKey 变化时（agent 刚用过工具）立刻查一次，不用等 20s 轮询。
 function ReminderBanner({ refreshKey }) {
+  const { colors } = useTheme()
   const [dueReminders, setDueReminders] = useState([])
 
   const checkDue = async () => {
@@ -48,7 +49,7 @@ function ReminderBanner({ refreshKey }) {
             padding: "8px 16px",
           }}
         >
-          <span>⏰ {r.message}</span>
+          <span style={{ color: colors.warningText }}>⏰ {r.message}</span>
           <button
             onClick={() => dismiss(r.id)}
             style={{ border: "none", background: "none", color: colors.warningText, cursor: "pointer", fontWeight: "bold" }}

@@ -18,3 +18,8 @@ code {
   padding: 2px 6px;
   background: #f4f3ec;
 }
+
+[data-theme="dark"] code {
+  background: #2a2c35;
+  color: #ececec;
+}
