@@ -7,13 +7,15 @@
 - 多轮对话，AI 记忆上下文，支持流式回复
 - Agent 工具调用：建任务/查任务、记笔记/语义搜索笔记、记日记/生成周复盘、设提醒、联网搜索
 - 每轮对话的工具调用过程可追溯（`agent_traces` 表）
-- 历史会话自动保存，侧边栏切换
-- 右侧工作台面板（任务/笔记/日记/提醒），跟聊天里的操作实时同步
+- 历史会话自动保存，聊天面板里可切换
+- 工作台总览（任务/笔记/日记/提醒四张卡片），图标栏可切到单模块全页视图，跟聊天里的操作实时同步
+- 聊天面板固定在右侧，可折叠；支持亮/暗主题切换
 - Markdown 格式渲染
 
 ## 技术栈
 
-- 后端：Python 3.11 + FastAPI（全异步）+ SQLAlchemy + SQLite + APScheduler
+- 后端：Python 3.11 + FastAPI（全异步）+ SQLAlchemy + Alembic + APScheduler
+- 数据库：PostgreSQL + pgvector（当前托管在 Supabase）
 - AI：DeepSeek API（function calling）+ fastembed（本地中文 embedding）+ Tavily（联网搜索）
 - 前端：React 19 + Vite
 - 部署：Railway（后端）+ Vercel（前端）
@@ -30,7 +32,9 @@
 ```bash
 py -3.10 -m venv .venv
 ./.venv/Scripts/pip install -r requirements.txt
-# 在 .env 文件中配置 DEEPSEEK_API_KEY / API_KEY / TAVILY_API_KEY
+# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / API_KEY / TAVILY_API_KEY
+# DATABASE_URL 形如 postgresql+asyncpg://user:pass@host:5432/dbname，需要数据库已支持 pgvector
+./.venv/Scripts/python.exe -m alembic upgrade head    # 首次运行先建表
 ./.venv/Scripts/python.exe -m uvicorn main:app --reload
 ```
 
@@ -49,9 +53,11 @@ npm run dev
 AI-Chat/
 ├── main.py                # FastAPI 入口
 ├── database.py            # 数据库模型（sessions/messages/tasks/notes/reminders/agent_traces）
+├── migrations/            # Alembic 迁移脚本（配置见 alembic.ini）
 ├── routers/                # chat / sessions / tasks / notes / reminders
 ├── services/                # 业务逻辑 + agent 核心循环 + 工具注册表
 ├── frontend/                # React + Vite，见 frontend/src/components
+├── docs/                    # 架构文档 + specs/ 下的功能设计文档
 └── requirements.txt
 ```
 

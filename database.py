@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Index, text
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Index, ForeignKey, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from pgvector.sqlalchemy import Vector
@@ -75,7 +75,6 @@ class Note(Base):
     title = Column(String(200))
     content = Column(Text)
     category = Column(String(20), default="note")             # note / journal
-    embedding = Column(Vector(512), nullable=True)             # pgvector 原生向量列，512 维对应 bge-small-zh-v1.5
     source = Column(String(20), default="local")               # local / notion
     external_id = Column(String(100), nullable=True, index=True)   # 来源系统里的 id（比如 Notion 页面 id）
     external_updated_at = Column(DateTime, nullable=True)       # 来源系统的最后编辑时间（UTC），用于增量同步判断
@@ -84,10 +83,23 @@ class Note(Base):
     def __repr__(self):
         return f"Note(id={self.id}, title={self.title!r}, category={self.category!r})"
 
+# note_chunks 表：一条笔记切成多个分块，每个分块一个向量，检索都在这张表上做。
+# 长笔记不分块的话，embedding 模型只能处理约 512 个 token，超出部分会被截断，后半段就检索不到了。
+class NoteChunk(Base):
+    __tablename__ = "note_chunks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)              # 这是笔记的第几个分块，从 0 开始
+    content = Column(Text)                                      # 分块原文，不含标题
+    embedding = Column(Vector(512), nullable=False)             # 对"标题+换行+分块原文"算出的向量，512 维对应 bge-small-zh-v1.5
+    def __repr__(self):
+        return f"NoteChunk(note_id={self.note_id}, chunk_index={self.chunk_index})"
+
 # HNSW 向量索引，配合 cosine_distance 查询用；声明在这里方便以后 Alembic 对比出漂移
 Index(
-    "ix_notes_embedding_hnsw",
-    Note.embedding,
+    "ix_note_chunks_embedding_hnsw",
+    NoteChunk.embedding,
     postgresql_using="hnsw",
     postgresql_ops={"embedding": "vector_cosine_ops"},
 )

@@ -18,11 +18,17 @@ def _get_model() -> TextEmbedding:
     return _model
 
 
-def _embed_sync(text: str) -> list:
-    vector = list(_get_model().embed([text]))[0]
-    return vector.tolist()
+def _embed_many_sync(texts: list) -> list:
+    return [v.tolist() for v in _get_model().embed(texts)]
+
+
+async def embed_texts(texts: list) -> list:
+    """一次性给多段文本算向量（一条笔记的所有分块走这里），在线程池里跑，不阻塞事件循环。"""
+    if not texts:
+        return []
+    return await asyncio.to_thread(_embed_many_sync, texts)
 
 
 async def embed_text(text: str) -> list:
-    """在线程池里跑 CPU 密集的 embedding 推理，不阻塞事件循环。"""
-    return await asyncio.to_thread(_embed_sync, text)
+    """单段文本（比如检索的查询词）算向量。"""
+    return (await embed_texts([text]))[0]
