@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Note, NoteChunk
 from services.chunking import chunk_text
@@ -11,12 +11,17 @@ from services.embeddings import embed_text, embed_texts
 OVERSAMPLE = 4
 
 
+class NoteReadOnlyError(Exception):
+    """外部来源（Notion）的笔记在本地是只读的，不允许删除。"""
+
+
 def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
     data = {
         "id": note.id,
         "title": note.title,
         "content": note.content,
         "category": note.category,
+        "source": note.source,
         "created_at": note.created_at.isoformat() if note.created_at else None,
     }
     if with_score is not None:
@@ -69,11 +74,59 @@ async def list_notes(db: AsyncSession, category: Optional[str] = None) -> list[d
     return [_serialize(n) for n in result.scalars().all()]
 
 
+async def get_note_by_external_id(db: AsyncSession, external_id: str, source: str = "notion") -> Optional[Note]:
+    result = await db.execute(select(Note).where(Note.source == source, Note.external_id == external_id))
+    return result.scalars().first()
+
+
+async def upsert_note_from_external(db: AsyncSession, external_id: str, title: str, content: str,
+                                     external_updated_at: datetime, source: str = "notion") -> tuple:
+    """
+    按 external_id 导入外部笔记：已存在就更新并重建分块，不存在就新建。
+    返回 (笔记, 是否新建)。分块向量先算好再写库，替换分块和更新笔记在同一个事务里。
+    """
+    chunks = await _build_chunks(title, content)
+
+    note = await get_note_by_external_id(db, external_id, source)
+    created = note is None
+    if created:
+        note = Note(source=source, external_id=external_id, category="note")
+        db.add(note)
+    else:
+        await db.execute(delete(NoteChunk).where(NoteChunk.note_id == note.id))
+    note.title = title
+    note.content = content
+    note.external_updated_at = external_updated_at
+    await db.flush()
+    db.add_all([
+        NoteChunk(note_id=note.id, chunk_index=i, content=text, embedding=embedding)
+        for i, (text, embedding) in enumerate(chunks)
+    ])
+    await db.commit()
+    await db.refresh(note)
+    return _serialize(note), created
+
+
+async def delete_missing_external(db: AsyncSession, source: str, existing_ids: list) -> int:
+    """
+    删除某个来源下、但来源系统里已经不存在的笔记（外部来源的笔记本来就是只读副本）。
+    existing_ids 是来源系统这次列出的全部 id；分块靠外键级联一起删。返回删除的条数。
+    """
+    result = await db.execute(
+        delete(Note).where(Note.source == source, Note.external_id.not_in(existing_ids))
+    )
+    await db.commit()
+    return result.rowcount
+
+
 async def delete_note(db: AsyncSession, note_id: int) -> bool:
     # 分块靠 note_chunks.note_id 的外键级联删除，这里不用管
     note = await db.get(Note, note_id)
     if note is None:
         return False
+    if note.source == "notion":
+        # 只读导入：本地删掉的话，下次同步会因为找不到 external_id 又被导入回来
+        raise NoteReadOnlyError("来自 Notion 的笔记请在 Notion 里删除")
     await db.delete(note)
     await db.commit()
     return True

@@ -5,6 +5,7 @@ from services import notes as notes_service
 from services import review as review_service
 from services import reminders as reminders_service
 from services import websearch as websearch_service
+from services import notion as notion_service
 
 
 async def _create_task(db: AsyncSession, args: dict) -> dict:
@@ -43,6 +44,10 @@ async def _save_note(db: AsyncSession, args: dict) -> dict:
 async def _search_notes(db: AsyncSession, args: dict) -> dict:
     results = await notes_service.search_notes(db, query=args["query"], top_k=args.get("top_k", 5))
     return {"notes": results}
+
+
+async def _sync_notion_notes(db: AsyncSession, args: dict) -> dict:
+    return await notion_service.sync_notion_notes(db)
 
 
 async def _add_journal_entry(db: AsyncSession, args: dict) -> dict:
@@ -195,6 +200,19 @@ TOOLS = [
             },
         },
         "handler": _search_notes,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "sync_notion_notes",
+                "description": "把用户 Notion 数据库里的页面同步到笔记库（只读导入，不会改动 Notion；"
+                                "Notion 里已经删除的页面，本地副本也会删掉）。"
+                                "用户说要同步/更新 Notion 笔记时用，返回新增、更新、跳过、失败、删除的数量",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        "handler": _sync_notion_notes,
     },
     {
         "schema": {

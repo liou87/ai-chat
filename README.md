@@ -5,7 +5,8 @@
 ## 功能特性
 
 - 多轮对话，AI 记忆上下文，支持流式回复
-- Agent 工具调用：建任务/查任务、记笔记/语义搜索笔记、记日记/生成周复盘、设提醒、联网搜索
+- Agent 工具调用：建任务/查任务、记笔记/语义搜索笔记、记日记/生成周复盘、设提醒、联网搜索、同步 Notion 笔记
+- 笔记按段落和标题分块后做向量检索，长笔记的后半段也能被搜到；Notion 数据库只读导入，增量同步，Notion 里删掉的页面本地副本也会清理
 - 每轮对话的工具调用过程可追溯（`agent_traces` 表）
 - 历史会话自动保存，聊天面板里可切换
 - 工作台总览（任务/笔记/日记/提醒四张卡片），图标栏可切到单模块全页视图，跟聊天里的操作实时同步
@@ -32,7 +33,7 @@
 ```bash
 py -3.10 -m venv .venv
 ./.venv/Scripts/pip install -r requirements.txt
-# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / API_KEY / TAVILY_API_KEY
+# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / API_KEY / TAVILY_API_KEY，需要 Notion 同步的话再配置 NOTION_API_KEY 和 NOTION_DATABASE_ID
 # DATABASE_URL 形如 postgresql+asyncpg://user:pass@host:5432/dbname，需要数据库已支持 pgvector
 ./.venv/Scripts/python.exe -m alembic upgrade head    # 首次运行先建表
 ./.venv/Scripts/python.exe -m uvicorn main:app --reload

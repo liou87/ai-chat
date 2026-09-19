@@ -23,6 +23,7 @@
 | 向量检索 | pgvector，HNSW 索引 + 余弦距离 | 检索在数据库端完成，不再是 Python 里手写循环 |
 | 后台调度 | APScheduler | AsyncIOScheduler，负责提醒到期扫描 |
 | 联网搜索 | Tavily REST API | 用 httpx 直接调用，没有引入官方 SDK |
+| Notion 同步 | Notion REST API，版本头 2025-09-03 | 用 httpx 直连，只读导入，没有引入官方 SDK |
 | 前端框架 | React 19 + Vite 8 | 没用状态管理库，纯 useState 和 props |
 | Markdown 渲染 | react-markdown | 渲染 AI 回复 |
 | 部署 | Railway 跑后端，Vercel 跑前端 | |
@@ -43,13 +44,14 @@ flowchart TB
         R2[routers 里的 tasks / notes / reminders / sessions]
         AGENT[services/agent.py tool-calling 循环]
         TOOLS[services/tools.py 工具注册表]
-        SVC[services 下的 tasks / notes / reminders / review / embeddings / websearch]
+        SVC[services 下的 tasks / notes / chunking / notion / reminders / review / embeddings / websearch]
         SCHED[services/scheduler.py 后台任务]
     end
 
     DB[(PostgreSQL + pgvector<br/>Supabase)]
     DEEPSEEK[DeepSeek API]
     TAVILY[Tavily API]
+    NOTION[Notion API]
 
     UI --> R1
     UI --> R2
@@ -62,13 +64,14 @@ flowchart TB
     AGENT --> DEEPSEEK
     SVC --> DB
     SVC --> TAVILY
+    SVC --> NOTION
     SCHED --> DB
     R2 --> SVC
 ```
 
 一次带工具调用的对话请求，完整链路是这样的（以 /api/chat/stream 为例）：
 
-前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent 进入循环：调用 DeepSeek 的 chat completions 接口并带上 tools 参数，如果模型返回 tool_calls，就执行对应工具（在 services/tools.py 里查表分发到 tasks、notes、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯。
+前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent 进入循环：调用 DeepSeek 的 chat completions 接口并带上 tools 参数，如果模型返回 tool_calls，就执行对应工具（在 services/tools.py 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯。
 
 拿到最终文本后，chat.py 会把它切成小块、带小延迟依次吐给前端，模拟打字机效果。这里要注意，这不是真正的 token 级流式，因为工具调用阶段没法边调用边流式吐字，所以实际是整体生成完再回放。响应头里带着 X-Session-Id（新会话的 id）和 X-Tool-Used（这一轮有没有调用过工具），前端用后者决定要不要刷新工作台面板。
 
@@ -89,7 +92,7 @@ AI-Chat/
 │   ├── chat.py             对话入口，system prompt 在这里拼
 │   ├── sessions.py         会话和消息历史查询
 │   ├── tasks.py            任务的 REST 接口
-│   ├── notes.py            笔记和日记的 REST 接口，含语义搜索
+│   ├── notes.py            笔记和日记的 REST 接口，含语义搜索和 Notion 同步
 │   └── reminders.py        提醒的 REST 接口
 │
 ├── services/              业务逻辑层，REST 路由和 agent 工具共用同一套函数，不会重复实现
@@ -98,8 +101,10 @@ AI-Chat/
 │   ├── agent.py             核心的 tool-calling 循环，写 agent_traces，是整个项目最关键的一个文件
 │   ├── tools.py             工具注册表：每个工具的 JSON Schema 加对应的处理函数
 │   ├── tasks.py             任务的增删改查，纯数据库操作，不调用 LLM
-│   ├── notes.py             笔记和日记的增删改查，加语义检索
-│   ├── embeddings.py        fastembed 封装，推理放在线程池里跑，不阻塞事件循环
+│   ├── notes.py             笔记和日记的增删改查，分块写入和语义检索，外部来源笔记的 upsert
+│   ├── chunking.py          正文分块的纯函数，不依赖数据库，可以单独测试
+│   ├── notion.py            Notion 只读同步：拉页面和正文、增量判断、限流重试
+│   ├── embeddings.py        fastembed 封装，推理放在线程池里跑，不阻塞事件循环，支持批量
 │   ├── review.py            周复盘数据聚合，只出数据不调 LLM，总结文字交给 agent 自己写
 │   ├── reminders.py         提醒的增删改查，以及供调度器调用的到期检查
 │   ├── scheduler.py         APScheduler 封装，每 60 秒跑一次到期扫描
@@ -120,9 +125,13 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
 
-sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，embedding 字段是 pgvector 原生的向量类型（512 维，对应 fastembed 生成的向量），另外还有 source、external_id、external_updated_at 三个字段，是为以后接入 Notion 只读同步预留的。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。
+sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。
 
-表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及 notes 表 embedding 列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
+表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及向量列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
+
+笔记检索的设计是这样：embedding 模型只能处理约 512 个 token，长笔记不分块的话，后半段永远检索不到。所以写入笔记时先用 services/chunking.py 切块，按段落合并到约 400 字一块，遇到标题行就另起一块，单个超长段落硬切并重叠 50 字；算向量时每块前面带上笔记标题；同一条笔记的所有分块批量送进模型。检索时在 note_chunks 上按余弦距离取最近的 top_k 乘 4 个分块，再按笔记去重，每条笔记只保留得分最高的那一块，最后取前 top_k 条。已知限制是按分类过滤发生在近似最近邻查找之后，过滤后结果可能少于要求的数量。另外 bge-small-zh 的相似度分数区间比较窄，不相关的短文本也能拿到 0.3 到 0.4，所以分数只适合排序，不适合设绝对阈值。
+
+Notion 同步（services/notion.py）是只读导入：先通过数据库 id 拿到 data source，再分页查出所有页面，对每个页面比较 last_edited_time 和本地的 external_updated_at，没改过就跳过，不拉正文也不重新算向量；改过或者是新页面就拉正文，正文抓取覆盖段落、标题、列表、引用、待办、代码块、折叠块和表格，嵌套内容递归最多 3 层，图片和子页面跳过，然后调用 notes 服务的 upsert，重建这个页面的分块。每个页面单独提交，单个页面失败只计入失败数，不影响其他页面。页面列表完整读完之后，本地有、Notion 里已经查不到的页面（删了或移出了数据库）对应的笔记会被删除，计入删除数；读取中途出错时不会执行这一步，不会误删。遇到 429 限流按 Retry-After 等待，最多重试 3 次。Notion 来源的笔记在本地是只读的，删除接口返回 403，因为本地删掉的话下次同步会被重新导入。
 
 ## 7. Agent 工具清单
 
@@ -130,7 +139,7 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 
 任务相关：create_task 建任务，list_tasks 按状态查任务，complete_task 标记完成，delete_task 删除。
 
-笔记相关：save_note 存一条笔记并自动算 embedding，search_notes 做语义检索。
+笔记相关：save_note 存一条笔记，自动分块并算向量，search_notes 做语义检索，sync_notion_notes 把 Notion 数据库里的页面同步进来，返回新增、更新、跳过、失败、删除的数量。
 
 日记相关：add_journal_entry 记一条日记，标题会自动生成成"日记 加日期"的格式；get_weekly_review 拿近 7 天任务、日记、笔记的聚合数据，本身不生成总结。
 
@@ -148,7 +157,7 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 
 任务相关：GET 和 POST /api/tasks 分别是列表和新建，PATCH /api/tasks/{id}/complete 标记完成，DELETE /api/tasks/{id} 删除。
 
-笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，DELETE /api/notes/{id} 删除。
+笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source 字段。
 
 提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期的提醒，前端轮询用这个接口，DELETE /api/reminders/{id} 取消或者说是 dismiss。
 
@@ -170,7 +179,7 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 
 入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局，左边是会话侧栏，中间是聊天区，右边是工作台面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。
 
-组件目录下，WorkbenchPanel 是右侧面板的 tab 容器，负责在任务、笔记、日记、提醒四个 tab 之间切换。TaskPanel 是任务 tab 的内容，负责增删改。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。
+组件目录下，WorkbenchPanel 是右侧面板的 tab 容器，负责在任务、笔记、日记、提醒四个 tab 之间切换。TaskPanel 是任务 tab 的内容，负责增删改。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。
 
 状态管理上没有引入 Redux 或者 Zustand，全靠 useState 和 props 一层层传下去。App.jsx 里有个叫 workbenchRefreshKey 的计数器，agent 用过工具之后就加一，通过 props 传给各个面板，让它们重新拉一次数据，这是让"聊天里改的数据"和"面板上看到的数据"保持一致的机制。
 
@@ -206,4 +215,4 @@ web_search 工具返回的网页内容没有做任何 prompt injection 方面的
 
 ## 15. 可能的后续方向
 
-值得考虑的方向包括：做多 agent 编排，比如用一个 router agent 把任务分发给专门的子 agent；搭一套评测 harness，用一组测试 prompt 加预期的工具调用去自动化跑分；加限流防止 API 被刷；笔记库接入 Notion 只读同步（数据模型已经预留好字段，spec 见 docs/specs/notion-sync.md）。
+值得考虑的方向包括：做多 agent 编排，比如用一个 router agent 把任务分发给专门的子 agent；搭一套评测 harness，用一组测试 prompt 加预期的工具调用去自动化跑分；加限流防止 API 被刷；Notion 同步目前只能手动触发，可以加一个定时任务自动同步（spec 见 docs/specs/notion-sync.md）。
