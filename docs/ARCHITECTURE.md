@@ -43,7 +43,7 @@ flowchart TB
         R1[routers/chat.py]
         R2[routers 里的 tasks / notes / reminders / sessions]
         AGENT[services/agent.py tool-calling 循环]
-        TOOLS[services/tools.py 工具注册表]
+        TOOLS[services/tools/ 工具注册表]
         SVC[services 下的 tasks / notes / chunking / notion / reminders / review / embeddings / websearch]
         SCHED[services/scheduler.py 后台任务]
     end
@@ -71,7 +71,7 @@ flowchart TB
 
 一次带工具调用的对话请求，完整链路是这样的（以 /api/chat/stream 为例）：
 
-前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent 进入循环：调用 DeepSeek 的 chat completions 接口并带上 tools 参数，如果模型返回 tool_calls，就执行对应工具（在 services/tools.py 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯。
+前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent 进入循环：调用 DeepSeek 的 chat completions 接口并带上 tools 参数，如果模型返回 tool_calls，就执行对应工具（在 services/tools/ 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯。
 
 拿到最终文本后，chat.py 会把它切成小块、带小延迟依次吐给前端，模拟打字机效果。这里要注意，这不是真正的 token 级流式，因为工具调用阶段没法边调用边流式吐字，所以实际是整体生成完再回放。响应头里带着 X-Session-Id（新会话的 id）和 X-Tool-Used（这一轮有没有调用过工具），前端用后者决定要不要刷新工作台面板。
 
@@ -99,12 +99,17 @@ AI-Chat/
 │   ├── auth.py              X-API-Key 鉴权依赖，自己调用 load_dotenv，不依赖别的模块先加载 .env
 │   ├── llm.py               DeepSeek 客户端封装
 │   ├── agent.py             核心的 tool-calling 循环，写 agent_traces，是整个项目最关键的一个文件
-│   ├── tools.py             工具注册表：每个工具的 JSON Schema 加对应的处理函数
+│   ├── tools/               工具注册表，按模块拆成几个文件，__init__.py 汇总成 TOOL_SCHEMAS/TOOL_HANDLERS
+│   │   ├── tasks_tools.py     任务相关工具
+│   │   ├── notes_tools.py     笔记/日记/Notion 同步相关工具
+│   │   ├── reminders_tools.py 提醒相关工具
+│   │   └── websearch_tools.py 联网搜索工具
 │   ├── tasks.py             任务的增删改查，纯数据库操作，不调用 LLM
-│   ├── notes.py             笔记和日记的增删改查，分块写入和语义检索，外部来源笔记的 upsert
-│   ├── chunking.py          正文分块的纯函数，不依赖数据库，可以单独测试
-│   ├── notion.py            Notion 只读同步：拉页面和正文、增量判断、限流重试
-│   ├── embeddings.py        fastembed 封装，推理放在线程池里跑，不阻塞事件循环，支持批量
+│   ├── notes/               笔记 / RAG 这一摊都在这个包里，对外仍是 from services import notes as notes_service
+│   │   ├── notes.py           笔记和日记的增删改查，分块写入和语义检索，外部来源笔记的 upsert
+│   │   ├── chunking.py        正文分块的纯函数，不依赖数据库，可以单独测试
+│   │   ├── embeddings.py      fastembed 封装，推理放在线程池里跑，不阻塞事件循环，支持批量
+│   │   └── notion.py          Notion 只读同步：拉页面和正文、增量判断、限流重试
 │   ├── review.py            周复盘数据聚合，只出数据不调 LLM，总结文字交给 agent 自己写
 │   ├── reminders.py         提醒的增删改查，以及供调度器调用的到期检查
 │   ├── scheduler.py         APScheduler 封装，每 60 秒跑一次到期扫描
@@ -129,13 +134,13 @@ sessions 表存一次对话会话，字段有标题和创建时间。messages �
 
 表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及向量列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
 
-笔记检索的设计是这样：embedding 模型只能处理约 512 个 token，长笔记不分块的话，后半段永远检索不到。所以写入笔记时先用 services/chunking.py 切块，按段落合并到约 400 字一块，遇到标题行就另起一块，单个超长段落硬切并重叠 50 字；算向量时每块前面带上笔记标题；同一条笔记的所有分块批量送进模型。检索时在 note_chunks 上按余弦距离取最近的 top_k 乘 4 个分块，再按笔记去重，每条笔记只保留得分最高的那一块，最后取前 top_k 条。已知限制是按分类过滤发生在近似最近邻查找之后，过滤后结果可能少于要求的数量。另外 bge-small-zh 的相似度分数区间比较窄，不相关的短文本也能拿到 0.3 到 0.4，所以分数只适合排序，不适合设绝对阈值。
+笔记检索的设计是这样：embedding 模型只能处理约 512 个 token，长笔记不分块的话，后半段永远检索不到。所以写入笔记时先用 services/notes/chunking.py 切块，按段落合并到约 400 字一块，遇到标题行就另起一块，单个超长段落硬切并重叠 50 字；算向量时每块前面带上笔记标题；同一条笔记的所有分块批量送进模型。检索时在 note_chunks 上按余弦距离取最近的 top_k 乘 4 个分块，再按笔记去重，每条笔记只保留得分最高的那一块，最后取前 top_k 条。已知限制是按分类过滤发生在近似最近邻查找之后，过滤后结果可能少于要求的数量。另外 bge-small-zh 的相似度分数区间比较窄，不相关的短文本也能拿到 0.3 到 0.4，所以分数只适合排序，不适合设绝对阈值。
 
-Notion 同步（services/notion.py）是只读导入：先通过数据库 id 拿到 data source，再分页查出所有页面，对每个页面比较 last_edited_time 和本地的 external_updated_at，没改过就跳过，不拉正文也不重新算向量；改过或者是新页面就拉正文，正文抓取覆盖段落、标题、列表、引用、待办、代码块、折叠块和表格，嵌套内容递归最多 3 层，图片和子页面跳过，然后调用 notes 服务的 upsert，重建这个页面的分块。每个页面单独提交，单个页面失败只计入失败数，不影响其他页面。页面列表完整读完之后，本地有、Notion 里已经查不到的页面（删了或移出了数据库）对应的笔记会被删除，计入删除数；读取中途出错时不会执行这一步，不会误删。遇到 429 限流按 Retry-After 等待，最多重试 3 次。Notion 来源的笔记在本地是只读的，删除接口返回 403，因为本地删掉的话下次同步会被重新导入。
+Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 id 拿到 data source，再分页查出所有页面，对每个页面比较 last_edited_time 和本地的 external_updated_at，没改过就跳过，不拉正文也不重新算向量；改过或者是新页面就拉正文，正文抓取覆盖段落、标题、列表、引用、待办、代码块、折叠块和表格，嵌套内容递归最多 3 层，图片和子页面跳过，然后调用 notes 服务的 upsert，重建这个页面的分块。每个页面单独提交，单个页面失败只计入失败数，不影响其他页面。页面列表完整读完之后，本地有、Notion 里已经查不到的页面（删了或移出了数据库）对应的笔记会被删除，计入删除数；读取中途出错时不会执行这一步，不会误删。遇到 429 限流按 Retry-After 等待，最多重试 3 次。Notion 来源的笔记在本地是只读的，删除接口返回 403，因为本地删掉的话下次同步会被重新导入。
 
 ## 7. Agent 工具清单
 
-全部定义在 services/tools.py 的 TOOLS 列表里。
+按模块拆在 services/tools/ 目录下几个文件里，每个文件是自己模块的 TOOLS 列表，services/tools/__init__.py 汇总。
 
 任务相关：create_task 建任务，list_tasks 按状态查任务，complete_task 标记完成，delete_task 删除。
 

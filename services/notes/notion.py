@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import httpx
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession
-from services import notes as notes_service
+from . import notes as notes_service
 
 load_dotenv()
 

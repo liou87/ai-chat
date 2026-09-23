@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth import verify_api_key
 from services import notes as notes_service
-from services import notion as notion_service
+from services.notes import notion as notion_service
 from database import SessionLocal
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])

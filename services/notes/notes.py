@@ -3,8 +3,8 @@ from typing import Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Note, NoteChunk
-from services.chunking import chunk_text
-from services.embeddings import embed_text, embed_texts
+from .chunking import chunk_text
+from .embeddings import embed_text, embed_texts
 
 # 检索时先多取几倍的分块再按笔记去重：一条长笔记可能有好几个分块都排在前面，
 # 直接取 top_k 个分块的话，结果会被同一条笔记占满
