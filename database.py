@@ -149,6 +149,18 @@ class DailyDigest(Base):
     def __repr__(self):
         return f"DailyDigest(digest_date={self.digest_date})"
 
+# hot_topics 表：每天收集一次的 AI/agent 领域热点（GitHub 上新出现的相关仓库 + 联网搜到的新闻），
+# 同样一天一条，items 是 DeepSeek 挑选、写好一句话理由之后的 JSON 列表
+class HotTopics(Base):
+    __tablename__ = "hot_topics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    topic_date = Column(Date, unique=True, index=True, nullable=False)
+    items = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+    def __repr__(self):
+        return f"HotTopics(topic_date={self.topic_date})"
+
 # 只负责确保 pgvector 扩展存在，每次启动跑一遍也没问题（幂等）。
 # 表结构本身不在这里建，改由 Alembic 管理（首次用 alembic upgrade head 建表，
 # 以后任何表结构改动都是改 model 再 alembic revision --autogenerate），

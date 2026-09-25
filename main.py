@@ -18,6 +18,7 @@ from routers.notes import router as notes_router
 from routers.reminders import router as reminders_router
 from routers.digest import router as digest_router
 from routers.goals import router as goals_router
+from routers.hot_topics import router as hot_topics_router
 from database import init_db
 from services.scheduler import start_scheduler, stop_scheduler
 
@@ -56,3 +57,4 @@ app.include_router(notes_router, prefix="/api")
 app.include_router(reminders_router, prefix="/api")
 app.include_router(digest_router, prefix="/api")
 app.include_router(goals_router, prefix="/api")
+app.include_router(hot_topics_router, prefix="/api")

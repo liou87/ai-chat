@@ -84,6 +84,8 @@ routers/chat.py 把这些事件实时转成 Vercel AI SDK 的 UI Message Stream 
 
 除了被动等用户提问，services/scheduler.py 现在还会每天早上 8 点主动生成一份"今日简报"：聚合今天到期/过期的任务和今天的提醒，交给 DeepSeek 用知行的口吻写成两三句话，存进 daily_digests 表，一天只生成一次。GET /api/digest/today 是读这份简报的接口，如果当天还没生成过（比如用户在 8 点之前就打开了页面），接口会现算一份再存起来，和定时任务共用同一个函数，不会重复生成。DeepSeek 调用失败时会退化成一句模板拼出来的文字，不会让这张卡片直接挂掉。前端在工作台总览页顶部展示这份简报，不需要用户开口问。
 
+同样的缓存套路还用在"今日 AI 热点"上（services/hot_topics.py，8:05 生成，比简报晚 5 分钟错开）：分别用 GitHub 搜索 API 查 ai-agent、agentic-ai、rag 这几个 topic 下最近一个月内新建、按星数排序的仓库（GitHub 的搜索接口不支持一次查询里对多个 topic 做 OR，只能分开查、按仓库 id 去重合并），同时用 Tavily 搜一次这周的 AI/agent 相关新闻，把两边的原始结果一起交给 DeepSeek，用 JSON 模式（response_format 传 json_object）挑出大约 5 条、跳过明显的垃圾仓库和无关内容，每条配一句为什么值得看。单个 GitHub topic 查询失败只跳过那一个，两边都没查到东西才会是空列表，DeepSeek 筛选失败就退化成不筛选的原始拼接。GET /api/hot-topics/today 是读取接口，同样是当天没有就现查一份、和定时任务共用同一个函数。前端在总览页 2x2 网格下面展示成一个可点击跳转的列表。
+
 聊天面板也在用这份简报：每次开一个新对话（没有历史消息的时候），会把今天的简报当成知行说的第一句话显示出来，让对话感觉是从"知行已经了解你今天的情况"这个地方开始的，而不是简报和聊天是两个互不相关的地方。这一步纯粹是展示层的处理——App.jsx 自己单独拉一次 /api/digest/today，拼出来的这条"消息"只放进本地渲染用的列表，不会进 useChat 的真实消息状态，所以真正发给后端的对话历史里不会带上这句话，导出对话的时候也不会包含它。开新对话或者切换历史会话之前都会先调用 useChat 的 stop()，避免上一轮还在流式生成的时候被打断后，残留的内容跟着串到新对话里。
 
 ## 4. 目录结构与文件职责
@@ -105,7 +107,8 @@ AI-Chat/
 │   ├── tasks.py            任务的 REST 接口
 │   ├── notes.py            笔记和日记的 REST 接口，含语义搜索和 Notion 同步
 │   ├── reminders.py        提醒的 REST 接口
-│   └── digest.py           每日简报的 REST 接口
+│   ├── digest.py           每日简报的 REST 接口
+│   └── hot_topics.py       每日 AI 热点的 REST 接口
 │
 ├── services/              业务逻辑层，REST 路由和 agent 工具共用同一套函数，不会重复实现
 │   ├── auth.py              X-API-Key 鉴权依赖，自己调用 load_dotenv，不依赖别的模块先加载 .env
@@ -126,7 +129,8 @@ AI-Chat/
 │   ├── reminders.py         提醒的增删改查，以及供调度器调用的到期检查
 │   ├── persona.py           助手的名字和性格设定，聊天和每日简报共用同一份
 │   ├── digest.py            每日简报：聚合今天的任务/提醒，交给 DeepSeek 写成简报文字，按天缓存
-│   ├── scheduler.py         APScheduler 封装：每 60 秒扫一次到期提醒，每天 8 点生成一次简报
+│   ├── hot_topics.py        每日 AI 热点：GitHub 搜索 + Tavily 新闻，交给 DeepSeek 筛选，按天缓存
+│   ├── scheduler.py         APScheduler 封装：每 60 秒扫一次到期提醒，每天 8:00/8:05 生成简报和热点
 │   └── websearch.py         Tavily 封装，没配 key 时优雅返回错误提示，不会抛异常
 │
 └── frontend/              React + Vite，见第 11 节
@@ -144,7 +148,7 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
 
-sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间，goal_id 是可选的外键，挂靠某个目标（删掉目标时这个字段置空，不会连带删任务）。goals 表是三层目标——phase（阶段）没有上级，month（月目标）挂在某个 phase 下，week（周目标）挂在某个 month 下，parent_id 自引用表示这层关系，删掉一个目标会级联删掉它的子目标；progress 是 0 到 100 的整数，手动或者 agent 调用工具设定，不从关联任务的完成比例自动算，因为目标进度往往不是子任务数量的线性函数。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过；structured_data 是日记复盘的引导问答加评分，JSON 文本，只有 journal 分类会用到，笔记分类恒为空。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。
+sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间，goal_id 是可选的外键，挂靠某个目标（删掉目标时这个字段置空，不会连带删任务）。goals 表是三层目标——phase（阶段）没有上级，month（月目标）挂在某个 phase 下，week（周目标）挂在某个 month 下，parent_id 自引用表示这层关系，删掉一个目标会级联删掉它的子目标；progress 是 0 到 100 的整数，手动或者 agent 调用工具设定，不从关联任务的完成比例自动算，因为目标进度往往不是子任务数量的线性函数。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过；structured_data 是日记复盘的引导问答加评分，JSON 文本，只有 journal 分类会用到，笔记分类恒为空。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。hot_topics 表结构一样，只是 topic_date 加 items（挑选后的热点列表，JSON 文本）。
 
 表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及向量列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
 
@@ -186,7 +190,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期的提醒，前端轮询用这个接口，DELETE /api/reminders/{id} 取消或者说是 dismiss。
 
-简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份。
+简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样。
 
 ## 9. 鉴权与安全
 
@@ -206,7 +210,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局：左边是图标栏（总览 + 五个模块 + 主题切换），中间是当前选中的主区域，右边是可折叠的聊天面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。persona.js 只有一个常量——助手的名字，要跟后端 services/persona.py 保持一致。
 
-组件目录下，WorkbenchPanel 是总览页，任务、笔记、日记、提醒四张卡片摆成 2x2 网格，网格上方是一张知行主动生成的"今日简报"卡片，再上面是"目标与下一里程碑"卡片（只显示阶段目标和进度条，完整的三层结构要点开"目标"模块看）。GoalPanel 是目标面板，compact 模式（总览卡片）只显示阶段目标，expanded 模式（点图标栏进入）显示完整的阶段/月/周三层缩进结构，可以新建、改进度、删除；新建目标时如果不是阶段目标，要先选一个类型对的上级。TaskPanel 负责任务的增删改，任务如果挂靠了目标，标题下面会用目标的强调色标出目标名称。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。日记分类下的新建表单跟笔记不一样，是引导式的：三道固定问题（今天完成了什么/最大的阻碍/明天最重要的一件事）加四项 1-5 评分（精力/压力/满意度/专注度，RatingPicker 组件画的一排小圆点按钮），再加一个可选的自由记录，全部字段都能空着不填。这几项会拼成一段正常的文本存进 content（拼接逻辑在后端 services/notes/notes.py 的 render_structured_review，前端和 agent 工具共用同一份渲染逻辑，不会走出两套格式），原始的问答和评分单独存在 structured_data 字段里。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。
+组件目录下，WorkbenchPanel 是总览页：顶部固定标题不滚动，下面的内容——简报卡片、"目标与下一里程碑"卡片、任务/笔记/日记/提醒四张卡片摆的 2x2 网格、"今日 AI 热点"卡片——都在一个整体可以滚动的区域里，内容已经超过一屏，不强求一次看完，每张卡片自己内部也有滚动。GoalPanel 是目标面板，compact 模式（总览卡片）只显示阶段目标，expanded 模式（点图标栏进入）显示完整的阶段/月/周三层缩进结构，可以新建、改进度、删除；新建目标时如果不是阶段目标，要先选一个类型对的上级。TaskPanel 负责任务的增删改，任务如果挂靠了目标，标题下面会用目标的强调色标出目标名称。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。日记分类下的新建表单跟笔记不一样，是引导式的：三道固定问题（今天完成了什么/最大的阻碍/明天最重要的一件事）加四项 1-5 评分（精力/压力/满意度/专注度，RatingPicker 组件画的一排小圆点按钮），再加一个可选的自由记录，全部字段都能空着不填。这几项会拼成一段正常的文本存进 content（拼接逻辑在后端 services/notes/notes.py 的 render_structured_review，前端和 agent 工具共用同一份渲染逻辑，不会走出两套格式），原始的问答和评分单独存在 structured_data 字段里。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。HotTopicsCard 展示当天的 AI 热点列表，每条是一个可以点击跳转到原链接的条目。
 
 状态管理上没有引入 Redux 或者 Zustand，全靠 useState 和 props 一层层传下去。App.jsx 里有个叫 workbenchRefreshKey 的计数器，agent 用过工具之后就加一，通过 props 传给各个面板，让它们重新拉一次数据，这是让"聊天里改的数据"和"面板上看到的数据"保持一致的机制。
 
@@ -234,7 +238,7 @@ onnxruntime 目前钉死在 1.17.3 版本，同时要求 numpy 低于 2.0，这�
 
 这是个单用户设计，没有多用户或者多租户的概念，API_KEY 是所有人共用的一把钥匙。
 
-总览页现在挂载的卡片（简报、目标、任务、笔记、日记、提醒）加起来会在页面刚加载时并发发出十来个请求，每个都要打一次远端的 Supabase，浏览器对同一个源默认最多 6 个并发连接，请求会排队；实测过如果在页面刚加载的头几秒内马上点进某个模块，那个模块的请求可能要排到 5 秒以后才轮到，表现为界面卡在"加载中"很久，不是卡死。根源是每个卡片都各自独立请求数据，没有合并；真要解决得做一个总览专用的聚合接口，一次请求把这几张卡片的数据都带回来，目前还没做。
+总览页现在挂载的卡片（简报、目标、任务、笔记、日记、提醒、AI 热点）加起来会在页面刚加载时并发发出十几个请求，每个都要打一次远端的 Supabase，浏览器对同一个源默认最多 6 个并发连接，请求会排队；实测过如果在页面刚加载的头几秒内马上点进某个模块，那个模块的请求可能要排到 5 秒以后才轮到，表现为界面卡在"加载中"很久，不是卡死。根源是每个卡片都各自独立请求数据，没有合并；真要解决得做一个总览专用的聚合接口，一次请求把这几张卡片的数据都带回来，目前还没做。总览页整体现在是可以滚动的，不再要求一屏放下所有内容，但并发请求排队这个问题本身跟页面能不能滚动没关系，卡片一多还是会撞上。
 
 web_search 工具返回的网页内容没有做任何 prompt injection 方面的防护，如果搜到的网页里藏着诱导模型忽略指令的内容，理论上是有被注入的风险的，目前没有针对性处理。
 
