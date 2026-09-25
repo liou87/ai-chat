@@ -9,6 +9,7 @@ from sqlalchemy import select, func
 from fastapi.responses import StreamingResponse
 from services.auth import verify_api_key
 from services.agent import run_agent, run_agent_stream
+from services import persona
 from database import SessionLocal, ChatSession, Message
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,8 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 def _build_system_prompt() -> str:
     now = datetime.now()
     return (
-        f"你是用户的个人工作台助手，当前时间是 {now.strftime('%Y-%m-%d %H:%M:%S')}（{'周' + '一二三四五六日'[now.weekday()]}）。"
+        f"{persona.IDENTITY}"
+        f"当前时间是 {now.strftime('%Y-%m-%d %H:%M:%S')}（{'周' + '一二三四五六日'[now.weekday()]}）。"
         "可以帮忙管理任务清单，记笔记、检索笔记，记日记/复盘，设置日程提醒，以及联网搜索。"
         "涉及新建、查询、完成、删除任务时，必须调用对应的工具来操作，不要凭空编造任务数据或直接臆测结果。"
         "用户让你记点什么、记录下来时，调用 save_note；用户问的问题可能之前记过笔记，"

@@ -16,6 +16,7 @@ from routers.sessions import router as sessions_router
 from routers.tasks import router as tasks_router
 from routers.notes import router as notes_router
 from routers.reminders import router as reminders_router
+from routers.digest import router as digest_router
 from database import init_db
 from services.scheduler import start_scheduler, stop_scheduler
 
@@ -52,3 +53,4 @@ app.include_router(sessions_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(notes_router, prefix="/api")
 app.include_router(reminders_router, prefix="/api")
+app.include_router(digest_router, prefix="/api")

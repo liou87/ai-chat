@@ -42,11 +42,12 @@ flowchart TB
 
     subgraph Backend[后端 FastAPI]
         R1[routers/chat.py]
-        R2[routers 里的 tasks / notes / reminders / sessions]
+        R2[routers 里的 tasks / notes / reminders / digest / sessions]
         AGENT[services/agent.py tool-calling 循环]
         TOOLS[services/tools/ 工具注册表]
         SVC[services 下的 tasks / notes / chunking / notion / reminders / review / embeddings / websearch]
-        SCHED[services/scheduler.py 后台任务]
+        PERSONA[services/persona.py 人设定义]
+        SCHED[services/scheduler.py 后台任务，含每日简报]
     end
 
     DB[(PostgreSQL + pgvector<br/>Supabase)]
@@ -61,12 +62,15 @@ flowchart TB
 
     R1 --> AGENT
     AGENT --> TOOLS
+    AGENT --> PERSONA
     TOOLS --> SVC
     AGENT --> DEEPSEEK
     SVC --> DB
     SVC --> TAVILY
     SVC --> NOTION
     SCHED --> DB
+    SCHED --> PERSONA
+    SCHED --> DEEPSEEK
     R2 --> SVC
 ```
 
@@ -75,6 +79,10 @@ flowchart TB
 前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent_stream 进入循环：每一步都是对 DeepSeek 的真流式请求（stream=True，带 tools 参数），边收边判断——收到的是文字就整理组装、收到的是工具调用就等参数片段拼完整。如果是工具调用，就执行对应工具（在 services/tools/ 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具、开始输出最终的自然语言回复为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯；非流式的 run_agent（给 /api/chat 用）是这个生成器的一层薄包装，把事件收集完整再一次性返回。
 
 routers/chat.py 把这些事件实时转成 Vercel AI SDK 的 UI Message Stream 协议（SSE，事件类型有 text-start/delta/end、tool-input-available、tool-output-available 等），工具调用和结果一产生就推给前端，不用等整轮跑完；最终回复也是模型生成一块就推一块，是真正的 token 级流式，不是切块回放。session id 和"这轮有没有用到工具"通过协议自带的自定义 data 事件传递（不再用响应头），前端用 @ai-sdk/react 的 useChat 收流，工具调用会作为消息里一个小的提示片段渲染出来。这次改造是照着 github.com/vercel/ai 的协议文档做的，具体的事件格式和字段以那份文档为准。deepseek-flash 这个模型起手延迟比较长（不带工具调用的短回复常见 2～7 秒），一旦开始生成，短回复几乎是瞬间吐完，所以短回复不一定能看出明显的逐字效果；内容足够长（比如几百字）的时候，能清楚看到分批到达。
+
+助手有一个名字和性格设定，叫"知行"，取自"知行合一"，也照应它自己的工作方式——先推理、再行动。这个设定写在 services/persona.py 里，是聊天的 system prompt 和每日简报共用的同一份文本，不是分开维护的两套语气。前端把"AI 助手"这个通用标签换成了这个名字，配一个纯 SVG 画的圆形头像（frontend/src/components/AssistantAvatar.jsx），回复中的时候嘴部会换成三个交替呼吸的点，用 CSS 动画做的，没有引入动画库或者角色模型。
+
+除了被动等用户提问，services/scheduler.py 现在还会每天早上 8 点主动生成一份"今日简报"：聚合今天到期/过期的任务和今天的提醒，交给 DeepSeek 用知行的口吻写成两三句话，存进 daily_digests 表，一天只生成一次。GET /api/digest/today 是读这份简报的接口，如果当天还没生成过（比如用户在 8 点之前就打开了页面），接口会现算一份再存起来，和定时任务共用同一个函数，不会重复生成。DeepSeek 调用失败时会退化成一句模板拼出来的文字，不会让这张卡片直接挂掉。前端在工作台总览页顶部展示这份简报，不需要用户开口问。
 
 ## 4. 目录结构与文件职责
 
@@ -94,7 +102,8 @@ AI-Chat/
 │   ├── sessions.py         会话和消息历史查询
 │   ├── tasks.py            任务的 REST 接口
 │   ├── notes.py            笔记和日记的 REST 接口，含语义搜索和 Notion 同步
-│   └── reminders.py        提醒的 REST 接口
+│   ├── reminders.py        提醒的 REST 接口
+│   └── digest.py           每日简报的 REST 接口
 │
 ├── services/              业务逻辑层，REST 路由和 agent 工具共用同一套函数，不会重复实现
 │   ├── auth.py              X-API-Key 鉴权依赖，自己调用 load_dotenv，不依赖别的模块先加载 .env
@@ -113,7 +122,9 @@ AI-Chat/
 │   │   └── notion.py          Notion 只读同步：拉页面和正文、增量判断、限流重试
 │   ├── review.py            周复盘数据聚合，只出数据不调 LLM，总结文字交给 agent 自己写
 │   ├── reminders.py         提醒的增删改查，以及供调度器调用的到期检查
-│   ├── scheduler.py         APScheduler 封装，每 60 秒跑一次到期扫描
+│   ├── persona.py           助手的名字和性格设定，聊天和每日简报共用同一份
+│   ├── digest.py            每日简报：聚合今天的任务/提醒，交给 DeepSeek 写成简报文字，按天缓存
+│   ├── scheduler.py         APScheduler 封装：每 60 秒扫一次到期提醒，每天 8 点生成一次简报
 │   └── websearch.py         Tavily 封装，没配 key 时优雅返回错误提示，不会抛异常
 │
 └── frontend/              React + Vite，见第 11 节
@@ -131,7 +142,7 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
 
-sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。
+sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。
 
 表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及向量列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
 
@@ -153,6 +164,8 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 搜索：web_search 调用 Tavily 联网搜索，没配置 key 的时候会返回一条错误提示而不是让整个流程崩掉。
 
+每日简报不是 agent 工具，不是用户在聊天里触发的，走的是 services/scheduler.py 的定时任务，见第 3 节。
+
 ## 8. REST API 一览
 
 除了 /api/chat 和 /api/chat/stream 之外，其余接口主要是给前端直接操作数据用的，不经过 agent。所有接口都需要 X-API-Key 请求头。
@@ -166,6 +179,8 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source 字段。
 
 提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期的提醒，前端轮询用这个接口，DELETE /api/reminders/{id} 取消或者说是 dismiss。
+
+简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份。
 
 ## 9. 鉴权与安全
 
@@ -183,9 +198,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 11. 前端结构
 
-入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局，左边是会话侧栏，中间是聊天区，右边是工作台面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。
+入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局：左边是图标栏（总览 + 四个模块 + 主题切换），中间是当前选中的主区域，右边是可折叠的聊天面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。persona.js 只有一个常量——助手的名字，要跟后端 services/persona.py 保持一致。
 
-组件目录下，WorkbenchPanel 是右侧面板的 tab 容器，负责在任务、笔记、日记、提醒四个 tab 之间切换。TaskPanel 是任务 tab 的内容，负责增删改。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。
+组件目录下，WorkbenchPanel 是总览页，任务、笔记、日记、提醒四张卡片摆成 2x2 网格，顶部还有一张知行主动生成的"今日简报"卡片。TaskPanel 负责任务的增删改。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。
 
 状态管理上没有引入 Redux 或者 Zustand，全靠 useState 和 props 一层层传下去。App.jsx 里有个叫 workbenchRefreshKey 的计数器，agent 用过工具之后就加一，通过 props 传给各个面板，让它们重新拉一次数据，这是让"聊天里改的数据"和"面板上看到的数据"保持一致的机制。
 
@@ -222,3 +237,5 @@ web_search 工具返回的网页内容没有做任何 prompt injection 方面的
 ## 15. 可能的后续方向
 
 值得考虑的方向包括：做多 agent 编排，比如用一个 router agent 把任务分发给专门的子 agent；搭一套评测 harness，用一组测试 prompt 加预期的工具调用去自动化跑分；加限流防止 API 被刷；Notion 同步目前只能手动触发，可以加一个定时任务自动同步（spec 见 docs/specs/notion-sync.md）。
+
+参考同类开源项目（Khoj、Letta、AnythingLLM）之后，还有几个方向记下来：笔记检索目前是纯向量检索，对精确术语不够敏感，可以加一路关键词检索做混合召回；回答引用的笔记可以在界面上标出具体是哪一条、跳转过去，而不是只在模型的话里带过；agent_traces 表已经记录了完整的工具调用轨迹，但前端从没展示过，加一个按时间线展开的追踪视图成本很低；工具数量以后变多的话，可以学 AnythingLLM 先筛一遍再把相关的工具塞进上下文，省 token 也减少选错工具的概率；另外可以参考 Letta 的核心记忆概念，加一层不用检索、常驻在 system prompt 里的关键信息（比如用户的固定偏好），跟笔记的按需检索是两回事，能补上语义检索覆盖不到的稳定上下文。

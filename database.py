@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Index, ForeignKey, text
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from pgvector.sqlalchemy import Vector
@@ -115,6 +115,17 @@ class Reminder(Base):
     created_at = Column(DateTime, default=datetime.now)
     def __repr__(self):
         return f"Reminder(id={self.id}, message={self.message!r}, remind_at={self.remind_at})"
+
+# daily_digests 表：知行每天主动生成的一份简报（今日待办 + 提醒），一天一条，重复生成会覆盖同一天的记录
+class DailyDigest(Base):
+    __tablename__ = "daily_digests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    digest_date = Column(Date, unique=True, index=True, nullable=False)
+    content = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+    def __repr__(self):
+        return f"DailyDigest(digest_date={self.digest_date})"
 
 # 只负责确保 pgvector 扩展存在，每次启动跑一遍也没问题（幂等）。
 # 表结构本身不在这里建，改由 Alembic 管理（首次用 alembic upgrade head 建表，

@@ -8,6 +8,8 @@ import ModulePage from "./components/ModulePage"
 import TaskPanel from "./components/TaskPanel"
 import NotePanel from "./components/NotePanel"
 import ReminderPanel from "./components/ReminderPanel"
+import AssistantAvatar from "./components/AssistantAvatar"
+import { PERSONA_NAME } from "./persona"
 import ReminderBanner from "./components/ReminderBanner"
 import { useTheme } from "./ThemeContext"
 import { moduleAccents, railIconColor } from "./theme"
@@ -244,7 +246,10 @@ function App() {
           <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.surface }}>
             <div style={{ position: "relative", borderBottom: `1px solid ${colors.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 14px" }}>
-                <span style={{ fontSize: 14, fontWeight: 600, marginRight: "auto", color: colors.text }}>AI 助手</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: "auto" }}>
+                  <AssistantAvatar active={loading} size={24} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{PERSONA_NAME}</span>
+                </div>
                 <button onClick={() => { setCurrentSession(null); setMessages([]); setShowHistory(false) }} style={iconBtnStyle} title="新对话">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                 </button>

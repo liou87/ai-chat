@@ -1,10 +1,11 @@
 # AI Chat
 
-基于 DeepSeek API 的个人工作台 agent 平台：聊天是入口，AI 通过 function calling 管理任务、笔记（语义检索）、日记复盘、日程提醒，并能联网搜索。详细架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+基于 DeepSeek API 的个人工作台 agent 平台：聊天是入口，助手叫"知行"，通过 function calling 管理任务、笔记（语义检索）、日记复盘、日程提醒，并能联网搜索。详细架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 功能特性
 
-- 多轮对话，AI 记忆上下文，支持流式回复
+- 助手有名字和性格设定（知行），不是通用的"AI 助手"标签，每天早上还会主动生成一份今日简报，不用开口问
+- 多轮对话，AI 记忆上下文，支持真正的 token 级流式回复（Vercel AI SDK 协议），工具调用过程实时可见
 - Agent 工具调用：建任务/查任务、记笔记/语义搜索笔记、记日记/生成周复盘、设提醒、联网搜索、同步 Notion 笔记
 - 笔记按段落和标题分块后做向量检索，长笔记的后半段也能被搜到；Notion 数据库只读导入，增量同步，Notion 里删掉的页面本地副本也会清理
 - 每轮对话的工具调用过程可追溯（`agent_traces` 表）
@@ -18,7 +19,7 @@
 - 后端：Python 3.11 + FastAPI（全异步）+ SQLAlchemy + Alembic + APScheduler
 - 数据库：PostgreSQL + pgvector（当前托管在 Supabase）
 - AI：DeepSeek API（function calling）+ fastembed（本地中文 embedding）+ Tavily（联网搜索）
-- 前端：React 19 + Vite
+- 前端：React 19 + Vite + Vercel AI SDK（@ai-sdk/react，真流式聊天）
 - 部署：Railway（后端）+ Vercel（前端）
 
 ## 线上地址

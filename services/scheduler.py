@@ -2,6 +2,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import SessionLocal
 from services import reminders as reminders_service
+from services import digest as digest_service
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,19 @@ async def _check_due_reminders():
             logger.info(f"触发 {len(due)} 条到期提醒：{[r['message'] for r in due]}")
 
 
+async def _generate_daily_digest():
+    async with SessionLocal() as db:
+        result = await digest_service.get_or_create_today_digest(db)
+        logger.info(f"生成每日简报：{result['content'][:50]}")
+
+
 def start_scheduler():
     scheduler.add_job(_check_due_reminders, "interval", seconds=60, id="check_due_reminders")
+    # 每天早上 8 点主动生成一份简报，不用等用户开口；用户当天第一次打开页面时如果这条还没跑，
+    # 接口自己也会现算一份，两边共用同一个函数，不会重复生成
+    scheduler.add_job(_generate_daily_digest, "cron", hour=8, minute=0, id="generate_daily_digest")
     scheduler.start()
-    logger.info("提醒调度器已启动，每 60 秒扫描一次")
+    logger.info("提醒调度器已启动，每 60 秒扫描一次；每日简报调度器已启动，每天 8:00 生成")
 
 
 def stop_scheduler():
