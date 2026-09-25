@@ -99,6 +99,7 @@ class Note(Base):
     source = Column(String(20), default="local")               # local / notion
     external_id = Column(String(100), nullable=True, index=True)   # 来源系统里的 id（比如 Notion 页面 id）
     external_updated_at = Column(DateTime, nullable=True)       # 来源系统的最后编辑时间（UTC），用于增量同步判断
+    structured_data = Column(Text, nullable=True)               # 日记复盘的引导问答+评分，JSON 文本，只有 journal 分类会用到
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     def __repr__(self):

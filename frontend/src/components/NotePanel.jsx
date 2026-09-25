@@ -47,6 +47,38 @@ function NoteContent({ text, lines, fontSize }) {
   )
 }
 
+const RATING_ITEMS = [
+  { key: "energy", label: "精力" },
+  { key: "stress", label: "压力" },
+  { key: "satisfaction", label: "满意度" },
+  { key: "focus", label: "专注度" },
+]
+
+// 1-5 分的评分选择器，5 个小圆点按钮，选中的用强调色填充
+function RatingPicker({ label, value, onChange, accent, colors }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontSize: 12.5, color: colors.textSecondary, width: 46, flexShrink: 0 }}>{label}</span>
+      <div style={{ display: "flex", gap: 5 }}>
+        {[1, 2, 3, 4, 5].map(n => (
+          <button
+            key={n}
+            onClick={() => onChange(value === n ? null : n)}
+            style={{
+              width: 22, height: 22, borderRadius: "50%", fontSize: 11, cursor: "pointer",
+              border: `1px solid ${value === n ? accent : colors.border}`,
+              background: value === n ? accent : "none",
+              color: value === n ? "#fff" : colors.textMuted,
+            }}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // 笔记 / 日记复盘共用的内容面板，category 由外层容器决定，accent 决定这张卡片的强调色。
 // 搜索框走语义检索并展示相似度分数，journal 分类下额外提供"生成本周复盘"入口，
 // note 分类下提供"同步 Notion"（只读导入）；Notion 来源的笔记标出来源，且不能在这里删除。
@@ -63,6 +95,10 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
   const [showForm, setShowForm] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null)   // { text, isError }
+
+  // 日记复盘的引导表单状态：三道固定问题 + 四项 1-5 评分，都是可选的，跟自由记录二选一或者都填
+  const emptyReview = { done: "", blocker: "", tomorrow: "", ratings: { energy: null, stress: null, satisfaction: null, focus: null } }
+  const [review, setReview] = useState(emptyReview)
 
   const fetchNotes = async () => {
     setLoading(true)
@@ -110,15 +146,34 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
   }, [refreshKey, category])
 
   const addNote = async () => {
-    if (!newContent.trim()) return
-    const title = category === "journal"
-      ? `日记 ${new Date().toISOString().slice(0, 10)}`
-      : newTitle
-    if (!title.trim()) return
+    if (category === "journal") {
+      const { done, blocker, tomorrow, ratings } = review
+      const hasRating = Object.values(ratings).some(v => v != null)
+      if (!done.trim() && !blocker.trim() && !tomorrow.trim() && !hasRating && !newContent.trim()) return
+      await fetch(`${API}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          category,
+          structured_data: {
+            answers: { done: done.trim(), blocker: blocker.trim(), tomorrow: tomorrow.trim() },
+            ratings,
+            notes: newContent.trim(),
+          },
+        })
+      })
+      setReview(emptyReview)
+      setNewContent("")
+      setShowForm(false)
+      fetchNotes()
+      return
+    }
+
+    if (!newContent.trim() || !newTitle.trim()) return
     await fetch(`${API}/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ title, content: newContent, category })
+      body: JSON.stringify({ title: newTitle, content: newContent, category })
     })
     setNewTitle("")
     setNewContent("")
@@ -194,16 +249,58 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             </div>
           )}
         </div>
+      ) : category === "journal" ? (
+        <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          <input
+            value={review.done}
+            onChange={e => setReview({ ...review, done: e.target.value })}
+            placeholder="今天完成了什么？"
+            style={inputStyle}
+          />
+          <input
+            value={review.blocker}
+            onChange={e => setReview({ ...review, blocker: e.target.value })}
+            placeholder="今天最大的阻碍是什么？"
+            style={inputStyle}
+          />
+          <input
+            value={review.tomorrow}
+            onChange={e => setReview({ ...review, tomorrow: e.target.value })}
+            placeholder="明天最重要的一件事？"
+            style={inputStyle}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 0" }}>
+            {RATING_ITEMS.map(({ key, label }) => (
+              <RatingPicker
+                key={key}
+                label={label}
+                value={review.ratings[key]}
+                onChange={v => setReview({ ...review, ratings: { ...review.ratings, [key]: v } })}
+                accent={resolvedAccent}
+                colors={colors}
+              />
+            ))}
+          </div>
+          <textarea
+            value={newContent}
+            onChange={e => setNewContent(e.target.value)}
+            placeholder="自由记录（可选）"
+            rows={2}
+            style={{ ...inputStyle, resize: "vertical" }}
+          />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={addNote} style={{ ...accentButtonStyle(resolvedAccent), flex: 1 }}>保存</button>
+            <button onClick={() => { setShowForm(false); setReview(emptyReview); setNewContent("") }} style={buttonStyle}>取消</button>
+          </div>
+        </div>
       ) : (
         <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-          {category === "note" && (
-            <input
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              placeholder="标题"
-              style={inputStyle}
-            />
-          )}
+          <input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            placeholder="标题"
+            style={inputStyle}
+          />
           <textarea
             value={newContent}
             onChange={e => setNewContent(e.target.value)}

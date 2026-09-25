@@ -10,9 +10,10 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
 class CreateNoteRequest(BaseModel):
-    title: str
-    content: str
+    title: str = ""
+    content: str = ""
     category: str = "note"
+    structured_data: Optional[dict] = None   # 日记复盘的引导问答+评分，只有 category="journal" 会用到
 
 
 @router.get("/notes")
@@ -24,6 +25,10 @@ async def get_notes(category: Optional[str] = None):
 @router.post("/notes")
 async def create_note(request: CreateNoteRequest):
     async with SessionLocal() as db:
+        if request.category == "journal":
+            # 日记统一走 create_journal_entry：标题按日期自动生成，结构化复盘也在这里渲染成正文，
+            # 跟 agent 工具 add_journal_entry 走的是同一条路径，不会出现两套不一致的行为
+            return await notes_service.create_journal_entry(db, content=request.content, structured_data=request.structured_data)
         return await notes_service.create_note(db, title=request.title, content=request.content, category=request.category)
 
 

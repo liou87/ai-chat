@@ -142,7 +142,7 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
 
-sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间，goal_id 是可选的外键，挂靠某个目标（删掉目标时这个字段置空，不会连带删任务）。goals 表是三层目标——phase（阶段）没有上级，month（月目标）挂在某个 phase 下，week（周目标）挂在某个 month 下，parent_id 自引用表示这层关系，删掉一个目标会级联删掉它的子目标；progress 是 0 到 100 的整数，手动或者 agent 调用工具设定，不从关联任务的完成比例自动算，因为目标进度往往不是子任务数量的线性函数。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。
+sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间，goal_id 是可选的外键，挂靠某个目标（删掉目标时这个字段置空，不会连带删任务）。goals 表是三层目标——phase（阶段）没有上级，month（月目标）挂在某个 phase 下，week（周目标）挂在某个 month 下，parent_id 自引用表示这层关系，删掉一个目标会级联删掉它的子目标；progress 是 0 到 100 的整数，手动或者 agent 调用工具设定，不从关联任务的完成比例自动算，因为目标进度往往不是子任务数量的线性函数。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过；structured_data 是日记复盘的引导问答加评分，JSON 文本，只有 journal 分类会用到，笔记分类恒为空。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。
 
 表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及向量列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
 
@@ -160,7 +160,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 笔记相关：save_note 存一条笔记，自动分块并算向量，search_notes 做语义检索，sync_notion_notes 把 Notion 数据库里的页面同步进来，返回新增、更新、跳过、失败、删除的数量。
 
-日记相关：add_journal_entry 记一条日记，标题会自动生成成"日记 加日期"的格式；get_weekly_review 拿近 7 天任务、日记、笔记的聚合数据，本身不生成总结。
+日记相关：add_journal_entry 记一条日记，标题会自动生成成"日记 加日期"的格式；用户如果是在做每日复盘，模型会优先用 done/blocker/tomorrow 三个引导字段和 energy/stress/satisfaction/focus 四个 1-5 评分字段分别填，而不是揉进一段自由文本，content 字段只用来放不属于这几个问题的自由记录，两种可以同时给。get_weekly_review 拿近 7 天任务、日记、笔记的聚合数据，本身不生成总结。
 
 提醒相关：set_reminder 设置提醒，list_reminders 查询所有提醒，cancel_reminder 取消。
 
@@ -180,7 +180,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
 
-笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source 字段。
+笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，POST 传 category="journal" 会自动走日记的建号逻辑（标题按日期生成，忽略传入的 title），可以带 structured_data 传引导问答和评分；GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source 和 structured_data 字段。
 
 提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期的提醒，前端轮询用这个接口，DELETE /api/reminders/{id} 取消或者说是 dismiss。
 
@@ -204,7 +204,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局：左边是图标栏（总览 + 五个模块 + 主题切换），中间是当前选中的主区域，右边是可折叠的聊天面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。persona.js 只有一个常量——助手的名字，要跟后端 services/persona.py 保持一致。
 
-组件目录下，WorkbenchPanel 是总览页，任务、笔记、日记、提醒四张卡片摆成 2x2 网格，网格上方是一张知行主动生成的"今日简报"卡片，再上面是"目标与下一里程碑"卡片（只显示阶段目标和进度条，完整的三层结构要点开"目标"模块看）。GoalPanel 是目标面板，compact 模式（总览卡片）只显示阶段目标，expanded 模式（点图标栏进入）显示完整的阶段/月/周三层缩进结构，可以新建、改进度、删除；新建目标时如果不是阶段目标，要先选一个类型对的上级。TaskPanel 负责任务的增删改，任务如果挂靠了目标，标题下面会用目标的强调色标出目标名称。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。
+组件目录下，WorkbenchPanel 是总览页，任务、笔记、日记、提醒四张卡片摆成 2x2 网格，网格上方是一张知行主动生成的"今日简报"卡片，再上面是"目标与下一里程碑"卡片（只显示阶段目标和进度条，完整的三层结构要点开"目标"模块看）。GoalPanel 是目标面板，compact 模式（总览卡片）只显示阶段目标，expanded 模式（点图标栏进入）显示完整的阶段/月/周三层缩进结构，可以新建、改进度、删除；新建目标时如果不是阶段目标，要先选一个类型对的上级。TaskPanel 负责任务的增删改，任务如果挂靠了目标，标题下面会用目标的强调色标出目标名称。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。日记分类下的新建表单跟笔记不一样，是引导式的：三道固定问题（今天完成了什么/最大的阻碍/明天最重要的一件事）加四项 1-5 评分（精力/压力/满意度/专注度，RatingPicker 组件画的一排小圆点按钮），再加一个可选的自由记录，全部字段都能空着不填。这几项会拼成一段正常的文本存进 content（拼接逻辑在后端 services/notes/notes.py 的 render_structured_review，前端和 agent 工具共用同一份渲染逻辑，不会走出两套格式），原始的问答和评分单独存在 structured_data 字段里。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。
 
 状态管理上没有引入 Redux 或者 Zustand，全靠 useState 和 props 一层层传下去。App.jsx 里有个叫 workbenchRefreshKey 的计数器，agent 用过工具之后就加一，通过 props 传给各个面板，让它们重新拉一次数据，这是让"聊天里改的数据"和"面板上看到的数据"保持一致的机制。
 

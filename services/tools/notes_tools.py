@@ -20,6 +20,9 @@ async def _sync_notion_notes(db: AsyncSession, args: dict) -> dict:
     return await notion_service.sync_notion_notes(db)
 
 
+RATING_FIELDS = ("energy", "stress", "satisfaction", "focus")
+
+
 async def _add_journal_entry(db: AsyncSession, args: dict) -> dict:
     entry_date = None
     if args.get("date"):
@@ -27,7 +30,21 @@ async def _add_journal_entry(db: AsyncSession, args: dict) -> dict:
             entry_date = datetime.fromisoformat(args["date"])
         except ValueError:
             entry_date = None
-    return await notes_service.create_journal_entry(db, content=args["content"], entry_date=entry_date)
+
+    # 引导问答/评分任意一项出现，就当成结构化复盘处理，正文交给 create_journal_entry 自动渲染；
+    # 都没有的话就是纯自由文本日记，走原来的路径
+    answer_keys = ("done", "blocker", "tomorrow")
+    structured_data = None
+    if any(args.get(k) for k in answer_keys) or any(args.get(k) is not None for k in RATING_FIELDS):
+        structured_data = {
+            "answers": {k: args[k] for k in answer_keys if args.get(k)},
+            "ratings": {k: args[k] for k in RATING_FIELDS if args.get(k) is not None},
+            "notes": args.get("content"),
+        }
+
+    return await notes_service.create_journal_entry(
+        db, content=args.get("content", ""), entry_date=entry_date, structured_data=structured_data
+    )
 
 
 async def _get_weekly_review(db: AsyncSession, args: dict) -> dict:
@@ -89,17 +106,26 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "add_journal_entry",
-                "description": "记一条日记/复盘条目",
+                "description": "记一条日记/复盘条目。用户如果是在做每日复盘（回顾今天做了什么、遇到的问题、"
+                                "明天打算做什么，或者提到精力/压力/心情这类状态），优先用 done/blocker/tomorrow/"
+                                "energy/stress/satisfaction/focus 这几个引导字段分别填，不要把回答揉进 content 里；"
+                                "content 只用于纯自由记录，两种可以同时给。",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "content": {"type": "string", "description": "日记正文"},
+                        "content": {"type": "string", "description": "自由记录的正文，不属于下面几个引导问题的内容写这里，不确定就留空"},
+                        "done": {"type": "string", "description": "今天完成了什么"},
+                        "blocker": {"type": "string", "description": "今天最大的阻碍是什么"},
+                        "tomorrow": {"type": "string", "description": "明天最重要的一件事"},
+                        "energy": {"type": "integer", "description": "精力评分，1 到 5"},
+                        "stress": {"type": "integer", "description": "压力评分，1 到 5"},
+                        "satisfaction": {"type": "integer", "description": "满意度评分，1 到 5"},
+                        "focus": {"type": "integer", "description": "专注度评分，1 到 5"},
                         "date": {
                             "type": "string",
                             "description": "这条日记对应的日期，ISO 8601 格式，例如 2026-09-14，不确定就留空（默认今天）",
                         },
                     },
-                    "required": ["content"],
                 },
             },
         },

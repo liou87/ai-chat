@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import select, delete
@@ -9,6 +10,9 @@ from .embeddings import embed_text, embed_texts
 # 检索时先多取几倍的分块再按笔记去重：一条长笔记可能有好几个分块都排在前面，
 # 直接取 top_k 个分块的话，结果会被同一条笔记占满
 OVERSAMPLE = 4
+
+# 日记复盘的评分维度，key 是存进 structured_data 里的字段名，value 是显示用的中文标签
+RATING_LABELS = {"energy": "精力", "stress": "压力", "satisfaction": "满意度", "focus": "专注度"}
 
 
 class NoteReadOnlyError(Exception):
@@ -22,11 +26,34 @@ def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
         "content": note.content,
         "category": note.category,
         "source": note.source,
+        "structured_data": json.loads(note.structured_data) if note.structured_data else None,
         "created_at": note.created_at.isoformat() if note.created_at else None,
     }
     if with_score is not None:
         data["score"] = round(with_score, 4)
     return data
+
+
+def render_structured_review(data: dict) -> str:
+    """
+    把复盘的引导问答 + 评分渲染成一段正常的文本，存进 content 字段——这样日记既能被现有的
+    分块/语义检索直接用上，周复盘聚合的时候也不用额外处理，看到的就是一段普通笔记正文。
+    """
+    lines = []
+    answers = data.get("answers") or {}
+    for key, label in (("done", "今天完成了什么"), ("blocker", "最大的阻碍"), ("tomorrow", "明天最重要的一件事")):
+        if answers.get(key):
+            lines.append(f"{label}：{answers[key]}")
+
+    ratings = data.get("ratings") or {}
+    rated = [f"{RATING_LABELS.get(k, k)} {v}/5" for k, v in ratings.items() if v]
+    if rated:
+        lines.append(" · ".join(rated))
+
+    if data.get("notes"):
+        lines.append(data["notes"])
+
+    return "\n\n".join(lines)
 
 
 async def _build_chunks(title: str, content: str) -> list:
@@ -41,11 +68,12 @@ async def _build_chunks(title: str, content: str) -> list:
 
 
 async def create_note(db: AsyncSession, title: str, content: str, category: str = "note",
-                       created_at: Optional[datetime] = None) -> dict:
+                       created_at: Optional[datetime] = None, structured_data: Optional[dict] = None) -> dict:
     # 先算向量再开始写库，避免慢的推理过程占着事务
     chunks = await _build_chunks(title, content)
 
-    note = Note(title=title, content=content, category=category)
+    note = Note(title=title, content=content, category=category,
+                structured_data=json.dumps(structured_data, ensure_ascii=False) if structured_data else None)
     if created_at:
         note.created_at = created_at
     db.add(note)
@@ -59,10 +87,14 @@ async def create_note(db: AsyncSession, title: str, content: str, category: str 
     return _serialize(note)
 
 
-async def create_journal_entry(db: AsyncSession, content: str, entry_date: Optional[datetime] = None) -> dict:
+async def create_journal_entry(db: AsyncSession, content: str, entry_date: Optional[datetime] = None,
+                                structured_data: Optional[dict] = None) -> dict:
     entry_date = entry_date or datetime.now()
     title = f"日记 {entry_date.strftime('%Y-%m-%d')}"
-    return await create_note(db, title=title, content=content, category="journal", created_at=entry_date)
+    if structured_data:
+        content = render_structured_review(structured_data)
+    return await create_note(db, title=title, content=content, category="journal", created_at=entry_date,
+                              structured_data=structured_data)
 
 
 async def list_notes(db: AsyncSession, category: Optional[str] = None) -> list[dict]:
