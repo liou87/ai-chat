@@ -25,6 +25,7 @@
 | 联网搜索 | Tavily REST API | 用 httpx 直接调用，没有引入官方 SDK |
 | Notion 同步 | Notion REST API，版本头 2025-09-03 | 用 httpx 直连，只读导入，没有引入官方 SDK |
 | 前端框架 | React 19 + Vite 8 | 没用状态管理库，纯 useState 和 props |
+| 聊天流式 | Vercel AI SDK（ai + @ai-sdk/react） | 后端按它的 UI Message Stream 协议推流，前端用 useChat 收，换来真正的 token 级流式和工具调用的实时可见性 |
 | Markdown 渲染 | react-markdown | 渲染 AI 回复 |
 | 部署 | Railway 跑后端，Vercel 跑前端 | |
 | Python 版本 | 3.11 | 曾经用的是 Anaconda 全局 3.8，因为 fastembed 依赖的 onnxruntime 需要 3.10 以上而升级 |
@@ -71,9 +72,9 @@ flowchart TB
 
 一次带工具调用的对话请求，完整链路是这样的（以 /api/chat/stream 为例）：
 
-前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent 进入循环：调用 DeepSeek 的 chat completions 接口并带上 tools 参数，如果模型返回 tool_calls，就执行对应工具（在 services/tools/ 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯。
+前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent_stream 进入循环：每一步都是对 DeepSeek 的真流式请求（stream=True，带 tools 参数），边收边判断——收到的是文字就整理组装、收到的是工具调用就等参数片段拼完整。如果是工具调用，就执行对应工具（在 services/tools/ 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具、开始输出最终的自然语言回复为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯；非流式的 run_agent（给 /api/chat 用）是这个生成器的一层薄包装，把事件收集完整再一次性返回。
 
-拿到最终文本后，chat.py 会把它切成小块、带小延迟依次吐给前端，模拟打字机效果。这里要注意，这不是真正的 token 级流式，因为工具调用阶段没法边调用边流式吐字，所以实际是整体生成完再回放。响应头里带着 X-Session-Id（新会话的 id）和 X-Tool-Used（这一轮有没有调用过工具），前端用后者决定要不要刷新工作台面板。
+routers/chat.py 把这些事件实时转成 Vercel AI SDK 的 UI Message Stream 协议（SSE，事件类型有 text-start/delta/end、tool-input-available、tool-output-available 等），工具调用和结果一产生就推给前端，不用等整轮跑完；最终回复也是模型生成一块就推一块，是真正的 token 级流式，不是切块回放。session id 和"这轮有没有用到工具"通过协议自带的自定义 data 事件传递（不再用响应头），前端用 @ai-sdk/react 的 useChat 收流，工具调用会作为消息里一个小的提示片段渲染出来。这次改造是照着 github.com/vercel/ai 的协议文档做的，具体的事件格式和字段以那份文档为准。deepseek-flash 这个模型起手延迟比较长（不带工具调用的短回复常见 2～7 秒），一旦开始生成，短回复几乎是瞬间吐完，所以短回复不一定能看出明显的逐字效果；内容足够长（比如几百字）的时候，能清楚看到分批到达。
 
 ## 4. 目录结构与文件职责
 
@@ -124,7 +125,7 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 设一个最大步数上限（目前是 5），防止死循环。每一步先调用 DeepSeek 接口。如果模型返回的消息里没有 tool_calls，说明它给出了最终回复，循环结束，把这段文字返回。如果有 tool_calls，就依次找到每个工具对应的处理函数、执行、把结果按 OpenAI 的 tool 消息格式塞回对话历史，然后进入下一轮循环，继续问模型。
 
-设计上有几个值得记住的点。工具是服务层的薄包装，tools.py 里的处理函数只是调用 tasks.py 这些模块里的普通函数，REST 路由也调用同一套函数，所以聊天里能做的事和界面上能做的事逻辑不会分叉。工具本身是"哑"的，不会自己调用 LLM，比如 get_weekly_review 只返回结构化数据，总结文字是外层循环里模型自己生成的，这样工具保持确定性，也方便单独测试。system prompt 里会注入当前时间，否则模型没法把"明天""5 分钟后"这种相对时间换算准确。最后，流式接口不是真流式，原因前面第 3 节已经说过。
+设计上有几个值得记住的点。工具是服务层的薄包装，tools.py 里的处理函数只是调用 tasks.py 这些模块里的普通函数，REST 路由也调用同一套函数，所以聊天里能做的事和界面上能做的事逻辑不会分叉。工具本身是"哑"的，不会自己调用 LLM，比如 get_weekly_review 只返回结构化数据，总结文字是外层循环里模型自己生成的，这样工具保持确定性，也方便单独测试。system prompt 里会注入当前时间，否则模型没法把"明天""5 分钟后"这种相对时间换算准确。
 
 ## 6. 数据模型
 
@@ -156,7 +157,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 除了 /api/chat 和 /api/chat/stream 之外，其余接口主要是给前端直接操作数据用的，不经过 agent。所有接口都需要 X-API-Key 请求头。
 
-对话相关：POST /api/chat 是非流式对话，返回内容包含 session_id、reply 和 trace；POST /api/chat/stream 是流式对话，响应头里带 X-Session-Id 和 X-Tool-Used。
+对话相关：POST /api/chat 是非流式对话，返回内容包含 session_id、reply 和 trace；POST /api/chat/stream 是流式对话，按 Vercel AI SDK 的 UI Message Stream 协议返回 SSE，session id 和是否用过工具通过协议里的自定义 data 事件传递。
 
 会话相关：GET /api/sessions 拿会话列表，GET /api/sessions/{id}/messages 拿某个会话的历史消息。
 
@@ -204,9 +205,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 onnxruntime 目前钉死在 1.17.3 版本，同时要求 numpy 低于 2.0，这是刻意为之。更高版本的 onnxruntime 在开发机上和 numpy 2.x 之间有 ABI 层面的冲突，会直接导致进程崩溃，不是普通的 Python 异常。以后升级这两个包之前，务必先确认组合仍然兼容。
 
-流式接口是伪流式，前面已经解释过原因，工具调用阶段对用户来说是完全不可见的，只能干等。
-
 会话列表和笔记列表这些接口都是全量返回，没有做分页，数据量大了会慢。
+
+前端目前只渲染了"文字部分"和"哪个工具被调用了"这个提示，工具调用的具体参数和返回结果没有展示在界面上，只在 agent_traces 表里能查到完整信息。
 
 项目里没有自动化测试，所有验证都是手动用 curl 或者浏览器测过的。
 

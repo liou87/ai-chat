@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
+import { useChat } from "@ai-sdk/react"
+import { DefaultChatTransport } from "ai"
 import { API, authHeaders } from "./api"
 import WorkbenchPanel from "./components/WorkbenchPanel"
 import ModulePage from "./components/ModulePage"
@@ -16,6 +18,9 @@ const iconBtnStyle = {
   display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
 }
 
+// 从 useChat 的 UIMessage.parts 里拼出纯文本，导出对话用得到
+const messageText = (msg) => msg.parts.filter(p => p.type === "text").map(p => p.text).join("")
+
 // 图标栏的导航项：总览 + 四个模块，点哪个主区域就切到哪个视图
 const NAV_ITEMS = [
   { key: "overview", label: "总览", icon: "overview", accent: null },
@@ -30,17 +35,10 @@ function App() {
   const [activeView, setActiveView] = useState("overview")  // overview | tasks | notes | journal | reminders
   const [sessions, setSessions] = useState([])          // 会话列表
   const [currentSession, setCurrentSession] = useState(null)  // 当前会话id
-  const [messages, setMessages] = useState([])          // 当前对话消息
   const [input, setInput] = useState("")
-  const [loading, setLoading] = useState(false)
   const [workbenchRefreshKey, setWorkbenchRefreshKey] = useState(0)  // agent 用过工具后 +1，触发工作台面板刷新
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-
-  // 页面加载时获取所有会话
-  useEffect(() => {
-    fetchSessions()
-  }, [])
 
   const fetchSessions = async () => {
     const res = await fetch(`${API}/sessions`, { headers: authHeaders })
@@ -48,79 +46,69 @@ function App() {
     setSessions(data)
   }
 
+  // useChat 的 onData 回调是 hook 初始化时捕获的闭包，用 ref 存 currentSession 才能在回调里读到最新值
+  const currentSessionRef = useRef(null)
+  useEffect(() => { currentSessionRef.current = currentSession }, [currentSession])
+
+  // transport 只创建一次：请求体按后端 /api/chat/stream 已有的 {session_id, messages: [{role, content}]}
+  // 格式重新拼装，不用 AI SDK 默认的 UIMessage 请求体，后端完全不用感知这次前端改造。
+  // prepareSendMessagesRequest 只在真正发请求时才会被调用（不在渲染过程中执行），这里读 ref 是安全的，
+  // 跟 AI SDK 官方文档里 headers: () => getToken() 是同一个道理；eslint 的 react-hooks/refs 规则会顺着
+  // 变量追踪到 ref，不管它有没有嵌在没被立即调用的回调里，所以这里手动豁免一下。
+  // eslint-disable-next-line react-hooks/refs
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: `${API}/chat/stream`,
+    headers: authHeaders,
+    prepareSendMessagesRequest: ({ messages: uiMessages }) => ({
+      headers: authHeaders,
+      body: {
+        session_id: currentSessionRef.current,
+        messages: uiMessages.map(m => ({ role: m.role, content: messageText(m) })),
+      },
+    }),
+  }), [])
+
+  // 后端按 AI SDK 的 UI Message Stream 协议推事件：文字是逐块的 text-delta，工具调用是
+  // tool-input-available/tool-output-available，session id 和"这轮有没有用到工具"走自定义的 data 事件
+  const { messages, sendMessage: sendChatMessage, setMessages, status } = useChat({
+    transport,
+    onData: (part) => {
+      if (part.type === "data-session") {
+        const sid = part.data.sessionId
+        if (currentSessionRef.current == null) {
+          setCurrentSession(sid)
+          fetchSessions()
+        }
+      } else if (part.type === "data-meta" && part.data.toolUsed) {
+        setWorkbenchRefreshKey(k => k + 1)
+      }
+    },
+  })
+  const loading = status === "submitted" || status === "streaming"
+
+  // 页面加载时获取所有会话
+  useEffect(() => {
+    fetchSessions()
+  }, [])
+
   // 点击会话，加载该会话的消息
   const loadSession = async (sessionId) => {
     setCurrentSession(sessionId)
     setShowHistory(false)
     const res = await fetch(`${API}/sessions/${sessionId}/messages`, { headers: authHeaders })
     const data = await res.json()
-    setMessages(data)
+    setMessages(data.map((m, i) => ({
+      id: `hist-${sessionId}-${i}`,
+      role: m.role,
+      parts: [{ type: "text", text: m.content }],
+    })))
   }
 
-  const sendMessage = async (presetText) => {
+  const sendMessage = (presetText) => {
     const text = presetText ?? input
     if (!text.trim()) return
-
-    const newMessages = [...messages, { role: "user", content: text }]
-    setMessages(newMessages)
     if (!presetText) setInput("")
-    setLoading(true)
-
-    // 先加一条空的 AI 消息占位
-    setMessages([...newMessages, { role: "assistant", content: "" }])
-
-    const res = await fetch(`${API}/chat/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({
-        session_id: currentSession,
-        messages: newMessages
-      })
-    })
-
-    if (!res.ok) {
-      setMessages(prev => {
-        const updated = [...prev]
-        updated[updated.length - 1] = { role: "assistant", content: "[请求失败，请稍后再试]" }
-        return updated
-      })
-      setLoading(false)
-      return
-    }
-
-    const newSessionId = res.headers.get("X-Session-Id")
-    const toolUsed = res.headers.get("X-Tool-Used") === "true"
-
-    // 读取流式响应
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let fullReply = ""
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const chunk = decoder.decode(value)
-      fullReply += chunk
-
-      // 每收到一块就更新最后一条 AI 消息
-      setMessages(prev => {
-        const updated = [...prev]
-        updated[updated.length - 1] = { role: "assistant", content: fullReply }
-        return updated
-      })
-    }
-
-    // 流结束后刷新历史，并记录新会话 id
-    if (!currentSession) {
-      if (newSessionId) setCurrentSession(Number(newSessionId))
-      fetchSessions()
-    }
-    // agent 这一轮调用过工具（比如改了任务/笔记/提醒），刷新工作台面板
-    if (toolUsed) {
-      setWorkbenchRefreshKey(k => k + 1)
-    }
-    setLoading(false)
+    sendChatMessage({ text })
   }
 
   // 导出对话
@@ -131,13 +119,13 @@ function App() {
 
     if (format === "txt") {
       content = messages.map(msg =>
-        `${msg.role === "user" ? "我" : "AI"}：${msg.content}`
+        `${msg.role === "user" ? "我" : "AI"}：${messageText(msg)}`
       ).join("\n\n")
     } else {
       content = messages.map(msg =>
         msg.role === "user"
-          ? `**我：** ${msg.content}`
-          : `**AI：** ${msg.content}`
+          ? `**我：** ${messageText(msg)}`
+          : `**AI：** ${messageText(msg)}`
       ).join("\n\n---\n\n")
     }
 
@@ -284,25 +272,42 @@ function App() {
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 12 }}>
-              {messages.map((msg, i) => (
-                <div key={i} style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-                  <span style={{
-                    display: "inline-block",
-                    background: msg.role === "user" ? colors.primary : colors.assistantBubble,
-                    color: msg.role === "user" ? colors.primaryText : colors.text,
-                    padding: "8px 12px",
-                    borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
-                    fontSize: 13.5,
-                    lineHeight: 1.5,
-                  }}>
-                    {msg.role === "assistant"
-                      ? <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      : msg.content
+              {messages.map((msg) => (
+                <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 4, alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+                  {msg.parts.map((part, pi) => {
+                    if (part.type === "text") {
+                      if (!part.text) return null
+                      return (
+                        <span key={pi} style={{
+                          display: "inline-block",
+                          background: msg.role === "user" ? colors.primary : colors.assistantBubble,
+                          color: msg.role === "user" ? colors.primaryText : colors.text,
+                          padding: "8px 12px",
+                          borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                          fontSize: 13.5,
+                          lineHeight: 1.5,
+                        }}>
+                          {msg.role === "assistant"
+                            ? <ReactMarkdown>{part.text}</ReactMarkdown>
+                            : part.text
+                          }
+                        </span>
+                      )
                     }
-                  </span>
+                    // 工具调用/结果这类 part 的 type 是 "tool-<工具名>"，只是一个不抢眼的小提示
+                    if (part.type.startsWith("tool-")) {
+                      return (
+                        <span key={pi} style={{ fontSize: 11, color: colors.textMuted }}>
+                          🔧 调用了 {part.type.slice(5)}
+                        </span>
+                      )
+                    }
+                    return null
+                  })}
                 </div>
               ))}
               {loading && <div style={{ color: colors.textMuted, fontSize: 13 }}>AI 正在回复...</div>}
+              {status === "error" && <div style={{ color: colors.danger, fontSize: 13 }}>请求失败，请稍后再试</div>}
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, padding: "0 16px" }}>

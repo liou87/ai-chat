@@ -1,4 +1,5 @@
-import asyncio
+import json
+import uuid
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -7,7 +8,7 @@ import logging
 from sqlalchemy import select, func
 from fastapi.responses import StreamingResponse
 from services.auth import verify_api_key
-from services.agent import run_agent
+from services.agent import run_agent, run_agent_stream
 from database import SessionLocal, ChatSession, Message
 
 logger = logging.getLogger(__name__)
@@ -96,52 +97,75 @@ async def chat(request: ChatRequest):
         return {"session_id": session_id, "reply": reply, "trace": trace}
 
 
+def _sse(payload: dict) -> str:
+    """AI SDK UI Message Stream 协议的一行：data: 加 JSON，空行结尾。"""
+    return f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+
+
 ##################
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     if not request.messages:
         raise HTTPException(status_code=400, detail="messages 不能为空")
 
-    # 存用户消息到数据库（和普通接口一样）
-    async with SessionLocal() as db:
-        session_id = await _get_or_create_session(db, request)
-        turn_index = await _get_turn_index(db, session_id)
-
-        last_user_msg = request.messages[-1]
-        db.add(Message(
-            session_id=session_id,
-            role=last_user_msg.role,
-            content=last_user_msg.content
-        ))
-        await db.commit()
-
-        # 工具调用循环不适合逐 token 真流式（可能要连续调几次工具），
-        # 所以先把完整流程跑完，再把最终文本按小段"回放"给前端，保留打字机效果，
-        # 同时避免为了拿流式效果而对模型多发一次请求（省钱、也避免两次结果不一致）。
-        try:
-            reply, trace = await run_agent(db, session_id, turn_index, _build_messages(request))
-        except Exception:
-            logger.error(f"流式请求失败，session_id: {session_id}", exc_info=True)
-
-            async def error_stream():
-                yield "\n[出错了，AI 服务暂时不可用，请稍后再试]"
-
-            return StreamingResponse(error_stream(), media_type="text/plain",
-                                      headers={"X-Session-Id": str(session_id)})
-
-        db.add(Message(session_id=session_id, role="assistant", content=reply))
-        await db.commit()
-
-    tool_used = any(t["type"] == "tool_call" for t in trace)
-
     async def generate():
-        chunk_size = 6
-        for i in range(0, len(reply), chunk_size):
-            yield reply[i:i + chunk_size]
-            await asyncio.sleep(0.02)
+        # message_id 贯穿这条 assistant 消息的 text-start/delta/end 三个事件，AI SDK 靠它们对应到同一段文字
+        message_id = f"msg_{uuid.uuid4().hex}"
+        text_started = False
+        tool_used = False
+        reply = ""
+
+        async with SessionLocal() as db:
+            try:
+                session_id = await _get_or_create_session(db, request)
+                turn_index = await _get_turn_index(db, session_id)
+
+                last_user_msg = request.messages[-1]
+                db.add(Message(session_id=session_id, role=last_user_msg.role, content=last_user_msg.content))
+                await db.commit()
+
+                yield _sse({"type": "start", "messageId": message_id})
+                # session id 尽早发出去，前端不用等这一整轮结束就能拿到（新会话场景要靠它去刷新会话列表）
+                yield _sse({"type": "data-session", "data": {"sessionId": session_id}})
+
+                async for event in run_agent_stream(db, session_id, turn_index, _build_messages(request)):
+                    if event["type"] == "text_delta":
+                        if not text_started:
+                            yield _sse({"type": "text-start", "id": message_id})
+                            text_started = True
+                        yield _sse({"type": "text-delta", "id": message_id, "delta": event["content"]})
+                    elif event["type"] == "tool_call":
+                        tool_used = True
+                        yield _sse({"type": "tool-input-available", "toolCallId": event["id"],
+                                    "toolName": event["name"], "input": event["args"]})
+                    elif event["type"] == "tool_result":
+                        yield _sse({"type": "tool-output-available", "toolCallId": event["id"],
+                                    "output": event["result"]})
+                    elif event["type"] == "final":
+                        reply = event["content"]
+                        # 超过最大步数的兜底文案没有经过 text_delta，这里补发一次，否则前端什么都收不到
+                        if not text_started:
+                            yield _sse({"type": "text-start", "id": message_id})
+                            yield _sse({"type": "text-delta", "id": message_id, "delta": reply})
+                        yield _sse({"type": "text-end", "id": message_id})
+
+                db.add(Message(session_id=session_id, role="assistant", content=reply))
+                await db.commit()
+                logger.info(f"流式回复完成，session_id: {session_id}")
+            except Exception:
+                logger.error("流式请求失败", exc_info=True)
+                if not text_started:
+                    yield _sse({"type": "text-start", "id": message_id})
+                yield _sse({"type": "text-delta", "id": message_id,
+                            "delta": "\n[出错了，AI 服务暂时不可用，请稍后再试]"})
+                yield _sse({"type": "text-end", "id": message_id})
+
+            yield _sse({"type": "data-meta", "data": {"toolUsed": tool_used}})
+            yield _sse({"type": "finish"})
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
-        media_type="text/plain",
-        headers={"X-Session-Id": str(session_id), "X-Tool-Used": str(tool_used).lower()},
+        media_type="text/event-stream",
+        headers={"x-vercel-ai-ui-message-stream": "v1"},
     )

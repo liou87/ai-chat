@@ -24,47 +24,46 @@ def get_client():
     return client
 
 
-async def ask_deepseek(messages: list) -> str:
-    logger.info(f"发送请求，消息数：{len(messages)}")
-    try:
-        response = await get_client().chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages
-        )
-        reply = response.choices[0].message.content
-        logger.info(f"收到回复，长度：{len(reply)}")
-        return reply
-    except Exception as e:
-        logger.error(f"DeepSeek 调用失败：{e}")
-        raise
-
-
-async def ask_deepseek_stream(messages: list):
+async def ask_deepseek_with_tools_stream(messages: list, tools: list):
     """
-    流式调用 DeepSeek,逐块返回内容。
-    """
-    logger.info(f"流式请求，消息数：{len(messages)}")
-    response = await get_client().chat.completions.create(
-        model=MODEL_NAME,
-        messages=messages,
-        stream=True  # 开启流式
-    )
-    async for chunk in response:
-        content = chunk.choices[0].delta.content
-        if content:
-            yield content  # 每次 yield 一小块文字
+    带 function calling 的流式调用：调用前不知道模型这一步是要输出文字还是请求工具，
+    所以统一用 stream=True 发一次请求，边收边判断，不用先猜再重发。
 
-
-async def ask_deepseek_with_tools(messages: list, tools: list):
+    是文字内容就实时 yield 出去（{"type": "text_delta", "content": ...}），前端能马上看到；
+    是工具调用的话，参数是分片段流式给的（同一个 tool_call 的 arguments 分好几个 chunk 拼），
+    这里攒完整了才一次性给出（{"type": "tool_calls", "calls": [...]}） ，因为半截 JSON 没法解析也没法执行。
+    流结束时如果整段都是纯文字（没有工具调用），额外 yield 一次完整文本
+    （{"type": "done", "content": ...}），方便调用方直接拿去存库，不用自己再拼一遍。
     """
-    带 function calling 的一次请求，返回原始 response message
-    （可能带 tool_calls，也可能是最终的自然语言回复）。
-    """
-    logger.info(f"发送带工具的请求，消息数：{len(messages)}，工具数：{len(tools)}")
+    logger.info(f"发送带工具的流式请求，消息数：{len(messages)}，工具数：{len(tools)}")
     response = await get_client().chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
         tools=tools,
-        tool_choice="auto"
+        tool_choice="auto",
+        stream=True,
     )
-    return response.choices[0].message
+
+    text_parts = []
+    tool_calls = {}  # 按 delta.tool_calls[i].index 分组，同一个工具调用的 arguments 片段追加在一起
+
+    async for chunk in response:
+        delta = chunk.choices[0].delta
+
+        if delta.content:
+            text_parts.append(delta.content)
+            yield {"type": "text_delta", "content": delta.content}
+
+        for tc in delta.tool_calls or []:
+            slot = tool_calls.setdefault(tc.index, {"id": None, "name": None, "arguments": ""})
+            if tc.id:
+                slot["id"] = tc.id
+            if tc.function and tc.function.name:
+                slot["name"] = tc.function.name
+            if tc.function and tc.function.arguments:
+                slot["arguments"] += tc.function.arguments
+
+    if tool_calls:
+        yield {"type": "tool_calls", "calls": [tool_calls[i] for i in sorted(tool_calls)]}
+    else:
+        yield {"type": "done", "content": "".join(text_parts)}
