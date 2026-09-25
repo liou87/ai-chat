@@ -74,7 +74,7 @@ function App() {
 
   // 后端按 AI SDK 的 UI Message Stream 协议推事件：文字是逐块的 text-delta，工具调用是
   // tool-input-available/tool-output-available，session id 和"这轮有没有用到工具"走自定义的 data 事件
-  const { messages, sendMessage: sendChatMessage, setMessages, status } = useChat({
+  const { messages, sendMessage: sendChatMessage, setMessages, status, stop } = useChat({
     transport,
     onData: (part) => {
       if (part.type === "data-session") {
@@ -95,8 +95,22 @@ function App() {
     fetchSessions()
   }, [])
 
+  // 今日简报，开新对话时当成知行的开场白显示——只是展示层的东西，不进 useChat 的真实消息状态，
+  // 不会被当成对话历史发给后端，纯粹是"翻开总览页才看得到"和"聊天从这里开始"这两件事挂钩起来
+  const [digestGreeting, setDigestGreeting] = useState(null)
+  useEffect(() => {
+    fetch(`${API}/digest/today`, { headers: authHeaders })
+      .then(res => res.json())
+      .then(data => setDigestGreeting(data?.content || null))
+      .catch(() => {})
+  }, [])
+  const displayMessages = messages.length === 0 && digestGreeting
+    ? [{ id: "digest-greeting", role: "assistant", parts: [{ type: "text", text: digestGreeting }] }]
+    : messages
+
   // 点击会话，加载该会话的消息
   const loadSession = async (sessionId) => {
+    stop()
     setCurrentSession(sessionId)
     setShowHistory(false)
     const res = await fetch(`${API}/sessions/${sessionId}/messages`, { headers: authHeaders })
@@ -258,7 +272,7 @@ function App() {
                   <AssistantAvatar active={loading} size={24} />
                   <span style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{PERSONA_NAME}</span>
                 </div>
-                <button onClick={() => { setCurrentSession(null); setMessages([]); setShowHistory(false) }} style={iconBtnStyle} title="新对话">
+                <button onClick={() => { stop(); setCurrentSession(null); setMessages([]); setShowHistory(false) }} style={iconBtnStyle} title="新对话">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                 </button>
                 <button onClick={() => setShowHistory(h => !h)} style={iconBtnStyle} title="历史会话">
@@ -285,7 +299,7 @@ function App() {
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 12 }}>
-              {messages.map((msg) => (
+              {displayMessages.map((msg) => (
                 <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 4, alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
                   {msg.parts.map((part, pi) => {
                     if (part.type === "text") {
