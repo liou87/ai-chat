@@ -46,10 +46,31 @@ class Task(Base):
     title = Column(String(200))                              # 任务内容
     done = Column(Boolean, default=False)                     # 是否完成
     due_at = Column(DateTime, nullable=True)                  # 截止时间（可选）
+    goal_id = Column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True, index=True)  # 挂靠的目标（可选）
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     def __repr__(self):
         return f"Task(id={self.id}, title={self.title!r}, done={self.done})"
+
+# goals 表：三层目标——phase（阶段）没有上级，month（月目标）挂在某个 phase 下，
+# week（周目标）挂在某个 month 下，parent_id 自引用表示这层挂靠关系。
+# progress 是手动或者 agent 调用工具设定的百分比，不从关联任务的完成比例自动算，
+# 因为目标进度往往不是子任务数量的线性函数（比如一个难任务没做完不代表只差一点）。
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    parent_id = Column(Integer, ForeignKey("goals.id", ondelete="CASCADE"), nullable=True, index=True)
+    tier = Column(String(10), nullable=False)                 # phase / month / week
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)                  # 补充说明，比如"下一里程碑是什么"
+    target_date = Column(DateTime, nullable=True)
+    progress = Column(Integer, default=0)                       # 0-100
+    status = Column(String(20), nullable=True)                  # 自由文本，比如"正常""轻度迟缓""证据不足"
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    def __repr__(self):
+        return f"Goal(id={self.id}, tier={self.tier!r}, title={self.title!r}, progress={self.progress})"
 
 # agent_traces 表：记录每一轮对话里 agent 的推理/工具调用步骤，用于可观测性
 class AgentTrace(Base):

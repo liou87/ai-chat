@@ -142,7 +142,7 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
 
-sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。
+sessions 表存一次对话会话，字段有标题和创建时间。messages 表存每条原始消息，关联到某个 session，agent 内部的工具调用过程不存在这里，那些存在 agent_traces 里。tasks 表是任务/待办，包含标题、完成状态、可选的截止时间，goal_id 是可选的外键，挂靠某个目标（删掉目标时这个字段置空，不会连带删任务）。goals 表是三层目标——phase（阶段）没有上级，month（月目标）挂在某个 phase 下，week（周目标）挂在某个 month 下，parent_id 自引用表示这层关系，删掉一个目标会级联删掉它的子目标；progress 是 0 到 100 的整数，手动或者 agent 调用工具设定，不从关联任务的完成比例自动算，因为目标进度往往不是子任务数量的线性函数。notes 表比较特殊，笔记和日记复用同一张表，靠 category 字段区分是 note 还是 journal，另外 source 字段区分来源（local 或 notion），external_id 存 Notion 页面 id，external_updated_at 存 Notion 那边的最后编辑时间（UTC），增量同步靠它判断页面有没有改过。note_chunks 表存笔记的分块，每个分块一行，带 pgvector 原生的向量列（512 维，对应 fastembed 生成的向量）和 HNSW 索引，外键指向 notes 并且级联删除，删笔记时分块自动清理。所有检索都在这张表上做，不在 notes 上。reminders 表存提醒，fired 字段由后台调度任务在到期后置为真，前端据此弹提示。agent_traces 表记录每轮对话内 agent 的完整执行轨迹，包括工具调用、工具结果、最终回复三种类型，是可观测性的落地。daily_digests 表存每日简报，digest_date 字段唯一，一天一条，重复生成会命中同一行。
 
 表结构变更走 Alembic：改 database.py 里的 model，跑 alembic revision --autogenerate 生成迁移文件，检查一遍生成的内容，再 alembic upgrade head 应用。有个已知的坑：涉及向量列的迁移，autogenerate 生成的文件里会漏掉 import pgvector.sqlalchemy，需要手动补上，不然跑迁移会报 NameError。
 
@@ -154,7 +154,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 按模块拆在 services/tools/ 目录下几个文件里，每个文件是自己模块的 TOOLS 列表，services/tools/__init__.py 汇总。
 
-任务相关：create_task 建任务，list_tasks 按状态查任务，complete_task 标记完成，delete_task 删除。
+任务相关：create_task 建任务（可以选填 goal_id 挂靠某个目标），list_tasks 按状态查任务，complete_task 标记完成，delete_task 删除。
+
+目标相关：create_goal 建目标，tier 参数是 phase/month/week 三选一，month 和 week 必须指定一个类型对的上级目标，类型不对会报错；list_goals 查询，可以按层级筛选；update_goal_progress 更新某个目标的进度百分比和状态描述。
 
 笔记相关：save_note 存一条笔记，自动分块并算向量，search_notes 做语义检索，sync_notion_notes 把 Notion 数据库里的页面同步进来，返回新增、更新、跳过、失败、删除的数量。
 
@@ -174,7 +176,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 会话相关：GET /api/sessions 拿会话列表，GET /api/sessions/{id}/messages 拿某个会话的历史消息。
 
-任务相关：GET 和 POST /api/tasks 分别是列表和新建，PATCH /api/tasks/{id}/complete 标记完成，DELETE /api/tasks/{id} 删除。
+任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id}/complete 标记完成，DELETE /api/tasks/{id} 删除。
+
+目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
 
 笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source 字段。
 
@@ -198,9 +202,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 11. 前端结构
 
-入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局：左边是图标栏（总览 + 四个模块 + 主题切换），中间是当前选中的主区域，右边是可折叠的聊天面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。persona.js 只有一个常量——助手的名字，要跟后端 services/persona.py 保持一致。
+入口是 main.jsx，挂载 App 组件。App.jsx 是顶层布局：左边是图标栏（总览 + 五个模块 + 主题切换），中间是当前选中的主区域，右边是可折叠的聊天面板，顶部还有一条到期提醒的弹窗。api.js 导出后端地址和鉴权请求头，所有组件都从这里引用。theme.js 存了一些共享的颜色、输入框、按钮的内联样式常量，项目没有引入 CSS 框架，全部是内联样式。persona.js 只有一个常量——助手的名字，要跟后端 services/persona.py 保持一致。
 
-组件目录下，WorkbenchPanel 是总览页，任务、笔记、日记、提醒四张卡片摆成 2x2 网格，顶部还有一张知行主动生成的"今日简报"卡片。TaskPanel 负责任务的增删改。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。
+组件目录下，WorkbenchPanel 是总览页，任务、笔记、日记、提醒四张卡片摆成 2x2 网格，网格上方是一张知行主动生成的"今日简报"卡片，再上面是"目标与下一里程碑"卡片（只显示阶段目标和进度条，完整的三层结构要点开"目标"模块看）。GoalPanel 是目标面板，compact 模式（总览卡片）只显示阶段目标，expanded 模式（点图标栏进入）显示完整的阶段/月/周三层缩进结构，可以新建、改进度、删除；新建目标时如果不是阶段目标，要先选一个类型对的上级。TaskPanel 负责任务的增删改，任务如果挂靠了目标，标题下面会用目标的强调色标出目标名称。NotePanel 笔记和日记共用，靠传进去的 category 区分，里面有语义搜索框；笔记分类下有"同步 Notion"按钮，结果显示在按钮下方一行，Notion 来源的笔记标题旁有灰色的 Notion 小标签，并且不显示删除按钮；笔记正文默认折叠成 3 到 4 行，内容溢出时才出现"展开"，是否溢出靠实际测量，聊天面板收起、窗口变宽时会重新测。ReminderPanel 是提醒的管理界面，能看列表、手动创建、取消。ReminderBanner 是顶部到期提醒的弹窗，会轮询到期接口。AssistantAvatar 是知行的头像，纯 SVG 画的圆形脸，回复中时嘴部会变成三个交替呼吸的点，聊天面板头部和简报卡片都在用同一个组件，靠 active 这个 prop 切换状态。
 
 状态管理上没有引入 Redux 或者 Zustand，全靠 useState 和 props 一层层传下去。App.jsx 里有个叫 workbenchRefreshKey 的计数器，agent 用过工具之后就加一，通过 props 传给各个面板，让它们重新拉一次数据，这是让"聊天里改的数据"和"面板上看到的数据"保持一致的机制。
 
@@ -228,6 +232,8 @@ onnxruntime 目前钉死在 1.17.3 版本，同时要求 numpy 低于 2.0，这�
 
 这是个单用户设计，没有多用户或者多租户的概念，API_KEY 是所有人共用的一把钥匙。
 
+总览页现在挂载的卡片（简报、目标、任务、笔记、日记、提醒）加起来会在页面刚加载时并发发出十来个请求，每个都要打一次远端的 Supabase，浏览器对同一个源默认最多 6 个并发连接，请求会排队；实测过如果在页面刚加载的头几秒内马上点进某个模块，那个模块的请求可能要排到 5 秒以后才轮到，表现为界面卡在"加载中"很久，不是卡死。根源是每个卡片都各自独立请求数据，没有合并；真要解决得做一个总览专用的聚合接口，一次请求把这几张卡片的数据都带回来，目前还没做。
+
 web_search 工具返回的网页内容没有做任何 prompt injection 方面的防护，如果搜到的网页里藏着诱导模型忽略指令的内容，理论上是有被注入的风险的，目前没有针对性处理。
 
 提醒的到期通知只有前端轮询弹窗这一种方式，没有推送、邮件或者短信，用户必须开着页面才能看到提醒。
@@ -239,3 +245,5 @@ web_search 工具返回的网页内容没有做任何 prompt injection 方面的
 值得考虑的方向包括：做多 agent 编排，比如用一个 router agent 把任务分发给专门的子 agent；搭一套评测 harness，用一组测试 prompt 加预期的工具调用去自动化跑分；加限流防止 API 被刷；Notion 同步目前只能手动触发，可以加一个定时任务自动同步（spec 见 docs/specs/notion-sync.md）。
 
 参考同类开源项目（Khoj、Letta、AnythingLLM）之后，还有几个方向记下来：笔记检索目前是纯向量检索，对精确术语不够敏感，可以加一路关键词检索做混合召回；回答引用的笔记可以在界面上标出具体是哪一条、跳转过去，而不是只在模型的话里带过；agent_traces 表已经记录了完整的工具调用轨迹，但前端从没展示过，加一个按时间线展开的追踪视图成本很低；工具数量以后变多的话，可以学 AnythingLLM 先筛一遍再把相关的工具塞进上下文，省 token 也减少选错工具的概率；另外可以参考 Letta 的核心记忆概念，加一层不用检索、常驻在 system prompt 里的关键信息（比如用户的固定偏好），跟笔记的按需检索是两回事，能补上语义检索覆盖不到的稳定上下文。
+
+参考另一个真实的个人工作台产品截图后加了目标层（三层结构、跟任务挂钩）和每日简报，也顺带验证了这两点：加分块标题防止语义稀释这个之前独立想出的做法，跟 Khoj 的做法是一致的；总览页多张卡片各自独立请求数据，在页面刚加载、请求量猛增的时候会因为浏览器同源并发连接数限制排队变慢（第 14 节有实测数据），后续可以做一个总览聚合接口一次性把这几张卡片的数据都带回来。

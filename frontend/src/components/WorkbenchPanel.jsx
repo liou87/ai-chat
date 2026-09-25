@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import TaskPanel from "./TaskPanel"
 import NotePanel from "./NotePanel"
 import ReminderPanel from "./ReminderPanel"
+import GoalPanel from "./GoalPanel"
 import AssistantAvatar from "./AssistantAvatar"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents } from "../theme"
@@ -59,15 +60,27 @@ function ModuleCard({ iconName, title, accent, extra, children }) {
 
 // 四个模块摆成 2x2 网格，一屏看到全部概览，不再靠 tab 切换隐藏内容
 function WorkbenchPanel({ refreshKey, onRequestWeeklyReview }) {
-  const { colors } = useTheme()
+  const { colors, cardStyle, isDark } = useTheme()
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 24, background: colors.pageBg }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16, flexShrink: 0 }}>
         <span style={{ fontSize: 19, fontWeight: 600, color: colors.text }}>工作台总览</span>
-        <span style={{ fontSize: 13, color: colors.textMuted }}>任务 / 笔记 / 日记 / 提醒，一屏看完</span>
+        <span style={{ fontSize: 13, color: colors.textMuted }}>目标 / 任务 / 笔记 / 日记 / 提醒，一屏看完</span>
       </div>
 
       <DigestCard />
+
+      <div style={{ ...cardStyle, marginBottom: 16, flexShrink: 0, maxHeight: 220, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: `1px solid ${colors.borderLight}`, flexShrink: 0 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: moduleAccents.goals + (isDark ? "33" : "1f"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <ModuleIcon name="goals" color={moduleAccents.goals} />
+          </div>
+          <span style={{ fontWeight: 600, fontSize: 15, color: colors.text }}>目标与下一里程碑</span>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px" }}>
+          <GoalPanel refreshKey={refreshKey} accent={moduleAccents.goals} />
+        </div>
+      </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 16 }}>
         <ModuleCard iconName="tasks" title="任务" accent={moduleAccents.tasks}>

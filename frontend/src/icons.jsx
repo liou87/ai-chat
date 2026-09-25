@@ -5,6 +5,7 @@ const PATHS = {
   notes: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" />,
   journal: <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />,
   reminders: <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
+  goals: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" /></>,
 }
 
 export function ModuleIcon({ name, color, size = 15 }) {
@@ -16,6 +17,7 @@ export function ModuleIcon({ name, color, size = 15 }) {
 }
 
 export const MODULE_LIST = [
+  { key: "goals", label: "目标" },
   { key: "tasks", label: "任务" },
   { key: "notes", label: "笔记" },
   { key: "journal", label: "日记" },

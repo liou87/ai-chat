@@ -12,6 +12,7 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 class CreateTaskRequest(BaseModel):
     title: str
     due_at: Optional[datetime] = None
+    goal_id: Optional[int] = None
 
 
 @router.get("/tasks")
@@ -23,7 +24,7 @@ async def get_tasks(status: str = "all"):
 @router.post("/tasks")
 async def create_task(request: CreateTaskRequest):
     async with SessionLocal() as db:
-        return await tasks_service.create_task(db, title=request.title, due_at=request.due_at)
+        return await tasks_service.create_task(db, title=request.title, due_at=request.due_at, goal_id=request.goal_id)
 
 
 @router.patch("/tasks/{task_id}/complete")

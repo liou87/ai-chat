@@ -11,12 +11,14 @@ def _serialize(task: Task) -> dict:
         "title": task.title,
         "done": task.done,
         "due_at": task.due_at.isoformat() if task.due_at else None,
+        "goal_id": task.goal_id,
         "created_at": task.created_at.isoformat() if task.created_at else None,
     }
 
 
-async def create_task(db: AsyncSession, title: str, due_at: Optional[datetime] = None) -> dict:
-    task = Task(title=title, due_at=due_at)
+async def create_task(db: AsyncSession, title: str, due_at: Optional[datetime] = None,
+                       goal_id: Optional[int] = None) -> dict:
+    task = Task(title=title, due_at=due_at, goal_id=goal_id)
     db.add(task)
     await db.commit()
     await db.refresh(task)

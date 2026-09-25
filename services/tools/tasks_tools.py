@@ -10,7 +10,7 @@ async def _create_task(db: AsyncSession, args: dict) -> dict:
             due_at = datetime.fromisoformat(args["due_at"])
         except ValueError:
             due_at = None
-    return await tasks_service.create_task(db, title=args["title"], due_at=due_at)
+    return await tasks_service.create_task(db, title=args["title"], due_at=due_at, goal_id=args.get("goal_id"))
 
 
 async def _list_tasks(db: AsyncSession, args: dict) -> dict:
@@ -44,6 +44,11 @@ TOOLS = [
                         "due_at": {
                             "type": "string",
                             "description": "截止时间，ISO 8601 格式，例如 2026-09-20T18:00:00，不确定就留空",
+                        },
+                        "goal_id": {
+                            "type": "integer",
+                            "description": "要挂靠的目标 id（可选）。不知道 id 就先调用 list_goals 查出来，"
+                                            "用户没提目标就留空，不要凭空猜一个",
                         },
                     },
                     "required": ["title"],

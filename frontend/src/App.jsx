@@ -6,6 +6,7 @@ import { API, authHeaders } from "./api"
 import WorkbenchPanel from "./components/WorkbenchPanel"
 import ModulePage from "./components/ModulePage"
 import TaskPanel from "./components/TaskPanel"
+import GoalPanel from "./components/GoalPanel"
 import NotePanel from "./components/NotePanel"
 import ReminderPanel from "./components/ReminderPanel"
 import AssistantAvatar from "./components/AssistantAvatar"
@@ -23,9 +24,10 @@ const iconBtnStyle = {
 // 从 useChat 的 UIMessage.parts 里拼出纯文本，导出对话用得到
 const messageText = (msg) => msg.parts.filter(p => p.type === "text").map(p => p.text).join("")
 
-// 图标栏的导航项：总览 + 四个模块，点哪个主区域就切到哪个视图
+// 图标栏的导航项：总览 + 五个模块，点哪个主区域就切到哪个视图
 const NAV_ITEMS = [
   { key: "overview", label: "总览", icon: "overview", accent: null },
+  { key: "goals", label: "目标", icon: "goals", accent: moduleAccents.goals },
   { key: "tasks", label: "任务", icon: "tasks", accent: moduleAccents.tasks },
   { key: "notes", label: "笔记", icon: "notes", accent: moduleAccents.notes },
   { key: "journal", label: "日记", icon: "journal", accent: moduleAccents.journal },
@@ -145,6 +147,12 @@ function App() {
 
   const renderMain = () => {
     switch (activeView) {
+      case "goals":
+        return (
+          <ModulePage iconName="goals" title="目标" accent={moduleAccents.goals}>
+            <GoalPanel refreshKey={workbenchRefreshKey} accent={moduleAccents.goals} mode="expanded" />
+          </ModulePage>
+        )
       case "tasks":
         return (
           <ModulePage iconName="tasks" title="任务" accent={moduleAccents.tasks}>

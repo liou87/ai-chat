@@ -10,15 +10,20 @@ import { moduleAccents } from "../theme"
 function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" }) {
   const { colors, inputStyle, accentButtonStyle, iconButtonStyle } = useTheme()
   const [tasks, setTasks] = useState([])
+  const [goalTitles, setGoalTitles] = useState({})  // goal_id -> title，只用来在任务行下面标一下挂靠的目标
   const [newTitle, setNewTitle] = useState("")
   const [loading, setLoading] = useState(false)
 
   const fetchTasks = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/tasks`, { headers: authHeaders })
-      const data = await res.json()
-      setTasks(data)
+      const [tasksRes, goalsRes] = await Promise.all([
+        fetch(`${API}/tasks`, { headers: authHeaders }),
+        fetch(`${API}/goals`, { headers: authHeaders }),
+      ])
+      setTasks(await tasksRes.json())
+      const goals = await goalsRes.json()
+      setGoalTitles(Object.fromEntries(goals.map(g => [g.id, g.title])))
     } finally {
       setLoading(false)
     }
@@ -84,7 +89,7 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
             <>
               <SectionLabel colors={colors}>未完成 · {pending.length}</SectionLabel>
               {pending.map(t => (
-                <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} expanded onComplete={completeTask} onDelete={deleteTask} />
+                <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} goalTitles={goalTitles} expanded onComplete={completeTask} onDelete={deleteTask} />
               ))}
             </>
           )}
@@ -92,14 +97,14 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
             <>
               <SectionLabel colors={colors}>已完成 · {done.length}</SectionLabel>
               {done.map(t => (
-                <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} expanded onComplete={completeTask} onDelete={deleteTask} />
+                <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} goalTitles={goalTitles} expanded onComplete={completeTask} onDelete={deleteTask} />
               ))}
             </>
           )}
         </>
       ) : (
         tasks.map(t => (
-          <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} onComplete={completeTask} onDelete={deleteTask} />
+          <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} goalTitles={goalTitles} onComplete={completeTask} onDelete={deleteTask} />
         ))
       )}
     </div>
@@ -110,7 +115,7 @@ function SectionLabel({ children, colors }) {
   return <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: "16px 0 8px" }}>{children}</div>
 }
 
-function TaskRow({ t, accent, colors, iconButtonStyle, expanded, onComplete, onDelete }) {
+function TaskRow({ t, accent, colors, iconButtonStyle, goalTitles, expanded, onComplete, onDelete }) {
   const border = `1px solid ${colors.borderLight}`
   return (
     <div
@@ -139,6 +144,11 @@ function TaskRow({ t, accent, colors, iconButtonStyle, expanded, onComplete, onD
         fontSize: expanded ? 15 : 14,
       }}>
         {t.title}
+        {t.goal_id && goalTitles[t.goal_id] && (
+          <div style={{ fontSize: 11, color: moduleAccents.goals }}>
+            🎯 {goalTitles[t.goal_id]}
+          </div>
+        )}
         {t.due_at && (
           <div style={{ fontSize: 11, color: colors.textMuted }}>
             截止：{new Date(t.due_at).toLocaleString()}

@@ -1,0 +1,84 @@
+from datetime import datetime
+from typing import Optional
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from database import Goal
+
+TIERS = ("phase", "month", "week")
+# 上级目标的层级要求：phase 没有上级，month 的上级必须是 phase，week 的上级必须是 month
+PARENT_TIER = {"phase": None, "month": "phase", "week": "month"}
+
+
+class InvalidGoalHierarchy(Exception):
+    """目标层级不对，比如给 week 挂了一个 phase 当上级。"""
+
+
+def _serialize(goal: Goal) -> dict:
+    return {
+        "id": goal.id,
+        "parent_id": goal.parent_id,
+        "tier": goal.tier,
+        "title": goal.title,
+        "description": goal.description,
+        "target_date": goal.target_date.isoformat() if goal.target_date else None,
+        "progress": goal.progress,
+        "status": goal.status,
+        "created_at": goal.created_at.isoformat() if goal.created_at else None,
+    }
+
+
+async def create_goal(db: AsyncSession, title: str, tier: str, parent_id: Optional[int] = None,
+                       description: Optional[str] = None, target_date: Optional[datetime] = None,
+                       status: Optional[str] = None) -> dict:
+    if tier not in TIERS:
+        raise InvalidGoalHierarchy(f"tier 必须是 {TIERS} 之一")
+
+    expected_parent_tier = PARENT_TIER[tier]
+    if expected_parent_tier is None:
+        parent_id = None  # phase 不允许有上级，传了也忽略
+    else:
+        if parent_id is None:
+            raise InvalidGoalHierarchy(f"{tier} 必须指定一个 {expected_parent_tier} 类型的上级目标")
+        parent = await db.get(Goal, parent_id)
+        if parent is None or parent.tier != expected_parent_tier:
+            raise InvalidGoalHierarchy(f"{tier} 的上级目标必须是 {expected_parent_tier} 类型")
+
+    goal = Goal(title=title, tier=tier, parent_id=parent_id, description=description,
+                target_date=target_date, status=status)
+    db.add(goal)
+    await db.commit()
+    await db.refresh(goal)
+    return _serialize(goal)
+
+
+async def list_goals(db: AsyncSession, tier: Optional[str] = None) -> list[dict]:
+    query = select(Goal)
+    if tier:
+        query = query.where(Goal.tier == tier)
+    query = query.order_by(Goal.tier, Goal.created_at)
+    result = await db.execute(query)
+    return [_serialize(g) for g in result.scalars().all()]
+
+
+async def update_goal_progress(db: AsyncSession, goal_id: int, progress: int,
+                                status: Optional[str] = None) -> Optional[dict]:
+    goal = await db.get(Goal, goal_id)
+    if goal is None:
+        return None
+    goal.progress = max(0, min(100, progress))
+    if status is not None:
+        goal.status = status
+    goal.updated_at = datetime.now()
+    await db.commit()
+    await db.refresh(goal)
+    return _serialize(goal)
+
+
+async def delete_goal(db: AsyncSession, goal_id: int) -> bool:
+    # 子目标靠 goals.parent_id 的外键级联删除；挂在这个目标下的任务外键是 SET NULL，不会被删掉
+    goal = await db.get(Goal, goal_id)
+    if goal is None:
+        return False
+    await db.delete(goal)
+    await db.commit()
+    return True

@@ -40,6 +40,7 @@ export const darkColors = {
 
 // 四个模块的识别色，明暗主题下保持不变——都是中等饱和度，在浅色/深色卡片背景上都读得清楚
 export const moduleAccents = {
+  goals: "#e11d48",
   tasks: "#3b82f6",
   notes: "#8b5cf6",
   journal: "#f59e0b",
