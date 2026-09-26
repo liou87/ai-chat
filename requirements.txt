@@ -2,7 +2,7 @@ fastapi
 uvicorn
 openai
 python-dotenv
-sqlalchemy
+sqlalchemy[asyncio]
 pydantic
 asyncpg
 pgvector
