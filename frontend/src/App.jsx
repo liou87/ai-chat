@@ -9,6 +9,7 @@ import TaskPanel from "./components/TaskPanel"
 import GoalPanel from "./components/GoalPanel"
 import NotePanel from "./components/NotePanel"
 import ReminderPanel from "./components/ReminderPanel"
+import HotTopicsPanel from "./components/HotTopicsPanel"
 import AssistantAvatar from "./components/AssistantAvatar"
 import { PERSONA_NAME } from "./persona"
 import ReminderBanner from "./components/ReminderBanner"
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { key: "notes", label: "笔记", icon: "notes", accent: moduleAccents.notes },
   { key: "journal", label: "日记", icon: "journal", accent: moduleAccents.journal },
   { key: "reminders", label: "提醒", icon: "reminders", accent: moduleAccents.reminders },
+  { key: "hotTopics", label: "热点", icon: "hotTopics", accent: moduleAccents.hotTopics },
 ]
 
 function App() {
@@ -197,8 +199,14 @@ function App() {
             <ReminderPanel refreshKey={workbenchRefreshKey} accent={moduleAccents.reminders} mode="expanded" />
           </ModulePage>
         )
+      case "hotTopics":
+        return (
+          <ModulePage iconName="hotTopics" title="热点" subtitle="AI/agent 领域，每天自动收集一次" accent={moduleAccents.hotTopics}>
+            <HotTopicsPanel />
+          </ModulePage>
+        )
       default:
-        return <WorkbenchPanel refreshKey={workbenchRefreshKey} onRequestWeeklyReview={onRequestWeeklyReview} />
+        return <WorkbenchPanel refreshKey={workbenchRefreshKey} />
     }
   }
 
