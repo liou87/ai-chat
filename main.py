@@ -47,7 +47,8 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(lifespan=lifespan)
+# 接口文档也放在 /api 下面：线上只有 /api/* 会转给 Python 函数，放在默认的 /docs 会被当成前端页面
+app = FastAPI(lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
 
 # 只允许指定前端域名跨域访问
 app.add_middleware(

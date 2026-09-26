@@ -27,8 +27,8 @@
 
 ## 线上地址
 
-- 前端：https://ai-chat-frontend-liard.vercel.app
-- 后端 API 文档：https://ai-chat-production-5293.up.railway.app/docs
+- 应用：https://ai-chat-frontend-liard.vercel.app
+- API 文档：https://ai-chat-frontend-liard.vercel.app/api/docs（本地是 http://127.0.0.1:8000/api/docs）
 
 ## 本地运行
 
