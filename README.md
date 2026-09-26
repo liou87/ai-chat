@@ -21,9 +21,9 @@
 
 - 后端：Python 3.11 + FastAPI（全异步）+ SQLAlchemy + Alembic + APScheduler
 - 数据库：PostgreSQL + pgvector（当前托管在 Supabase）
-- AI：DeepSeek API（function calling）+ fastembed（本地中文 embedding）+ Tavily（联网搜索）
+- AI：DeepSeek API（function calling）+ Voyage AI（embedding）+ Tavily（联网搜索）
 - 前端：React 19 + Vite + Vercel AI SDK（@ai-sdk/react，真流式聊天）
-- 部署：Railway（后端）+ Vercel（前端）
+- 部署：Vercel（前端静态构建 + /api 由 Python 函数运行 FastAPI），配置见 vercel.json
 
 ## 线上地址
 
@@ -37,7 +37,7 @@
 ```bash
 py -3.10 -m venv .venv
 ./.venv/Scripts/pip install -r requirements.txt
-# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / API_KEY / TAVILY_API_KEY，需要 Notion 同步的话再配置 NOTION_API_KEY 和 NOTION_DATABASE_ID
+# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / API_KEY / TAVILY_API_KEY / VOYAGE_API_KEY，需要 Notion 同步的话再配置 NOTION_API_KEY 和 NOTION_DATABASE_ID
 # 时区用 APP_TIMEZONE 配置（IANA 名字，默认 Australia/Sydney），提醒、每日简报、"今天"的判断都按它算，要跟浏览器所在时区一致
 # DATABASE_URL 形如 postgresql+asyncpg://user:pass@host:5432/dbname，需要数据库已支持 pgvector
 ./.venv/Scripts/python.exe -m alembic upgrade head    # 首次运行先建表

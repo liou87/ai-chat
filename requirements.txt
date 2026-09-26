@@ -6,9 +6,7 @@ sqlalchemy
 pydantic
 asyncpg
 pgvector
+httpx
 alembic
-numpy<2
-onnxruntime==1.17.3
-fastembed
 apscheduler
 tzdata

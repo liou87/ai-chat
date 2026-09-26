@@ -19,7 +19,7 @@
 | 数据库 | PostgreSQL，托管在 Supabase | 原计划本地 Docker 跑，Docker Desktop 起不来后改用 Supabase 免费云端实例 |
 | 数据库迁移 | Alembic | 表结构变更走 autogenerate + upgrade，不再手动建表或者删库重建 |
 | LLM | DeepSeek API，deepseek-flash 模型 | 走 OpenAI SDK 兼容协议，AsyncOpenAI 指向 DeepSeek 的 base_url |
-| Embedding | fastembed，本地 ONNX 模型 BAAI/bge-small-zh-v1.5，512 维 | 不依赖外部 embedding API |
+| Embedding | Voyage AI 在线接口，voyage-4-lite，输出 512 维 | 早期用 fastembed 在本地跑 bge-small-zh，搬到 Vercel 时换成在线接口，函数更轻、冷启动更快 |
 | 向量检索 | pgvector，HNSW 索引 + 余弦距离 | 检索在数据库端完成，不再是 Python 里手写循环 |
 | 后台调度 | APScheduler | AsyncIOScheduler，负责提醒到期扫描、每日简报和热点；按 APP_TIMEZONE 时区排程 |
 | 联网搜索 | Tavily REST API | 用 httpx 直接调用，没有引入官方 SDK |
@@ -27,8 +27,8 @@
 | 前端框架 | React 19 + Vite 8 | 没用状态管理库，纯 useState 和 props |
 | 聊天流式 | Vercel AI SDK（ai + @ai-sdk/react） | 后端按它的 UI Message Stream 协议推流，前端用 useChat 收，换来真正的 token 级流式和工具调用的实时可见性 |
 | Markdown 渲染 | react-markdown | 渲染 AI 回复 |
-| 部署 | Railway 跑后端，Vercel 跑前端 | |
-| Python 版本 | 3.11 | 曾经用的是 Anaconda 全局 3.8，因为 fastembed 依赖的 onnxruntime 需要 3.10 以上而升级 |
+| 部署 | Vercel 一个项目：前端是静态构建，/api/* 由 Python 函数（api/index.py 加载 main.py 的 FastAPI app）处理 | 早期后端在 Railway |
+| Python 版本 | 3.12（Vercel 支持 3.12–3.14），本地 3.11 也能跑 | |
 
 ## 3. 系统架构
 
@@ -96,10 +96,11 @@ AI-Chat/
 ├── database.py           所有 SQLAlchemy 模型，以及异步 engine/session 工厂
 ├── alembic.ini           Alembic 配置，数据库连接串从 DATABASE_URL 环境变量读
 ├── migrations/           Alembic 迁移脚本，env.py 接了项目的 Base.metadata 和异步引擎
-├── requirements.txt      后端依赖，注意 numpy 和 onnxruntime 的版本是钉住的，见第 14 节
-├── .python-version       3.11，配合 Railway 部署用
-├── vercel.json           让 Vercel 在这个 monorepo 里正确构建 frontend 子目录
-├── railway.toml          Railway 启动命令
+├── requirements.txt      后端依赖（Vercel 构建 Python 函数时按它安装）
+├── .python-version       3.12，Vercel 按它选 Python 版本
+├── vercel.json           前端构建命令、/api 转发到 Python 函数、函数配置、每日 cron、部署地区
+├── api/index.py          Vercel 的 Python 函数入口，只是导入 main.py 里的 app
+├── scripts/              一次性维护脚本，比如换 embedding 模型后重算向量的 reembed_notes.py
 │
 ├── routers/              只负责解析请求、调用 services、序列化响应，不写业务逻辑
 │   ├── chat.py             对话入口，system prompt 在这里拼
@@ -123,7 +124,7 @@ AI-Chat/
 │   ├── notes/               笔记 / RAG 这一摊都在这个包里，对外仍是 from services import notes as notes_service
 │   │   ├── notes.py           笔记和日记的增删改查，分块写入和语义检索，外部来源笔记的 upsert
 │   │   ├── chunking.py        正文分块的纯函数，不依赖数据库，可以单独测试
-│   │   ├── embeddings.py      fastembed 封装，推理放在线程池里跑，不阻塞事件循环，支持批量
+│   │   ├── embeddings.py      Voyage AI 向量接口封装：区分查询/文档两种输入，批量请求，限流时退避重试
 │   │   └── notion.py          Notion 只读同步：拉页面和正文、增量判断、限流重试
 │   ├── review.py            周复盘数据聚合，只出数据不调 LLM，总结文字交给 agent 自己写
 │   ├── reminders.py         提醒的增删改查，以及供调度器调用的到期检查
@@ -224,13 +225,13 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 13. 部署
 
-后端部署在 Railway 上，railway.toml 里指定了启动命令。需要在 Railway 项目设置里配好 .env 里那几个环境变量，并且确认用的是 Python 3.11。
+前后端都部署在同一个 Vercel 项目里，配置全在根目录的 vercel.json：前端按 installCommand/buildCommand 进 frontend 目录构建出静态文件；/api/* 通过 rewrite 转给 api/index.py 这个 Python 函数，它加载的就是 main.py 里的 FastAPI app，路由本来就带 /api 前缀，所以本地和线上是同一套代码。前后端同域名，不需要跨域配置，前端默认用相对路径 /api 访问后端。
 
-前端部署在 Vercel 上，因为仓库是个 monorepo，前端代码在 frontend 子目录下，所以在仓库根目录放了个 vercel.json，显式指定了进 frontend 目录安装和构建的命令，这样就不用依赖 Vercel 项目设置里的 Root Directory 配置也能正常构建。
+因为 Vercel 上没有常驻进程，和本地常驻 uvicorn 有几处不同，代码里用 VERCEL 环境变量区分：数据库用 NullPool，每个请求用完连接就关，避免多个函数实例把 Supabase 会话模式 pooler 的连接占满；lifespan 里不启动 APScheduler，提醒到期改在 /reminders 和 /reminders/due 接口里顺手检查（前端每 20 秒轮询一次），每日简报和热点由 vercel.json 里的 cron 每天调一次 /api/cron/daily 预生成（Hobby 版 cron 一天最多一次、有 ±59 分钟误差，当天第一次打开页面时也会现生成）。函数部署在新加坡（sin1），跟 Supabase 同一地区。
+
+Vercel 项目需要配的环境变量：DEEPSEEK_API_KEY、DATABASE_URL、API_KEY、TAVILY_API_KEY、VOYAGE_API_KEY、CRON_SECRET（随便一段随机字符串，Vercel 调 cron 时会带上），前端构建用的 VITE_API_KEY（和 API_KEY 相同）；用到 Notion 同步的话再加 NOTION_API_KEY、NOTION_DATABASE_ID。VITE_API_URL 在线上不要配，留空就走同域的 /api。
 
 ## 14. 已知限制和技术债
-
-onnxruntime 目前钉死在 1.17.3 版本，同时要求 numpy 低于 2.0，这是刻意为之。更高版本的 onnxruntime 在开发机上和 numpy 2.x 之间有 ABI 层面的冲突，会直接导致进程崩溃，不是普通的 Python 异常。以后升级这两个包之前，务必先确认组合仍然兼容。
 
 会话列表和笔记列表这些接口都是全量返回，没有做分页，数据量大了会慢。
 

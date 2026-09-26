@@ -2,13 +2,19 @@ import os
 from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from pgvector.sqlalchemy import Vector
 from services.clock import now as clock_now
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://aichat:aichat@localhost:5432/aichat")
 
+# 部署在 Vercel 上时（Vercel 运行时会设置 VERCEL=1），函数实例随请求起停、可能同时有好几个，
+# 各自攒连接池会把 Supabase 会话模式 pooler 的连接数占满，所以用 NullPool：每个请求用完连接就关。
+# 本地开发是常驻进程，继续用默认连接池，省掉每次建连接的开销。
+ON_VERCEL = bool(os.getenv("VERCEL"))
+
 # 异步 Postgres 引擎
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False, poolclass=NullPool if ON_VERCEL else None)
 
 # 所有数据库模型的基类
 Base = declarative_base()

@@ -13,15 +13,19 @@ class CreateReminderRequest(BaseModel):
     remind_at: datetime
 
 
+# 查询前先把已经到点的提醒标记为 fired：部署在 Vercel 上没有常驻的定时任务，
+# 靠前端每 20 秒轮询 /reminders/due 顺手完成到期检查；本地常驻进程里调度器也在做同样的事，重复标记没有副作用
 @router.get("/reminders")
 async def get_reminders():
     async with SessionLocal() as db:
+        await reminders_service.mark_due_as_fired(db)
         return await reminders_service.list_reminders(db)
 
 
 @router.get("/reminders/due")
 async def get_due_reminders():
     async with SessionLocal() as db:
+        await reminders_service.mark_due_as_fired(db)
         return await reminders_service.list_due(db)
 
 
