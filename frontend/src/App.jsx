@@ -19,6 +19,7 @@ import { ModuleIcon } from "./icons"
 import { isSubmitEnter } from "./keyboard"
 import { useConfirm } from "./confirm"
 import { dayBucket } from "./datetime"
+import { useWindowWidth } from "./hooks"
 
 const iconBtnStyle = {
   width: 28, height: 28, borderRadius: 7, border: "none", background: "none",
@@ -61,6 +62,37 @@ function toolStatusText(part) {
 const STICK_THRESHOLD = 40
 const WEEKLY_REVIEW_PROMPT = "请帮我生成这周的复盘总结"
 const SESSION_BUCKETS = ["今天", "昨天", "最近 7 天", "更早"]
+
+// ---- 布局尺寸 ----
+// 窗口窄于这个宽度，侧栏收成只有图标（悬停看名字），给主区域和聊天多让点地方
+const RAIL_COMPACT_BELOW = 1280
+const RAIL_WIDTH = 176
+const RAIL_WIDTH_COMPACT = 60
+const COLLAPSE_HANDLE_WIDTH = 18
+// 聊天面板可以拖动左边缘调宽，宽度记在本机浏览器里（只是个人偏好，存不进去也不影响使用）
+const CHAT_WIDTH_DEFAULT = 380
+const CHAT_WIDTH_MIN = 300
+const CHAT_WIDTH_MAX = 640
+const MAIN_MIN_WIDTH = 420   // 拖宽聊天时主区域至少留这么宽
+const CHAT_WIDTH_KEY = "ai-chat-chat-width"
+
+function loadChatWidth() {
+  try {
+    const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY))
+    if (saved >= CHAT_WIDTH_MIN && saved <= CHAT_WIDTH_MAX) return saved
+  } catch {
+    // localStorage 不可用就用默认宽度
+  }
+  return CHAT_WIDTH_DEFAULT
+}
+
+function saveChatWidth(width) {
+  try {
+    localStorage.setItem(CHAT_WIDTH_KEY, String(width))
+  } catch {
+    // 存不进去就算了，只是下次打开回到默认宽度
+  }
+}
 const INPUT_MAX_HEIGHT = 160
 
 // 图标栏的导航项：总览 + 六个模块，点哪个主区域就切到哪个视图
@@ -87,6 +119,48 @@ function App() {
   const [openMenu, setOpenMenu] = useState(null)  // null | "history" | "more"，聊天头部的两个下拉
   const [historyLoadError, setHistoryLoadError] = useState(null)
   const [chatNotice, setChatNotice] = useState(null)  // 聊天区底部的一行状态，比如"周复盘已存入日记"
+
+  // ---- 布局：侧栏窄屏收起、聊天面板拖动调宽 ----
+  const windowWidth = useWindowWidth()
+  const railCompact = windowWidth < RAIL_COMPACT_BELOW
+  const railWidth = railCompact ? RAIL_WIDTH_COMPACT : RAIL_WIDTH
+  const [chatWidth, setChatWidth] = useState(loadChatWidth)
+  const [resizingChat, setResizingChat] = useState(false)
+  // 实际宽度还要受窗口限制：窗口变窄时自动收窄，保证主区域至少留 MAIN_MIN_WIDTH
+  const maxChatWidthForWindow = Math.min(CHAT_WIDTH_MAX, windowWidth - railWidth - COLLAPSE_HANDLE_WIDTH - MAIN_MIN_WIDTH)
+  const effectiveChatWidth = Math.max(CHAT_WIDTH_MIN, Math.min(chatWidth, maxChatWidthForWindow))
+  const clampChatWidth = (w) => Math.round(Math.max(CHAT_WIDTH_MIN, Math.min(w, maxChatWidthForWindow)))
+
+  const onResizeStart = (e) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setResizingChat(true)
+  }
+  const onResizeMove = (e) => {
+    if (!resizingChat) return
+    setChatWidth(clampChatWidth(window.innerWidth - e.clientX))
+  }
+  const onResizeEnd = () => {
+    if (!resizingChat) return
+    setResizingChat(false)
+    saveChatWidth(chatWidth)
+  }
+  // 键盘也能调：左右方向键每次 20px，双击或 Home 恢复默认
+  const onResizeKey = (e) => {
+    const step = e.key === "ArrowLeft" ? 20 : e.key === "ArrowRight" ? -20 : 0
+    if (step) {
+      e.preventDefault()
+      const next = clampChatWidth(effectiveChatWidth + step)
+      setChatWidth(next)
+      saveChatWidth(next)
+    } else if (e.key === "Home") {
+      resetChatWidth()
+    }
+  }
+  const resetChatWidth = () => {
+    setChatWidth(CHAT_WIDTH_DEFAULT)
+    saveChatWidth(CHAT_WIDTH_DEFAULT)
+  }
 
   const fetchSessions = async () => {
     try {
@@ -386,19 +460,20 @@ function App() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif", background: colors.pageBg, color: colors.text }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif", background: colors.pageBg, color: colors.text, userSelect: resizingChat ? "none" : undefined, cursor: resizingChat ? "col-resize" : undefined }}>
       <ReminderBanner refreshKey={workbenchRefreshKey} onChange={() => setWorkbenchRefreshKey(k => k + 1)} />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
-        {/* 侧栏：品牌标 + 总览/六模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像 */}
-        <nav style={{ width: 176, flexShrink: 0, background: colors.railBg, display: "flex", flexDirection: "column", padding: "16px 12px", gap: 2 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18, padding: "0 4px" }}>
+        {/* 侧栏：品牌标 + 总览/六模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像。
+            窗口窄时收成只有图标，文字挪到悬停提示和 aria-label 里 */}
+        <nav style={{ width: railWidth, flexShrink: 0, background: colors.railBg, display: "flex", flexDirection: "column", padding: railCompact ? "16px 10px" : "16px 12px", gap: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 9, marginBottom: 18, padding: railCompact ? 0 : "0 4px" }} title={railCompact ? PERSONA_NAME : undefined}>
             <div style={{ width: 30, height: 30, borderRadius: 9, background: colors.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
-            <span style={{ fontSize: 14.5, fontWeight: 600, color: "#fff" }}>{PERSONA_NAME}</span>
+            {!railCompact && <span style={{ fontSize: 14.5, fontWeight: 600, color: "#fff" }}>{PERSONA_NAME}</span>}
           </div>
 
           {NAV_ITEMS.map(item => {
@@ -409,14 +484,16 @@ function App() {
                 key={item.key}
                 onClick={() => setActiveView(item.key)}
                 aria-current={active ? "page" : undefined}
+                aria-label={railCompact ? item.label : undefined}
+                title={railCompact ? item.label : undefined}
                 style={{
                   width: "100%", height: 36, borderRadius: 8, border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 10, padding: "0 10px",
+                  display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 10, padding: railCompact ? 0 : "0 10px",
                   background: active ? activeColor + "26" : "transparent",
                 }}
               >
                 <ModuleIcon name={item.icon} color={active ? activeColor : railIconColor} size={16} />
-                <span style={{ fontSize: 13.5, color: active ? "#fff" : railIconColor, fontWeight: active ? 600 : 400 }}>{item.label}</span>
+                {!railCompact && <span style={{ fontSize: 13.5, color: active ? "#fff" : railIconColor, fontWeight: active ? 600 : 400 }}>{item.label}</span>}
               </button>
             )
           })}
@@ -424,9 +501,11 @@ function App() {
           <div style={{ flex: 1 }} />
           <button
             onClick={toggleTheme}
+            aria-label={railCompact ? (isDark ? "浅色模式" : "深色模式") : undefined}
+            title={railCompact ? (isDark ? "浅色模式" : "深色模式") : undefined}
             style={{
               width: "100%", height: 34, borderRadius: 8, border: "none", cursor: "pointer",
-              display: "flex", alignItems: "center", gap: 10, padding: "0 10px", background: "transparent",
+              display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 10, padding: railCompact ? 0 : "0 10px", background: "transparent",
             }}
           >
             {isDark ? (
@@ -434,11 +513,11 @@ function App() {
             ) : (
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
             )}
-            <span style={{ fontSize: 13.5, color: railIconColor }}>{isDark ? "浅色模式" : "深色模式"}</span>
+            {!railCompact && <span style={{ fontSize: 13.5, color: railIconColor }}>{isDark ? "浅色模式" : "深色模式"}</span>}
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 10, padding: railCompact ? "8px 0 0" : "8px 10px 0" }} title={railCompact ? "我的工作台" : undefined}>
             <div style={{ width: 26, height: 26, borderRadius: 13, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>我</div>
-            <span style={{ fontSize: 13, color: railIconColor }}>我的工作台</span>
+            {!railCompact && <span style={{ fontSize: 13, color: railIconColor }}>我的工作台</span>}
           </div>
         </nav>
 
@@ -448,7 +527,7 @@ function App() {
         {/* 折叠把手 */}
         <button
           onClick={() => setChatCollapsed(c => !c)}
-          style={{ width: 18, flexShrink: 0, border: "none", borderLeft: `1px solid ${colors.border}`, padding: 0, background: colors.chatBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          style={{ width: COLLAPSE_HANDLE_WIDTH, flexShrink: 0, border: "none", borderLeft: `1px solid ${colors.border}`, padding: 0, background: colors.chatBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
           title={chatCollapsed ? "展开聊天" : "收起聊天"}
           aria-label={chatCollapsed ? "展开聊天" : "收起聊天"}
           aria-expanded={!chatCollapsed}
@@ -460,7 +539,28 @@ function App() {
 
         {/* 右侧聊天面板，固定停靠、可折叠 */}
         {!chatCollapsed && (
-          <aside style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg }}>
+          <aside style={{ width: effectiveChatWidth, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg, position: "relative" }}>
+            {/* 左边缘的拖动条：拖动调宽，双击恢复默认宽度 */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="调整聊天面板宽度"
+              aria-valuenow={effectiveChatWidth}
+              aria-valuemin={CHAT_WIDTH_MIN}
+              aria-valuemax={CHAT_WIDTH_MAX}
+              tabIndex={0}
+              title="拖动调整宽度，双击恢复默认"
+              onPointerDown={onResizeStart}
+              onPointerMove={onResizeMove}
+              onPointerUp={onResizeEnd}
+              onPointerCancel={onResizeEnd}
+              onDoubleClick={resetChatWidth}
+              onKeyDown={onResizeKey}
+              style={{
+                position: "absolute", left: -3, top: 0, bottom: 0, width: 6, zIndex: 20, cursor: "col-resize",
+                background: resizingChat ? colors.primary + "55" : "transparent", touchAction: "none",
+              }}
+            />
             <div style={{ position: "relative", borderBottom: `1px solid ${colors.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: "auto" }}>

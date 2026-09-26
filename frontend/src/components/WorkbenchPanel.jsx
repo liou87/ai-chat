@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import TaskPanel from "./TaskPanel"
 import ReminderPanel from "./ReminderPanel"
 import GoalPanel from "./GoalPanel"
@@ -6,6 +7,7 @@ import { useTheme } from "../ThemeContext"
 import { moduleAccents, radiusMd } from "../theme"
 import { PERSONA_NAME } from "../persona"
 import LoadError from "./LoadError"
+import { useElementWidth } from "../hooks"
 
 // 知行主动生成的今日简报，一天只生成一次（后端做缓存）。数据由 App 统一请求一次后传进来，
 // 跟聊天开场白共用；不带 refreshKey，不会因为聊天里用了个工具就重新生成一遍。用淡色通栏而不是带边框的卡片，
@@ -76,44 +78,68 @@ function ModuleCard({ title, accent, extra, children }) {
   )
 }
 
+// 主区域窄于这个宽度就把 bento 双列改成单列堆叠，免得任务卡片被挤得太窄
+const SINGLE_COLUMN_BELOW = 720
+// 双列时卡片区的最小高度：屏幕高就撑满简报下方的空间，屏幕矮就保底这么高、整页滚动
+const GRID_MIN_HEIGHT = 480
+
 // 总览只留四块最常看的东西：今日简报、任务、阶段目标、提醒——笔记/日记/AI热点都已经在侧栏有独立页面，
 // 不用在总览里重复摆一遍。任务用得最勤，给它最大的一块；阶段目标和提醒次要，堆在右边窄列，
 // 主次分明（bento 布局），不是四个大小一样的方框摆整齐。
 function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest }) {
   const { colors } = useTheme()
+  const containerRef = useRef(null)
+  const width = useElementWidth(containerRef)
+  const singleColumn = width > 0 && width < SINGLE_COLUMN_BELOW
+
+  const tasksCard = (
+    <ModuleCard title="任务" accent={moduleAccents.tasks}>
+      <TaskPanel refreshKey={refreshKey} accent={moduleAccents.tasks} />
+    </ModuleCard>
+  )
+  const goalsCard = (
+    <ModuleCard title="阶段目标" accent={moduleAccents.goals}>
+      <GoalPanel refreshKey={refreshKey} accent={moduleAccents.goals} />
+    </ModuleCard>
+  )
+  const remindersCard = (
+    <ModuleCard title="提醒" accent={moduleAccents.reminders}>
+      <ReminderPanel refreshKey={refreshKey} accent={moduleAccents.reminders} />
+    </ModuleCard>
+  )
+
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 24, background: colors.pageBg, minHeight: 0 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, flexShrink: 0 }}>
+    <div ref={containerRef} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: singleColumn ? 16 : 24, background: colors.pageBg, minHeight: 0 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 10px", marginBottom: 16, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <span style={{ fontSize: 19, fontWeight: 600, color: colors.text }}>工作台总览</span>
-          <span style={{ fontSize: 13, color: colors.textMuted }}>今日简报 · 任务 · 阶段目标 · 提醒</span>
+          {!singleColumn && <span style={{ fontSize: 13, color: colors.textMuted }}>今日简报 · 任务 · 阶段目标 · 提醒</span>}
         </div>
         <span style={{ fontSize: 13, color: colors.textMuted }}>
           {new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}
         </span>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      {/* 滚动容器本身是 flex 列：简报按内容高度，卡片区 flex: 1 吃掉剩下的高度 */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <DigestCard digest={digest} onRetry={onRetryDigest} onRegenerate={onRegenerateDigest} />
 
-      <DigestCard digest={digest} onRetry={onRetryDigest} onRegenerate={onRegenerateDigest} />
-
-      <div style={{ display: "flex", gap: 16, height: 520 }}>
-        <div style={{ flex: 1.6, minWidth: 0 }}>
-          <ModuleCard title="任务" accent={moduleAccents.tasks}>
-            <TaskPanel refreshKey={refreshKey} accent={moduleAccents.tasks} />
-          </ModuleCard>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
-          <ModuleCard title="阶段目标" accent={moduleAccents.goals}>
-            <GoalPanel refreshKey={refreshKey} accent={moduleAccents.goals} />
-          </ModuleCard>
-          <ModuleCard title="提醒" accent={moduleAccents.reminders}>
-            <ReminderPanel refreshKey={refreshKey} accent={moduleAccents.reminders} />
-          </ModuleCard>
-        </div>
-      </div>
-
+        {singleColumn ? (
+          // 单列：每张卡片给个固定的舒适高度，内容多了卡片内部滚动，整页也能滚
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ height: 420, display: "flex" }}>{tasksCard}</div>
+            <div style={{ height: 260, display: "flex" }}>{goalsCard}</div>
+            <div style={{ height: 340, display: "flex" }}>{remindersCard}</div>
+          </div>
+        ) : (
+          <div style={{ flex: 1, minHeight: GRID_MIN_HEIGHT, display: "flex", gap: 16 }}>
+            <div style={{ flex: 1.6, minWidth: 0, display: "flex" }}>{tasksCard}</div>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+              {goalsCard}
+              {remindersCard}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
