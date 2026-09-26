@@ -272,7 +272,7 @@ function App() {
         {/* 折叠把手 */}
         <div
           onClick={() => setChatCollapsed(c => !c)}
-          style={{ width: 18, flexShrink: 0, borderLeft: `1px solid ${colors.border}`, background: colors.surface, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          style={{ width: 18, flexShrink: 0, borderLeft: `1px solid ${colors.border}`, background: colors.chatBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
           title={chatCollapsed ? "展开聊天" : "收起聊天"}
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: chatCollapsed ? "rotate(180deg)" : "none" }}>
@@ -282,7 +282,7 @@ function App() {
 
         {/* 右侧聊天面板，固定停靠、可折叠 */}
         {!chatCollapsed && (
-          <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.surface }}>
+          <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg }}>
             <div style={{ position: "relative", borderBottom: `1px solid ${colors.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: "auto" }}>

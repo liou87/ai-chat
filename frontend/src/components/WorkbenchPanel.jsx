@@ -48,16 +48,17 @@ function DigestCard() {
 }
 
 // 一张模块卡片：不用色块图标当门面，靠加粗标题 + 一条细的强调色左边框来区分模块，
+// 背景用该模块强调色的极淡洗色（跟今日简报卡片一个做法），不是平面白色，
 // 内容区自己滚动，卡片高度由外层 flex 布局撑满
 function ModuleCard({ title, accent, extra, children }) {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   return (
     <div style={{
       flex: 1,
       minHeight: 0,
       display: "flex",
       flexDirection: "column",
-      background: colors.surface,
+      background: accent + (isDark ? "1a" : "0e"),
       borderRadius: radiusMd,
       border: `1px solid ${colors.borderLight}`,
       borderLeft: `3px solid ${accent}`,
