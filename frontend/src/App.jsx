@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { API, authHeaders } from "./api"
+import { API, authHeaders, apiFetch } from "./api"
 import WorkbenchPanel from "./components/WorkbenchPanel"
 import ModulePage from "./components/ModulePage"
 import TaskPanel from "./components/TaskPanel"
@@ -16,6 +16,7 @@ import ReminderBanner from "./components/ReminderBanner"
 import { useTheme } from "./ThemeContext"
 import { moduleAccents, railIconColor } from "./theme"
 import { ModuleIcon } from "./icons"
+import { isSubmitEnter } from "./keyboard"
 
 const iconBtnStyle = {
   width: 28, height: 28, borderRadius: 7, border: "none", background: "none",
@@ -25,7 +26,40 @@ const iconBtnStyle = {
 // 从 useChat 的 UIMessage.parts 里拼出纯文本，导出对话用得到
 const messageText = (msg) => msg.parts.filter(p => p.type === "text").map(p => p.text).join("")
 
-// 图标栏的导航项：总览 + 五个模块，点哪个主区域就切到哪个视图
+// 工具名 -> 中文动作，聊天里显示"正在新建任务…/已新建任务"，不直接把英文函数名露给用户。
+// 跟后端 services/tools/ 下注册的工具一一对应，新增工具时这里也要补一条，没补的会退回显示原名。
+const TOOL_LABELS = {
+  create_goal: "新建目标",
+  list_goals: "查看目标",
+  update_goal_progress: "更新目标进度",
+  create_task: "新建任务",
+  list_tasks: "查看任务",
+  complete_task: "完成任务",
+  delete_task: "删除任务",
+  save_note: "保存笔记",
+  search_notes: "搜索笔记",
+  sync_notion_notes: "同步 Notion",
+  add_journal_entry: "写日记",
+  get_weekly_review: "生成周复盘",
+  set_reminder: "设置提醒",
+  list_reminders: "查看提醒",
+  cancel_reminder: "取消提醒",
+  web_search: "联网搜索",
+}
+
+function toolStatusText(part) {
+  const name = part.type.slice(5)
+  const label = TOOL_LABELS[name] ?? name
+  if (part.state === "output-error") return `${label}失败`
+  if (part.state === "output-available") return `已${label}`
+  return `正在${label}…`
+}
+
+// 离底部多近算"在底部"：在底部时新内容自动跟随，往上翻了就不再强行拉回去
+const STICK_THRESHOLD = 40
+const INPUT_MAX_HEIGHT = 160
+
+// 图标栏的导航项：总览 + 六个模块，点哪个主区域就切到哪个视图
 const NAV_ITEMS = [
   { key: "overview", label: "总览", icon: "overview", accent: null },
   { key: "goals", label: "目标", icon: "goals", accent: moduleAccents.goals },
@@ -38,18 +72,23 @@ const NAV_ITEMS = [
 
 function App() {
   const { colors, inputStyle, isDark, toggleTheme } = useTheme()
-  const [activeView, setActiveView] = useState("overview")  // overview | tasks | notes | journal | reminders
+  const [activeView, setActiveView] = useState("overview")  // overview | goals | tasks | notes | journal | reminders | hotTopics
   const [sessions, setSessions] = useState([])          // 会话列表
+  const [sessionsError, setSessionsError] = useState(null)
   const [currentSession, setCurrentSession] = useState(null)  // 当前会话id
   const [input, setInput] = useState("")
   const [workbenchRefreshKey, setWorkbenchRefreshKey] = useState(0)  // agent 用过工具后 +1，触发工作台面板刷新
   const [chatCollapsed, setChatCollapsed] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [openMenu, setOpenMenu] = useState(null)  // null | "history" | "more"，聊天头部的两个下拉
+  const [historyLoadError, setHistoryLoadError] = useState(null)
 
   const fetchSessions = async () => {
-    const res = await fetch(`${API}/sessions`, { headers: authHeaders })
-    const data = await res.json()
-    setSessions(data)
+    try {
+      setSessions(await apiFetch("/sessions"))
+      setSessionsError(null)
+    } catch (e) {
+      setSessionsError(e.message)
+    }
   }
 
   // useChat 的 onData 回调是 hook 初始化时捕获的闭包，用 ref 存 currentSession 才能在回调里读到最新值
@@ -97,55 +136,112 @@ function App() {
     fetchSessions()
   }, [])
 
-  // 今日简报，开新对话时当成知行的开场白显示——只是展示层的东西，不进 useChat 的真实消息状态，
-  // 不会被当成对话历史发给后端，纯粹是"翻开总览页才看得到"和"聊天从这里开始"这两件事挂钩起来
-  const [digestGreeting, setDigestGreeting] = useState(null)
-  useEffect(() => {
-    fetch(`${API}/digest/today`, { headers: authHeaders })
-      .then(res => res.json())
-      .then(data => setDigestGreeting(data?.content || null))
-      .catch(() => {})
-  }, [])
-  const displayMessages = messages.length === 0 && digestGreeting
-    ? [{ id: "digest-greeting", role: "assistant", parts: [{ type: "text", text: digestGreeting }] }]
-    : messages
+  // 今日简报只在这里请求一次，总览的简报卡片和聊天开场白共用这一份，
+  // 避免首次打开时两处同时请求、在定时任务还没跑的情况下触发两次生成
+  const [digest, setDigest] = useState({ data: null, loading: true, error: null })
+  const loadDigest = () => {
+    setDigest(d => ({ ...d, loading: true, error: null }))
+    apiFetch("/digest/today")
+      .then(data => setDigest({ data, loading: false, error: null }))
+      .catch(e => setDigest({ data: null, loading: false, error: e.message }))
+  }
+  useEffect(loadDigest, [])
+
+  // 简报当成知行的开场白显示——只是展示层的东西，不进 useChat 的真实消息状态，不会被当成对话历史发给后端
+  const digestGreeting = digest.data?.content || null
+  const displayMessages = useMemo(() => (
+    messages.length === 0 && digestGreeting
+      ? [{ id: "digest-greeting", role: "assistant", parts: [{ type: "text", text: digestGreeting }] }]
+      : messages
+  ), [messages, digestGreeting])
+
+  // ---- 聊天区滚动：在底部时跟随新内容，用户往上翻就停住，右下角给个"回到底部" ----
+  const scrollRef = useRef(null)
+  const stickToBottomRef = useRef(true)
+  const [showJump, setShowJump] = useState(false)
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    stickToBottomRef.current = true
+    setShowJump(false)
+  }
+
+  const onChatScroll = () => {
+    const el = scrollRef.current
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD
+    stickToBottomRef.current = atBottom
+    setShowJump(!atBottom)
+  }
+
+  useLayoutEffect(() => {
+    if (stickToBottomRef.current) scrollToBottom()
+  }, [displayMessages, status, chatCollapsed])
+
+  // ---- 输入框：多行，随内容长高，超过上限后内部滚动 ----
+  const inputRef = useRef(null)
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT)}px`
+  }, [input, chatCollapsed])
+
+  const startNewChat = () => {
+    stop()
+    setCurrentSession(null)
+    setMessages([])
+    setHistoryLoadError(null)
+    setOpenMenu(null)
+  }
 
   // 点击会话，加载该会话的消息
   const loadSession = async (sessionId) => {
     stop()
     setCurrentSession(sessionId)
-    setShowHistory(false)
-    const res = await fetch(`${API}/sessions/${sessionId}/messages`, { headers: authHeaders })
-    const data = await res.json()
-    setMessages(data.map((m, i) => ({
-      id: `hist-${sessionId}-${i}`,
-      role: m.role,
-      parts: [{ type: "text", text: m.content }],
-    })))
+    setOpenMenu(null)
+    setHistoryLoadError(null)
+    try {
+      const data = await apiFetch(`/sessions/${sessionId}/messages`)
+      setMessages(data.map((m, i) => ({
+        id: `hist-${sessionId}-${i}`,
+        role: m.role,
+        parts: [{ type: "text", text: m.content }],
+      })))
+      stickToBottomRef.current = true
+    } catch (e) {
+      setMessages([])
+      setHistoryLoadError(e.message)
+    }
   }
 
   const sendMessage = (presetText) => {
+    if (loading) return
     const text = presetText ?? input
     if (!text.trim()) return
-    if (!presetText) setInput("")
+    if (presetText == null) setInput("")
+    setHistoryLoadError(null)
+    stickToBottomRef.current = true
     sendChatMessage({ text })
   }
 
   // 导出对话
   const exportChat = (format) => {
+    setOpenMenu(null)
     if (messages.length === 0) return
 
     let content = ""
 
     if (format === "txt") {
       content = messages.map(msg =>
-        `${msg.role === "user" ? "我" : "AI"}：${messageText(msg)}`
+        `${msg.role === "user" ? "我" : PERSONA_NAME}：${messageText(msg)}`
       ).join("\n\n")
     } else {
       content = messages.map(msg =>
         msg.role === "user"
           ? `**我：** ${messageText(msg)}`
-          : `**AI：** ${messageText(msg)}`
+          : `**${PERSONA_NAME}：** ${messageText(msg)}`
       ).join("\n\n---\n\n")
     }
 
@@ -159,7 +255,15 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  const onRequestWeeklyReview = () => sendMessage("请帮我生成这周的复盘总结")
+  // 周复盘走聊天生成，聊天收起时先展开，不然点了按钮什么都看不到
+  const onRequestWeeklyReview = () => {
+    setChatCollapsed(false)
+    sendMessage("请帮我生成这周的复盘总结")
+  }
+
+  // "思考中"只在还没有任何回复内容时显示，文字开始流出来就收起，不跟正文同时挂着
+  const lastMessage = messages[messages.length - 1]
+  const showThinking = loading && !(lastMessage?.role === "assistant" && lastMessage.parts.some(p => (p.type === "text" && p.text) || p.type.startsWith("tool-")))
 
   const renderMain = () => {
     switch (activeView) {
@@ -206,8 +310,18 @@ function App() {
           </ModulePage>
         )
       default:
-        return <WorkbenchPanel refreshKey={workbenchRefreshKey} />
+        return <WorkbenchPanel refreshKey={workbenchRefreshKey} digest={digest} onRetryDigest={loadDigest} />
     }
+  }
+
+  const menuStyle = {
+    position: "absolute", top: "100%", right: 8, maxHeight: 320, overflowY: "auto",
+    background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 10,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.16)", zIndex: 10, padding: 6,
+  }
+  const menuItemStyle = {
+    display: "block", width: "100%", textAlign: "left", border: "none", background: "transparent",
+    padding: "8px 10px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: colors.text, fontFamily: "inherit",
   }
 
   return (
@@ -215,11 +329,11 @@ function App() {
       <ReminderBanner refreshKey={workbenchRefreshKey} />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
-        {/* 侧栏：品牌标 + 总览/五模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像 */}
-        <div style={{ width: 176, flexShrink: 0, background: colors.railBg, display: "flex", flexDirection: "column", padding: "16px 12px", gap: 2 }}>
+        {/* 侧栏：品牌标 + 总览/六模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像 */}
+        <nav style={{ width: 176, flexShrink: 0, background: colors.railBg, display: "flex", flexDirection: "column", padding: "16px 12px", gap: 2 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18, padding: "0 4px" }}>
             <div style={{ width: 30, height: 30, borderRadius: 9, background: colors.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
@@ -233,6 +347,7 @@ function App() {
               <button
                 key={item.key}
                 onClick={() => setActiveView(item.key)}
+                aria-current={active ? "page" : undefined}
                 style={{
                   width: "100%", height: 36, borderRadius: 8, border: "none", cursor: "pointer",
                   display: "flex", alignItems: "center", gap: 10, padding: "0 10px",
@@ -254,9 +369,9 @@ function App() {
             }}
           >
             {isDark ? (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
             ) : (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
             )}
             <span style={{ fontSize: 13.5, color: railIconColor }}>{isDark ? "浅色模式" : "深色模式"}</span>
           </button>
@@ -264,116 +379,177 @@ function App() {
             <div style={{ width: 26, height: 26, borderRadius: 13, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>我</div>
             <span style={{ fontSize: 13, color: railIconColor }}>我的工作台</span>
           </div>
-        </div>
+        </nav>
 
         {/* 主区域：总览网格，或某个模块的宽松全页视图 */}
         {renderMain()}
 
         {/* 折叠把手 */}
-        <div
+        <button
           onClick={() => setChatCollapsed(c => !c)}
-          style={{ width: 18, flexShrink: 0, borderLeft: `1px solid ${colors.border}`, background: colors.chatBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          style={{ width: 18, flexShrink: 0, border: "none", borderLeft: `1px solid ${colors.border}`, padding: 0, background: colors.chatBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
           title={chatCollapsed ? "展开聊天" : "收起聊天"}
+          aria-label={chatCollapsed ? "展开聊天" : "收起聊天"}
+          aria-expanded={!chatCollapsed}
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: chatCollapsed ? "rotate(180deg)" : "none" }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: chatCollapsed ? "rotate(180deg)" : "none" }}>
             <path d="M15 18l-6-6 6-6" />
           </svg>
-        </div>
+        </button>
 
         {/* 右侧聊天面板，固定停靠、可折叠 */}
         {!chatCollapsed && (
-          <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg }}>
+          <aside style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg }}>
             <div style={{ position: "relative", borderBottom: `1px solid ${colors.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: "auto" }}>
                   <AssistantAvatar active={loading} size={24} />
                   <span style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{PERSONA_NAME}</span>
                 </div>
-                <button onClick={() => { stop(); setCurrentSession(null); setMessages([]); setShowHistory(false) }} style={iconBtnStyle} title="新对话">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                <button onClick={startNewChat} style={iconBtnStyle} title="新对话" aria-label="新对话">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                 </button>
-                <button onClick={() => setShowHistory(h => !h)} style={iconBtnStyle} title="历史会话">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" /></svg>
+                <button onClick={() => setOpenMenu(m => m === "history" ? null : "history")} style={iconBtnStyle} title="历史会话" aria-label="历史会话" aria-expanded={openMenu === "history"}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" /></svg>
+                </button>
+                <button onClick={() => setOpenMenu(m => m === "more" ? null : "more")} style={iconBtnStyle} title="更多" aria-label="更多" aria-expanded={openMenu === "more"}>
+                  <ModuleIcon name="more" color={colors.textSecondary} size={15} strokeWidth={2.4} />
                 </button>
               </div>
-              {showHistory && (
-                <div style={{ position: "absolute", top: "100%", right: 8, width: 260, maxHeight: 320, overflowY: "auto", background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.16)", zIndex: 10, padding: 6 }}>
-                  {sessions.length === 0 && <div style={{ padding: 10, fontSize: 13, color: colors.textMuted }}>暂无历史会话</div>}
+
+              {/* 点下拉外面任意位置关闭下拉 */}
+              {openMenu && <div onClick={() => setOpenMenu(null)} style={{ position: "fixed", inset: 0, zIndex: 9 }} />}
+
+              {openMenu === "history" && (
+                <div style={{ ...menuStyle, width: 260 }}>
+                  {sessionsError && <div style={{ padding: 10, fontSize: 13, color: colors.danger }}>加载失败：{sessionsError}</div>}
+                  {!sessionsError && sessions.length === 0 && <div style={{ padding: 10, fontSize: 13, color: colors.textMuted }}>暂无历史会话</div>}
                   {sessions.map(s => (
-                    <div
+                    <button
                       key={s.id}
                       onClick={() => loadSession(s.id)}
-                      style={{
-                        padding: "8px 10px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: colors.text,
-                        background: currentSession === s.id ? colors.selectedBg : "transparent",
-                      }}
+                      style={{ ...menuItemStyle, background: currentSession === s.id ? colors.selectedBg : "transparent" }}
                     >
                       {s.title}
-                    </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {openMenu === "more" && (
+                <div style={{ ...menuStyle, width: 150 }}>
+                  {["txt", "md"].map(fmt => (
+                    <button
+                      key={fmt}
+                      onClick={() => exportChat(fmt)}
+                      disabled={messages.length === 0}
+                      style={{ ...menuItemStyle, cursor: messages.length === 0 ? "not-allowed" : "pointer", color: messages.length === 0 ? colors.textMuted : colors.text }}
+                    >
+                      导出为 {fmt.toUpperCase()}
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 12 }}>
-              {displayMessages.map((msg) => (
-                <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 4, alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-                  {msg.parts.map((part, pi) => {
-                    if (part.type === "text") {
-                      if (!part.text) return null
-                      return (
-                        <span key={pi} style={{
-                          display: "inline-block",
-                          background: msg.role === "user" ? colors.primary : colors.assistantBubble,
-                          color: msg.role === "user" ? colors.primaryText : colors.text,
-                          padding: "8px 12px",
-                          borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
-                          fontSize: 13.5,
-                          lineHeight: 1.5,
-                        }}>
-                          {msg.role === "assistant"
-                            ? <ReactMarkdown>{part.text}</ReactMarkdown>
-                            : part.text
-                          }
-                        </span>
-                      )
-                    }
-                    // 工具调用/结果这类 part 的 type 是 "tool-<工具名>"，只是一个不抢眼的小提示
-                    if (part.type.startsWith("tool-")) {
-                      return (
-                        <span key={pi} style={{ fontSize: 11, color: colors.textMuted }}>
-                          🔧 调用了 {part.type.slice(5)}
-                        </span>
-                      )
-                    }
-                    return null
-                  })}
-                </div>
-              ))}
-              {loading && <div style={{ color: colors.textMuted, fontSize: 13 }}>AI 正在回复...</div>}
-              {status === "error" && <div style={{ color: colors.danger, fontSize: 13 }}>请求失败，请稍后再试</div>}
-            </div>
+            <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+              <div
+                ref={scrollRef}
+                onScroll={onChatScroll}
+                style={{ height: "100%", overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}
+              >
+                {displayMessages.map((msg) => (
+                  <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 4, alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+                    {msg.parts.map((part, pi) => {
+                      if (part.type === "text") {
+                        if (!part.text) return null
+                        return (
+                          <span key={pi} style={{
+                            display: "inline-block",
+                            background: msg.role === "user" ? colors.primary : colors.assistantBubble,
+                            color: msg.role === "user" ? colors.primaryText : colors.text,
+                            padding: "8px 12px",
+                            borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                            fontSize: 13.5,
+                            lineHeight: 1.5,
+                            whiteSpace: msg.role === "user" ? "pre-wrap" : undefined,
+                          }}>
+                            {msg.role === "assistant"
+                              ? <ReactMarkdown>{part.text}</ReactMarkdown>
+                              : part.text
+                            }
+                          </span>
+                        )
+                      }
+                      // 工具调用/结果这类 part 的 type 是 "tool-<工具名>"，只是一个不抢眼的小提示
+                      if (part.type.startsWith("tool-")) {
+                        return (
+                          <span key={pi} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: part.state === "output-error" ? colors.danger : colors.textMuted }}>
+                            <ModuleIcon name="tool" color="currentColor" size={11} />
+                            {toolStatusText(part)}
+                          </span>
+                        )
+                      }
+                      return null
+                    })}
+                  </div>
+                ))}
+                {showThinking && <div style={{ color: colors.textMuted, fontSize: 13 }}>{PERSONA_NAME}正在思考…</div>}
+                {status === "error" && <div style={{ color: colors.danger, fontSize: 13 }}>请求失败，请稍后再试</div>}
+                {historyLoadError && <div style={{ color: colors.danger, fontSize: 13 }}>会话加载失败：{historyLoadError}</div>}
+              </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, padding: "0 16px" }}>
-              <a onClick={() => exportChat("txt")} style={{ fontSize: 12, color: colors.textMuted, cursor: "pointer" }}>导出 TXT</a>
-              <a onClick={() => exportChat("md")} style={{ fontSize: 12, color: colors.textMuted, cursor: "pointer" }}>导出 MD</a>
+              {showJump && (
+                <button
+                  onClick={scrollToBottom}
+                  aria-label="回到底部"
+                  title="回到底部"
+                  style={{
+                    position: "absolute", right: 16, bottom: 10, width: 30, height: 30, borderRadius: 15,
+                    border: `1px solid ${colors.border}`, background: colors.surface, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+                  }}
+                >
+                  <ModuleIcon name="arrowDown" color={colors.textSecondary} size={14} />
+                </button>
+              )}
             </div>
 
             <div style={{ padding: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: colors.inputRowBg, border: `1px solid ${colors.border}`, borderRadius: 10, padding: "6px 6px 6px 12px" }}>
-                <input
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, background: colors.inputRowBg, border: `1px solid ${colors.border}`, borderRadius: 10, padding: "6px 6px 6px 12px" }}>
+                <textarea
+                  ref={inputRef}
+                  rows={1}
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && sendMessage()}
-                  placeholder="输入消息..."
-                  style={{ ...inputStyle, flex: 1, border: "none", background: "none", padding: "4px 0" }}
+                  onKeyDown={e => {
+                    if (isSubmitEnter(e)) {
+                      e.preventDefault()
+                      sendMessage()
+                    }
+                  }}
+                  placeholder="输入消息，Shift+Enter 换行"
+                  aria-label="输入消息"
+                  style={{ ...inputStyle, flex: 1, border: "none", background: "none", padding: "5px 0", resize: "none", lineHeight: 1.45, maxHeight: INPUT_MAX_HEIGHT, boxSizing: "border-box" }}
                 />
-                <button onClick={() => sendMessage()} style={{ width: 30, height: 30, borderRadius: 8, background: colors.primary, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></svg>
-                </button>
+                {loading ? (
+                  <button onClick={stop} title="停止生成" aria-label="停止生成" style={{ width: 30, height: 30, borderRadius: 8, background: colors.text, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                    <ModuleIcon name="stop" color={colors.pageBg} size={13} strokeWidth={2.6} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => sendMessage()}
+                    disabled={!input.trim()}
+                    title="发送"
+                    aria-label="发送"
+                    style={{ width: 30, height: 30, borderRadius: 8, background: colors.primary, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: input.trim() ? "pointer" : "default", opacity: input.trim() ? 1 : 0.45, flexShrink: 0 }}
+                  >
+                    <ModuleIcon name="send" color="#fff" size={14} strokeWidth={2.3} />
+                  </button>
+                )}
               </div>
             </div>
-          </div>
+          </aside>
         )}
       </div>
     </div>

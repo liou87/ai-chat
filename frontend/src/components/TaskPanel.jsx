@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react"
-import { API, authHeaders } from "../api"
+import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, formMaxWidth } from "../theme"
+import { ModuleIcon } from "../icons"
+import { isSubmitEnter } from "../keyboard"
+import LoadError from "./LoadError"
 
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
@@ -13,20 +16,32 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
   const [goalTitles, setGoalTitles] = useState({})  // goal_id -> title，只用来在任务行下面标一下挂靠的目标
   const [newTitle, setNewTitle] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)          // 列表加载失败
+  const [actionError, setActionError] = useState(null)  // 新建/完成/删除失败
 
   const fetchTasks = async () => {
     setLoading(true)
     try {
-      const [tasksRes, goalsRes] = await Promise.all([
-        fetch(`${API}/tasks`, { headers: authHeaders }),
-        fetch(`${API}/goals`, { headers: authHeaders }),
-      ])
-      setTasks(await tasksRes.json())
-      const goals = await goalsRes.json()
+      const [taskList, goals] = await Promise.all([apiFetch("/tasks"), apiFetch("/goals")])
+      setTasks(taskList)
       setGoalTitles(Object.fromEntries(goals.map(g => [g.id, g.title])))
+      setError(null)
+    } catch (e) {
+      setError(e.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  // 增删改统一走这里：失败时在列表上方提示，成功后重新拉列表
+  const mutate = async (request) => {
+    try {
+      await request()
+      setActionError(null)
+    } catch (e) {
+      setActionError(e.message)
+    }
+    fetchTasks()
   }
 
   useEffect(() => {
@@ -35,24 +50,14 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
 
   const addTask = async () => {
     if (!newTitle.trim()) return
-    await fetch(`${API}/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ title: newTitle })
-    })
+    const title = newTitle
     setNewTitle("")
-    fetchTasks()
+    await mutate(() => apiFetch("/tasks", { method: "POST", body: { title } }))
   }
 
-  const completeTask = async (id) => {
-    await fetch(`${API}/tasks/${id}/complete`, { method: "PATCH", headers: authHeaders })
-    fetchTasks()
-  }
+  const completeTask = (id) => mutate(() => apiFetch(`/tasks/${id}/complete`, { method: "PATCH" }))
 
-  const deleteTask = async (id) => {
-    await fetch(`${API}/tasks/${id}`, { method: "DELETE", headers: authHeaders })
-    fetchTasks()
-  }
+  const deleteTask = (id) => mutate(() => apiFetch(`/tasks/${id}`, { method: "DELETE" }))
 
   const pending = tasks.filter(t => !t.done).sort((a, b) => {
     if (!a.due_at) return 1
@@ -68,20 +73,23 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
         <input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && addTask()}
+          onKeyDown={e => isSubmitEnter(e) && addTask()}
           placeholder="新任务..."
+          aria-label="新任务"
           style={{ ...inputStyle, flex: 1 }}
         />
-        <button onClick={addTask} style={accentButtonStyle(accent)}>+</button>
+        <button onClick={addTask} style={accentButtonStyle(accent)} aria-label="添加任务">+</button>
       </div>
 
+      {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
       {!loading && tasks.length > 0 && !expanded && (
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
           {pending.length} 条未完成 / 共 {tasks.length} 条
         </div>
       )}
       {loading && tasks.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
-      {!loading && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
+      {error && <LoadError message={error} onRetry={fetchTasks} />}
+      {!loading && !error && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
 
       {expanded ? (
         <>
@@ -136,6 +144,7 @@ function TaskRow({ t, accent, colors, iconButtonStyle, goalTitles, expanded, onC
         onChange={() => !t.done && onComplete(t.id)}
         disabled={t.done}
         style={{ accentColor: accent }}
+        aria-label={`完成：${t.title}`}
       />
       <span style={{
         flex: 1,
@@ -145,8 +154,9 @@ function TaskRow({ t, accent, colors, iconButtonStyle, goalTitles, expanded, onC
       }}>
         {t.title}
         {t.goal_id && goalTitles[t.goal_id] && (
-          <div style={{ fontSize: 11, color: moduleAccents.goals }}>
-            🎯 {goalTitles[t.goal_id]}
+          <div style={{ fontSize: 11, color: moduleAccents.goals, display: "flex", alignItems: "center", gap: 4 }}>
+            <ModuleIcon name="goals" color="currentColor" size={11} />
+            {goalTitles[t.goal_id]}
           </div>
         )}
         {t.due_at && (
@@ -155,7 +165,7 @@ function TaskRow({ t, accent, colors, iconButtonStyle, goalTitles, expanded, onC
           </div>
         )}
       </span>
-      <button onClick={() => onDelete(t.id)} style={iconButtonStyle} title="删除">×</button>
+      <button onClick={() => onDelete(t.id)} style={iconButtonStyle} title="删除" aria-label={`删除：${t.title}`}>×</button>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
-import { API, authHeaders } from "../api"
+import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
+import { ModuleIcon } from "../icons"
 
 // 定时轮询到期提醒（后台 APScheduler 每 60s 扫描一次并标记 fired），
 // 有到期的就在顶部弹条幅，点"知道了"直接删除该提醒。
@@ -11,8 +12,7 @@ function ReminderBanner({ refreshKey }) {
 
   const checkDue = async () => {
     try {
-      const res = await fetch(`${API}/reminders/due`, { headers: authHeaders })
-      if (res.ok) setDueReminders(await res.json())
+      setDueReminders(await apiFetch("/reminders/due"))
     } catch {
       // 网络错误静默忽略，下次轮询再试
     }
@@ -31,8 +31,12 @@ function ReminderBanner({ refreshKey }) {
   }, [refreshKey])
 
   const dismiss = async (id) => {
-    await fetch(`${API}/reminders/${id}`, { method: "DELETE", headers: authHeaders })
     setDueReminders(prev => prev.filter(r => r.id !== id))
+    try {
+      await apiFetch(`/reminders/${id}`, { method: "DELETE" })
+    } catch {
+      // 删除失败的话下次轮询它会重新出现，不单独提示
+    }
   }
 
   if (dueReminders.length === 0) return null
@@ -49,7 +53,10 @@ function ReminderBanner({ refreshKey }) {
             padding: "8px 16px",
           }}
         >
-          <span style={{ color: colors.warningText }}>⏰ {r.message}</span>
+          <span style={{ color: colors.warningText, display: "flex", alignItems: "center", gap: 8 }}>
+            <ModuleIcon name="reminders" color="currentColor" size={15} />
+            {r.message}
+          </span>
           <button
             onClick={() => dismiss(r.id)}
             style={{ border: "none", background: "none", color: colors.warningText, cursor: "pointer", fontWeight: "bold" }}

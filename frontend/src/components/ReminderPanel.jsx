@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react"
-import { API, authHeaders } from "../api"
+import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, formMaxWidth } from "../theme"
+import { ModuleIcon } from "../icons"
+import LoadError from "./LoadError"
 
 // 提醒管理面板：能看到所有提醒（待触发/已到期）、手动新建、取消。
 // 到期后的弹窗提示由 ReminderBanner 负责，这里是"管理"视图。
@@ -11,14 +13,18 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
   const expanded = mode === "expanded"
   const [reminders, setReminders] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [message, setMessage] = useState("")
   const [remindAt, setRemindAt] = useState("")
 
   const fetchReminders = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/reminders`, { headers: authHeaders })
-      setReminders(await res.json())
+      setReminders(await apiFetch("/reminders"))
+      setError(null)
+    } catch (e) {
+      setError(e.message)
     } finally {
       setLoading(false)
     }
@@ -31,18 +37,24 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
 
   const addReminder = async () => {
     if (!message.trim() || !remindAt) return
-    await fetch(`${API}/reminders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ message, remind_at: remindAt })
-    })
-    setMessage("")
-    setRemindAt("")
+    try {
+      await apiFetch("/reminders", { method: "POST", body: { message, remind_at: remindAt } })
+      setMessage("")
+      setRemindAt("")
+      setActionError(null)
+    } catch (e) {
+      setActionError(e.message)
+    }
     fetchReminders()
   }
 
   const cancelReminder = async (id) => {
-    await fetch(`${API}/reminders/${id}`, { method: "DELETE", headers: authHeaders })
+    try {
+      await apiFetch(`/reminders/${id}`, { method: "DELETE" })
+      setActionError(null)
+    } catch (e) {
+      setActionError(e.message)
+    }
     fetchReminders()
   }
 
@@ -58,19 +70,23 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
           value={message}
           onChange={e => setMessage(e.target.value)}
           placeholder="提醒内容"
+          aria-label="提醒内容"
           style={{ ...inputStyle, flex: expanded ? 2 : undefined }}
         />
         <input
           type="datetime-local"
           value={remindAt}
           onChange={e => setRemindAt(e.target.value)}
+          aria-label="提醒时间"
           style={{ ...inputStyle, flex: expanded ? 1 : undefined }}
         />
         <button onClick={addReminder} style={{ ...accentButtonStyle(accent), whiteSpace: "nowrap" }}>+ 新建提醒</button>
       </div>
 
+      {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
       {loading && reminders.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
-      {!loading && reminders.length === 0 && <div style={{ color: colors.textMuted }}>暂无提醒</div>}
+      {error && <LoadError message={error} onRetry={fetchReminders} />}
+      {!loading && !error && reminders.length === 0 && <div style={{ color: colors.textMuted }}>暂无提醒</div>}
 
       {upcoming.length > 0 && (
         <>
@@ -104,12 +120,12 @@ function ReminderRow({ r, expanded, onCancel }) {
         borderBottom: `1px solid ${colors.borderLight}`,
       }}
     >
-      <span style={{ fontSize: 16 }}>{r.fired ? "🔔" : "⏰"}</span>
+      <ModuleIcon name={r.fired ? "reminders" : "clock"} color={r.fired ? colors.warningText : colors.textMuted} size={16} />
       <span style={{ flex: 1, fontSize: expanded ? 15 : 14, color: colors.text }}>
         {r.message}
         <div style={{ fontSize: 11, color: colors.textMuted }}>{new Date(r.remind_at).toLocaleString()}</div>
       </span>
-      <button onClick={() => onCancel(r.id)} style={iconButtonStyle} title="取消">×</button>
+      <button onClick={() => onCancel(r.id)} style={iconButtonStyle} title="取消" aria-label={`取消提醒：${r.message}`}>×</button>
     </div>
   )
 }

@@ -1,7 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
-import { API, authHeaders } from "../api"
+import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, radiusSm, formMaxWidth } from "../theme"
+import { isSubmitEnter } from "../keyboard"
+import LoadError from "./LoadError"
 
 // 笔记正文默认只显示前几行，超出才出现"展开"，避免一条长笔记（比如 Notion 长页面）占满整个列表。
 // 是否溢出靠实际测量（scrollHeight 大于 clientHeight），不靠字数估算，聊天面板收起、窗口变宽时会重新测。
@@ -89,6 +91,8 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
   const resolvedAccent = accent ?? (category === "journal" ? moduleAccents.journal : moduleAccents.notes)
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
@@ -100,28 +104,33 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
   const emptyReview = { done: "", blocker: "", tomorrow: "", ratings: { energy: null, stress: null, satisfaction: null, focus: null } }
   const [review, setReview] = useState(emptyReview)
 
-  const fetchNotes = async () => {
+  const load = async (request) => {
     setLoading(true)
     try {
-      const url = new URL(`${API}/notes`)
-      url.searchParams.set("category", category)
-      const res = await fetch(url, { headers: authHeaders })
-      setNotes(await res.json())
+      setNotes(await request())
+      setError(null)
+    } catch (e) {
+      setError(e.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const runSearch = async (query) => {
-    setLoading(true)
+  const fetchNotes = () => load(() => apiFetch("/notes", { params: { category } }))
+
+  const runSearch = (query) => load(() => apiFetch("/notes/search", { params: { query, category } }))
+
+  // 新建/删除：失败时在列表上方提示，成功后重新拉列表
+  const mutate = async (request) => {
     try {
-      const url = new URL(`${API}/notes/search`)
-      url.searchParams.set("query", query)
-      url.searchParams.set("category", category)
-      const res = await fetch(url, { headers: authHeaders })
-      setNotes(await res.json())
+      await request()
+      setActionError(null)
+      return true
+    } catch (e) {
+      setActionError(e.message)
+      return false
     } finally {
-      setLoading(false)
+      fetchNotes()
     }
   }
 
@@ -150,59 +159,52 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
       const { done, blocker, tomorrow, ratings } = review
       const hasRating = Object.values(ratings).some(v => v != null)
       if (!done.trim() && !blocker.trim() && !tomorrow.trim() && !hasRating && !newContent.trim()) return
-      await fetch(`${API}/notes`, {
+      const ok = await mutate(() => apiFetch("/notes", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({
+        body: {
           category,
           structured_data: {
             answers: { done: done.trim(), blocker: blocker.trim(), tomorrow: tomorrow.trim() },
             ratings,
             notes: newContent.trim(),
           },
-        })
-      })
-      setReview(emptyReview)
-      setNewContent("")
-      setShowForm(false)
-      fetchNotes()
+        },
+      }))
+      // 保存失败时保留表单内容，免得辛苦写的日记白写
+      if (ok) {
+        setReview(emptyReview)
+        setNewContent("")
+        setShowForm(false)
+      }
       return
     }
 
     if (!newContent.trim() || !newTitle.trim()) return
-    await fetch(`${API}/notes`, {
+    const ok = await mutate(() => apiFetch("/notes", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ title: newTitle, content: newContent, category })
-    })
-    setNewTitle("")
-    setNewContent("")
-    setShowForm(false)
-    fetchNotes()
+      body: { title: newTitle, content: newContent, category },
+    }))
+    if (ok) {
+      setNewTitle("")
+      setNewContent("")
+      setShowForm(false)
+    }
   }
 
-  const deleteNote = async (id) => {
-    await fetch(`${API}/notes/${id}`, { method: "DELETE", headers: authHeaders })
-    fetchNotes()
-  }
+  const deleteNote = (id) => mutate(() => apiFetch(`/notes/${id}`, { method: "DELETE" }))
 
   const syncNotion = async () => {
     setSyncing(true)
     setSyncStatus(null)
     try {
-      const res = await fetch(`${API}/notes/sync-notion`, { method: "POST", headers: authHeaders })
-      const data = await res.json()
-      if (!res.ok) {
-        setSyncStatus({ text: data.detail || "同步失败", isError: true })
-        return
-      }
+      const data = await apiFetch("/notes/sync-notion", { method: "POST" })
       const parts = [`新增 ${data.imported}`, `更新 ${data.updated}`, `跳过 ${data.skipped}`]
       if (data.deleted > 0) parts.push(`删除 ${data.deleted}`)
       if (data.failed > 0) parts.push(`失败 ${data.failed}`)
       setSyncStatus({ text: parts.join(" · "), isError: data.failed > 0 })
       refresh()
-    } catch {
-      setSyncStatus({ text: "同步失败，请检查网络后再试", isError: true })
+    } catch (e) {
+      setSyncStatus({ text: `同步失败：${e.message}`, isError: true })
     } finally {
       setSyncing(false)
     }
@@ -221,7 +223,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
         <input
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && refresh()}
+          onKeyDown={e => isSubmitEnter(e) && refresh()}
           placeholder={category === "journal" ? "语义搜索日记..." : "语义搜索笔记..."}
           style={{ ...inputStyle, flex: 1 }}
         />
@@ -317,8 +319,10 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
       )}
       </div>
 
+      {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
       {loading && <div style={{ color: colors.textMuted }}>加载中...</div>}
-      {!loading && notes.length === 0 && <div style={{ color: colors.textMuted }}>暂无内容</div>}
+      {!loading && error && <LoadError message={error} onRetry={refresh} />}
+      {!loading && !error && notes.length === 0 && <div style={{ color: colors.textMuted }}>暂无内容</div>}
 
       {notes.map(n => (
         <div
@@ -352,7 +356,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
                 <span style={{ fontSize: 11, color: resolvedAccent }}>{n.score.toFixed(2)}</span>
               )}
               {n.source !== "notion" && (
-                <button onClick={() => deleteNote(n.id)} style={iconButtonStyle} title="删除">×</button>
+                <button onClick={() => deleteNote(n.id)} style={iconButtonStyle} title="删除" aria-label={`删除：${n.title}`}>×</button>
               )}
             </div>
           </div>

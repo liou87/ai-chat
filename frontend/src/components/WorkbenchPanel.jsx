@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react"
 import TaskPanel from "./TaskPanel"
 import ReminderPanel from "./ReminderPanel"
 import GoalPanel from "./GoalPanel"
@@ -6,24 +5,18 @@ import AssistantAvatar from "./AssistantAvatar"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, radiusMd } from "../theme"
 import { PERSONA_NAME } from "../persona"
-import { API, authHeaders } from "../api"
+import LoadError from "./LoadError"
 
-// 知行主动生成的今日简报，一天只生成一次（后端做缓存），这里只是读取展示，不带 refreshKey，
-// 不会因为聊天里用了个工具就重新生成一遍。用淡色通栏而不是带边框的卡片，跟下面的功能卡片区分开，
-// 一眼看出这是"知行说的话"而不是一个数据模块。
-function DigestCard() {
+// 知行主动生成的今日简报，一天只生成一次（后端做缓存）。数据由 App 统一请求一次后传进来，
+// 跟聊天开场白共用；不带 refreshKey，不会因为聊天里用了个工具就重新生成一遍。用淡色通栏而不是带边框的卡片，
+// 跟下面的功能卡片区分开，一眼看出这是"知行说的话"而不是一个数据模块。
+// 标出生成时间，让人知道生成之后才加的任务不在里面。
+function DigestCard({ digest, onRetry }) {
   const { colors, isDark } = useTheme()
-  const [digest, setDigest] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    fetch(`${API}/digest/today`, { headers: authHeaders })
-      .then(res => res.json())
-      .then(data => { if (!cancelled) setDigest(data) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  const { data, loading, error } = digest
+  const generatedAt = data?.created_at
+    ? new Date(data.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+    : null
 
   return (
     <div style={{
@@ -38,9 +31,12 @@ function DigestCard() {
     }}>
       <AssistantAvatar size={30} />
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, marginBottom: 3 }}>{PERSONA_NAME}的今日简报</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, marginBottom: 3 }}>
+          {PERSONA_NAME}的今日简报
+          {generatedAt && <span style={{ fontWeight: 400, marginLeft: 8 }}>{generatedAt} 生成</span>}
+        </div>
         <div style={{ fontSize: 13.5, color: colors.text, lineHeight: 1.55 }}>
-          {loading ? "生成中..." : (digest?.content || "今天还没有简报")}
+          {loading ? "生成中..." : error ? <LoadError message={error} onRetry={onRetry} /> : (data?.content || "今天还没有简报")}
         </div>
       </div>
     </div>
@@ -78,7 +74,7 @@ function ModuleCard({ title, accent, extra, children }) {
 // 总览只留四块最常看的东西：今日简报、任务、阶段目标、提醒——笔记/日记/AI热点都已经在侧栏有独立页面，
 // 不用在总览里重复摆一遍。任务用得最勤，给它最大的一块；阶段目标和提醒次要，堆在右边窄列，
 // 主次分明（bento 布局），不是四个大小一样的方框摆整齐。
-function WorkbenchPanel({ refreshKey }) {
+function WorkbenchPanel({ refreshKey, digest, onRetryDigest }) {
   const { colors } = useTheme()
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 24, background: colors.pageBg, minHeight: 0 }}>
@@ -94,7 +90,7 @@ function WorkbenchPanel({ refreshKey }) {
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
 
-      <DigestCard />
+      <DigestCard digest={digest} onRetry={onRetryDigest} />
 
       <div style={{ display: "flex", gap: 16, height: 520 }}>
         <div style={{ flex: 1.6, minWidth: 0 }}>

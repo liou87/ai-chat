@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
-import { API, authHeaders } from "../api"
+import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, formMaxWidth } from "../theme"
+import LoadError from "./LoadError"
 
 const TIER_LABEL = { phase: "阶段目标", month: "月目标", week: "周目标" }
 const PARENT_TIER = { phase: null, month: "phase", week: "month" }
@@ -22,14 +23,18 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
   const expanded = mode === "expanded"
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ tier: "phase", parent_id: "", title: "", description: "" })
 
   const fetchGoals = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/goals`, { headers: authHeaders })
-      setGoals(await res.json())
+      setGoals(await apiFetch("/goals"))
+      setError(null)
+    } catch (e) {
+      setError(e.message)
     } finally {
       setLoading(false)
     }
@@ -39,6 +44,16 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
     fetchGoals()
   }, [refreshKey])
 
+  const mutate = async (request) => {
+    try {
+      await request()
+      setActionError(null)
+    } catch (e) {
+      setActionError(e.message)
+    }
+    fetchGoals()
+  }
+
   const phases = goals.filter(g => g.tier === "phase")
   const byParent = (parentId) => goals.filter(g => g.parent_id === parentId)
   const parentOptions = goals.filter(g => g.tier === PARENT_TIER[form.tier])
@@ -46,41 +61,29 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
   const addGoal = async () => {
     if (!form.title.trim()) return
     if (PARENT_TIER[form.tier] && !form.parent_id) return  // month/week 必须选上级
-    await fetch(`${API}/goals`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({
-        title: form.title,
-        tier: form.tier,
-        parent_id: form.parent_id ? Number(form.parent_id) : null,
-        description: form.description || null,
-      })
-    })
+    const body = {
+      title: form.title,
+      tier: form.tier,
+      parent_id: form.parent_id ? Number(form.parent_id) : null,
+      description: form.description || null,
+    }
     setForm({ tier: "phase", parent_id: "", title: "", description: "" })
     setShowForm(false)
-    fetchGoals()
+    await mutate(() => apiFetch("/goals", { method: "POST", body }))
   }
 
-  const updateProgress = async (id, progress) => {
-    await fetch(`${API}/goals/${id}/progress`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ progress })
-    })
-    fetchGoals()
-  }
+  const updateProgress = (id, progress) =>
+    mutate(() => apiFetch(`/goals/${id}/progress`, { method: "PATCH", body: { progress } }))
 
-  const deleteGoal = async (id) => {
-    await fetch(`${API}/goals/${id}`, { method: "DELETE", headers: authHeaders })
-    fetchGoals()
-  }
+  const deleteGoal = (id) => mutate(() => apiFetch(`/goals/${id}`, { method: "DELETE" }))
 
   if (!expanded) {
     // 紧凑视图：只看阶段目标的标题和进度条，跟截图里"目标与下一里程碑"卡片一个意思
     return (
       <div>
         {loading && phases.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
-        {!loading && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
+        {error && <LoadError message={error} onRetry={fetchGoals} />}
+        {!loading && !error && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
         {phases.map(g => (
           <div key={g.id} style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
@@ -145,8 +148,10 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
       )}
       </div>
 
+      {actionError && <div style={{ marginBottom: 10 }}><LoadError message={actionError} /></div>}
       {loading && goals.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
-      {!loading && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
+      {error && <LoadError message={error} onRetry={fetchGoals} />}
+      {!loading && !error && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
 
       {phases.map(phase => (
         <GoalNode key={phase.id} goal={phase} depth={0} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle}
@@ -170,7 +175,7 @@ function GoalNode({ goal, depth, accent, colors, iconButtonStyle, byParent, onUp
           </span>
           <span style={{ fontSize: 14, fontWeight: 600, color: colors.text, flex: 1 }}>{goal.title}</span>
           {goal.status && <span style={{ fontSize: 11, color: colors.textMuted }}>{goal.status}</span>}
-          <button onClick={() => onDelete(goal.id)} style={iconButtonStyle} title="删除">×</button>
+          <button onClick={() => onDelete(goal.id)} style={iconButtonStyle} title="删除" aria-label={`删除：${goal.title}`}>×</button>
         </div>
         {goal.description && <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>{goal.description}</div>}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>

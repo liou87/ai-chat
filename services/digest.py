@@ -73,6 +73,14 @@ async def _compose_with_llm(data: dict) -> str:
     return response.choices[0].message.content.strip()
 
 
+def _serialize(digest: DailyDigest) -> dict:
+    return {
+        "digest_date": digest.digest_date.isoformat(),
+        "content": digest.content,
+        "created_at": digest.created_at.isoformat() if digest.created_at else None,
+    }
+
+
 async def get_or_create_today_digest(db: AsyncSession) -> dict:
     """
     拿今天的简报，没有就现算一份存起来：一天只会真正生成一次，重复调用（比如用户刷新页面）
@@ -81,7 +89,7 @@ async def get_or_create_today_digest(db: AsyncSession) -> dict:
     today = date_cls.today()
     existing = (await db.execute(select(DailyDigest).where(DailyDigest.digest_date == today))).scalars().first()
     if existing:
-        return {"digest_date": today.isoformat(), "content": existing.content}
+        return _serialize(existing)
 
     data = await _aggregate_today(db)
     try:
@@ -90,13 +98,15 @@ async def get_or_create_today_digest(db: AsyncSession) -> dict:
         logger.error("生成每日简报失败，改用模板兜底", exc_info=True)
         content = _fallback_text(data)
 
+    digest = DailyDigest(digest_date=today, content=content)
     try:
-        db.add(DailyDigest(digest_date=today, content=content))
+        db.add(digest)
         await db.commit()
     except IntegrityError:
         # 极小概率的竞态：调度任务和用户开页面几乎同时触发，谁先提交都行，读已经存在的那条就行
         await db.rollback()
         existing = (await db.execute(select(DailyDigest).where(DailyDigest.digest_date == today))).scalars().first()
-        return {"digest_date": today.isoformat(), "content": existing.content}
+        return _serialize(existing)
 
-    return {"digest_date": today.isoformat(), "content": content}
+    await db.refresh(digest)
+    return _serialize(digest)
