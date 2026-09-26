@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
 import { API, authHeaders } from "../api"
 import { useTheme } from "../ThemeContext"
-import { moduleAccents, radiusSm } from "../theme"
+import { moduleAccents, radiusSm, formMaxWidth } from "../theme"
 
 // 笔记正文默认只显示前几行，超出才出现"展开"，避免一条长笔记（比如 Notion 长页面）占满整个列表。
 // 是否溢出靠实际测量（scrollHeight 大于 clientHeight），不靠字数估算，聊天面板收起、窗口变宽时会重新测。
@@ -210,6 +210,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
 
   return (
     <div>
+      <div style={{ maxWidth: formMaxWidth }}>
       {category === "journal" && (
         <button onClick={onRequestWeeklyReview} style={{ ...accentButtonStyle(resolvedAccent), width: "100%", marginBottom: 12 }}>
           生成本周复盘
@@ -314,6 +315,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
           </div>
         </div>
       )}
+      </div>
 
       {loading && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {!loading && notes.length === 0 && <div style={{ color: colors.textMuted }}>暂无内容</div>}

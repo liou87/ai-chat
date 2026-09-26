@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { API, authHeaders } from "../api"
 import { useTheme } from "../ThemeContext"
-import { moduleAccents } from "../theme"
+import { moduleAccents, formMaxWidth } from "../theme"
 
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
@@ -64,7 +64,7 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: expanded ? 20 : 12 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: expanded ? 20 : 12, maxWidth: formMaxWidth }}>
         <input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}

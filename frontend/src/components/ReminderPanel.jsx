@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { API, authHeaders } from "../api"
 import { useTheme } from "../ThemeContext"
-import { moduleAccents } from "../theme"
+import { moduleAccents, formMaxWidth } from "../theme"
 
 // 提醒管理面板：能看到所有提醒（待触发/已到期）、手动新建、取消。
 // 到期后的弹窗提示由 ReminderBanner 负责，这里是"管理"视图。
@@ -53,7 +53,7 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
 
   return (
     <div>
-      <div style={{ display: "flex", flexDirection: expanded ? "row" : "column", gap: 6, marginBottom: expanded ? 20 : 12 }}>
+      <div style={{ display: "flex", flexDirection: expanded ? "row" : "column", gap: 6, marginBottom: expanded ? 20 : 12, maxWidth: expanded ? formMaxWidth * 1.4 : undefined }}>
         <input
           value={message}
           onChange={e => setMessage(e.target.value)}

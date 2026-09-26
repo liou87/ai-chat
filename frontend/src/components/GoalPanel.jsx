@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { API, authHeaders } from "../api"
 import { useTheme } from "../ThemeContext"
-import { moduleAccents } from "../theme"
+import { moduleAccents, formMaxWidth } from "../theme"
 
 const TIER_LABEL = { phase: "阶段目标", month: "月目标", week: "周目标" }
 const PARENT_TIER = { phase: null, month: "phase", week: "month" }
@@ -97,6 +97,7 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
 
   return (
     <div>
+      <div style={{ maxWidth: formMaxWidth }}>
       {!showForm ? (
         <button onClick={() => setShowForm(true)} style={{ ...accentButtonStyle(accent), width: "100%", marginBottom: 16 }}>
           + 新建目标
@@ -142,6 +143,7 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
           </div>
         </div>
       )}
+      </div>
 
       {loading && goals.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {!loading && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}

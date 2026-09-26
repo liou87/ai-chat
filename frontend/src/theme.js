@@ -51,6 +51,11 @@ export const moduleAccents = {
 // 图标栏本身固定深色（不跟随明暗主题切换），未激活图标用这个中性灰
 export const railIconColor = "#9a9db0"
 
+// 搜索框、新建输入框、表单这类"控制类"元素的最大宽度：总览卡片本来就窄，用不上；
+// 展开的单模块全页视图容器很宽，这些单行控件不加限制会被拉成很长的条，加了这个才不难看。
+// 列表里的任务行/笔记卡片这类内容多的元素不用这个，让它们正常占满宽度。
+export const formMaxWidth = 480
+
 export const radiusSm = 6
 export const radiusMd = 12
 
