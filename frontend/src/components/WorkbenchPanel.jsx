@@ -108,9 +108,14 @@ function WorkbenchPanel({ refreshKey, onRequestWeeklyReview }) {
   const { colors, cardStyle, isDark } = useTheme()
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 24, background: colors.pageBg, minHeight: 0 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16, flexShrink: 0 }}>
-        <span style={{ fontSize: 19, fontWeight: 600, color: colors.text }}>工作台总览</span>
-        <span style={{ fontSize: 13, color: colors.textMuted }}>目标 / 任务 / 笔记 / 日记 / 提醒</span>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontSize: 19, fontWeight: 600, color: colors.text }}>工作台总览</span>
+          <span style={{ fontSize: 13, color: colors.textMuted }}>目标 / 任务 / 笔记 / 日记 / 提醒</span>
+        </div>
+        <span style={{ fontSize: 13, color: colors.textMuted }}>
+          {new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}
+        </span>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>

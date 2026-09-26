@@ -207,12 +207,15 @@ function App() {
       <ReminderBanner refreshKey={workbenchRefreshKey} />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
-        {/* 图标栏：品牌标 + 总览/四模块导航 + 主题切换 + 头像 */}
-        <div style={{ width: 56, flexShrink: 0, background: colors.railBg, display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 0", gap: 6 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: colors.primary, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
+        {/* 侧栏：品牌标 + 总览/五模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像 */}
+        <div style={{ width: 176, flexShrink: 0, background: colors.railBg, display: "flex", flexDirection: "column", padding: "16px 12px", gap: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 18, padding: "0 4px" }}>
+            <div style={{ width: 30, height: 30, borderRadius: 9, background: colors.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <span style={{ fontSize: 14.5, fontWeight: 600, color: "#fff" }}>{PERSONA_NAME}</span>
           </div>
 
           {NAV_ITEMS.map(item => {
@@ -222,14 +225,14 @@ function App() {
               <button
                 key={item.key}
                 onClick={() => setActiveView(item.key)}
-                title={item.label}
                 style={{
-                  width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: "100%", height: 36, borderRadius: 8, border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 10, padding: "0 10px",
                   background: active ? activeColor + "26" : "transparent",
                 }}
               >
-                <ModuleIcon name={item.icon} color={active ? activeColor : railIconColor} size={17} />
+                <ModuleIcon name={item.icon} color={active ? activeColor : railIconColor} size={16} />
+                <span style={{ fontSize: 13.5, color: active ? "#fff" : railIconColor, fontWeight: active ? 600 : 400 }}>{item.label}</span>
               </button>
             )
           })}
@@ -237,16 +240,22 @@ function App() {
           <div style={{ flex: 1 }} />
           <button
             onClick={toggleTheme}
-            title={isDark ? "切换到浅色模式" : "切换到深色模式"}
-            style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+            style={{
+              width: "100%", height: 34, borderRadius: 8, border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 10, padding: "0 10px", background: "transparent",
+            }}
           >
             {isDark ? (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c8cad4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
             ) : (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c8cad4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={railIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
             )}
+            <span style={{ fontSize: 13.5, color: railIconColor }}>{isDark ? "浅色模式" : "深色模式"}</span>
           </button>
-          <div style={{ width: 30, height: 30, borderRadius: 15, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, marginTop: 10 }}>我</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 0" }}>
+            <div style={{ width: 26, height: 26, borderRadius: 13, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>我</div>
+            <span style={{ fontSize: 13, color: railIconColor }}>我的工作台</span>
+          </div>
         </div>
 
         {/* 主区域：总览网格，或某个模块的宽松全页视图 */}
