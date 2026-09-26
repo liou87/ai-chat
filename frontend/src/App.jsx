@@ -17,6 +17,8 @@ import { useTheme } from "./ThemeContext"
 import { moduleAccents, railIconColor } from "./theme"
 import { ModuleIcon } from "./icons"
 import { isSubmitEnter } from "./keyboard"
+import { useConfirm } from "./confirm"
+import { dayBucket } from "./datetime"
 
 const iconBtnStyle = {
   width: 28, height: 28, borderRadius: 7, border: "none", background: "none",
@@ -57,6 +59,8 @@ function toolStatusText(part) {
 
 // 离底部多近算"在底部"：在底部时新内容自动跟随，往上翻了就不再强行拉回去
 const STICK_THRESHOLD = 40
+const WEEKLY_REVIEW_PROMPT = "请帮我生成这周的复盘总结"
+const SESSION_BUCKETS = ["今天", "昨天", "最近 7 天", "更早"]
 const INPUT_MAX_HEIGHT = 160
 
 // 图标栏的导航项：总览 + 六个模块，点哪个主区域就切到哪个视图
@@ -72,6 +76,7 @@ const NAV_ITEMS = [
 
 function App() {
   const { colors, inputStyle, isDark, toggleTheme } = useTheme()
+  const confirm = useConfirm()
   const [activeView, setActiveView] = useState("overview")  // overview | goals | tasks | notes | journal | reminders | hotTopics
   const [sessions, setSessions] = useState([])          // 会话列表
   const [sessionsError, setSessionsError] = useState(null)
@@ -81,6 +86,7 @@ function App() {
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [openMenu, setOpenMenu] = useState(null)  // null | "history" | "more"，聊天头部的两个下拉
   const [historyLoadError, setHistoryLoadError] = useState(null)
+  const [chatNotice, setChatNotice] = useState(null)  // 聊天区底部的一行状态，比如"周复盘已存入日记"
 
   const fetchSessions = async () => {
     try {
@@ -94,6 +100,8 @@ function App() {
   // useChat 的 onData 回调是 hook 初始化时捕获的闭包，用 ref 存 currentSession 才能在回调里读到最新值
   const currentSessionRef = useRef(null)
   useEffect(() => { currentSessionRef.current = currentSession }, [currentSession])
+  // 这一轮是不是"生成本周复盘"：是的话回复完整结束后把正文存进日记。onFinish 同样是初始化时捕获的闭包，用 ref
+  const pendingReviewSaveRef = useRef(false)
 
   // transport 只创建一次：请求体按后端 /api/chat/stream 已有的 {session_id, messages: [{role, content}]}
   // 格式重新拼装，不用 AI SDK 默认的 UIMessage 请求体，后端完全不用感知这次前端改造。
@@ -124,9 +132,26 @@ function App() {
           setCurrentSession(sid)
           fetchSessions()
         }
+      } else if (part.type === "data-title") {
+        // 新会话第一轮结束后后端用 AI 起了标题，直接改列表里那一条
+        const { sessionId, title } = part.data
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s))
       } else if (part.type === "data-meta" && part.data.toolUsed) {
         setWorkbenchRefreshKey(k => k + 1)
       }
+    },
+    onFinish: ({ message, isAbort, isError, isDisconnect }) => {
+      if (!pendingReviewSaveRef.current) return
+      pendingReviewSaveRef.current = false
+      const text = messageText(message).trim()
+      // 中途停止、出错的不存，免得存进去半截复盘
+      if (isAbort || isError || isDisconnect || !text) return
+      apiFetch("/notes/weekly-review", { method: "POST", body: { content: text } })
+        .then(note => {
+          setChatNotice({ text: `周复盘已存入日记（${note.title}）`, isError: false })
+          setWorkbenchRefreshKey(k => k + 1)
+        })
+        .catch(e => setChatNotice({ text: `周复盘保存失败：${e.message}`, isError: true }))
     },
   })
   const loading = status === "submitted" || status === "streaming"
@@ -146,6 +171,17 @@ function App() {
       .catch(e => setDigest({ data: null, loading: false, error: e.message }))
   }
   useEffect(loadDigest, [])
+
+  // 手动重新生成简报：按现在的任务/提醒重写一份，覆盖今天那条
+  const regenerateDigest = async () => {
+    if (!(await confirm({ title: "重新生成今日简报", message: "会按现在的任务和提醒重新写一份，覆盖今天已有的简报，消耗一次 DeepSeek 调用。", confirmText: "重新生成" }))) return
+    setDigest(d => ({ ...d, loading: true, error: null }))
+    try {
+      setDigest({ data: await apiFetch("/digest/today/regenerate", { method: "POST" }), loading: false, error: null })
+    } catch (e) {
+      setDigest(d => ({ ...d, loading: false, error: e.message }))
+    }
+  }
 
   // 简报当成知行的开场白显示——只是展示层的东西，不进 useChat 的真实消息状态，不会被当成对话历史发给后端
   const digestGreeting = digest.data?.content || null
@@ -190,18 +226,39 @@ function App() {
 
   const startNewChat = () => {
     stop()
+    pendingReviewSaveRef.current = false
     setCurrentSession(null)
     setMessages([])
     setHistoryLoadError(null)
+    setChatNotice(null)
     setOpenMenu(null)
   }
+
+  const deleteSession = async (s) => {
+    setOpenMenu(null)
+    if (!(await confirm({ title: "删除会话", message: `「${s.title}」的全部消息会被删除，无法恢复。` }))) return
+    try {
+      await apiFetch(`/sessions/${s.id}`, { method: "DELETE" })
+      if (currentSession === s.id) startNewChat()
+      setSessions(prev => prev.filter(x => x.id !== s.id))
+    } catch (e) {
+      setChatNotice({ text: `删除会话失败：${e.message}`, isError: true })
+    }
+  }
+
+  // 历史会话按"今天/昨天/最近 7 天/更早"分组，后端已经按时间倒序
+  const groupedSessions = SESSION_BUCKETS
+    .map(label => ({ label, items: sessions.filter(s => dayBucket(s.created_at) === label) }))
+    .filter(g => g.items.length > 0)
 
   // 点击会话，加载该会话的消息
   const loadSession = async (sessionId) => {
     stop()
+    pendingReviewSaveRef.current = false
     setCurrentSession(sessionId)
     setOpenMenu(null)
     setHistoryLoadError(null)
+    setChatNotice(null)
     try {
       const data = await apiFetch(`/sessions/${sessionId}/messages`)
       setMessages(data.map((m, i) => ({
@@ -222,6 +279,7 @@ function App() {
     if (!text.trim()) return
     if (presetText == null) setInput("")
     setHistoryLoadError(null)
+    setChatNotice(null)
     stickToBottomRef.current = true
     sendChatMessage({ text })
   }
@@ -256,9 +314,12 @@ function App() {
   }
 
   // 周复盘走聊天生成，聊天收起时先展开，不然点了按钮什么都看不到
+  // 回复完整结束后，onFinish 会把复盘正文存成一条"周复盘 YYYY-Www"日记
   const onRequestWeeklyReview = () => {
+    if (loading) return
     setChatCollapsed(false)
-    sendMessage("请帮我生成这周的复盘总结")
+    pendingReviewSaveRef.current = true
+    sendMessage(WEEKLY_REVIEW_PROMPT)
   }
 
   // "思考中"只在还没有任何回复内容时显示，文字开始流出来就收起，不跟正文同时挂着
@@ -310,7 +371,7 @@ function App() {
           </ModulePage>
         )
       default:
-        return <WorkbenchPanel refreshKey={workbenchRefreshKey} digest={digest} onRetryDigest={loadDigest} />
+        return <WorkbenchPanel refreshKey={workbenchRefreshKey} digest={digest} onRetryDigest={loadDigest} onRegenerateDigest={regenerateDigest} />
     }
   }
 
@@ -326,7 +387,7 @@ function App() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif", background: colors.pageBg, color: colors.text }}>
-      <ReminderBanner refreshKey={workbenchRefreshKey} />
+      <ReminderBanner refreshKey={workbenchRefreshKey} onChange={() => setWorkbenchRefreshKey(k => k + 1)} />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
         {/* 侧栏：品牌标 + 总览/六模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像 */}
@@ -424,14 +485,20 @@ function App() {
                 <div style={{ ...menuStyle, width: 260 }}>
                   {sessionsError && <div style={{ padding: 10, fontSize: 13, color: colors.danger }}>加载失败：{sessionsError}</div>}
                   {!sessionsError && sessions.length === 0 && <div style={{ padding: 10, fontSize: 13, color: colors.textMuted }}>暂无历史会话</div>}
-                  {sessions.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => loadSession(s.id)}
-                      style={{ ...menuItemStyle, background: currentSession === s.id ? colors.selectedBg : "transparent" }}
-                    >
-                      {s.title}
-                    </button>
+                  {groupedSessions.map(group => (
+                    <div key={group.label}>
+                      <div style={{ fontSize: 11, color: colors.textMuted, padding: "8px 10px 4px" }}>{group.label}</div>
+                      {group.items.map(s => (
+                        <SessionItem
+                          key={s.id}
+                          s={s}
+                          active={currentSession === s.id}
+                          itemStyle={menuItemStyle}
+                          onOpen={() => loadSession(s.id)}
+                          onDelete={() => deleteSession(s)}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
@@ -497,6 +564,7 @@ function App() {
                 {showThinking && <div style={{ color: colors.textMuted, fontSize: 13 }}>{PERSONA_NAME}正在思考…</div>}
                 {status === "error" && <div style={{ color: colors.danger, fontSize: 13 }}>请求失败，请稍后再试</div>}
                 {historyLoadError && <div style={{ color: colors.danger, fontSize: 13 }}>会话加载失败：{historyLoadError}</div>}
+                {chatNotice && <div style={{ color: chatNotice.isError ? colors.danger : colors.textMuted, fontSize: 12.5 }}>{chatNotice.text}</div>}
               </div>
 
               {showJump && (
@@ -552,6 +620,33 @@ function App() {
           </aside>
         )}
       </div>
+    </div>
+  )
+}
+
+// 历史会话里的一条：整行点击打开，悬停/聚焦时右侧出现删除按钮
+function SessionItem({ s, active, itemStyle, onOpen, onDelete }) {
+  const { colors } = useTheme()
+  const [hover, setHover] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      style={{ display: "flex", alignItems: "center", borderRadius: 6, background: active ? colors.selectedBg : hover ? colors.inputRowBg : "transparent" }}
+    >
+      <button onClick={onOpen} style={{ ...itemStyle, flex: 1, minWidth: 0, background: "transparent", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {s.title}
+      </button>
+      <button
+        onClick={onDelete}
+        aria-label={`删除会话：${s.title}`}
+        title="删除会话"
+        style={{ border: "none", background: "none", cursor: "pointer", color: colors.danger, fontSize: 15, lineHeight: 1, padding: "0 10px", opacity: hover ? 1 : 0 }}
+      >
+        ×
+      </button>
     </div>
   )
 }

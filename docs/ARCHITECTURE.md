@@ -21,7 +21,7 @@
 | LLM | DeepSeek API，deepseek-flash 模型 | 走 OpenAI SDK 兼容协议，AsyncOpenAI 指向 DeepSeek 的 base_url |
 | Embedding | fastembed，本地 ONNX 模型 BAAI/bge-small-zh-v1.5，512 维 | 不依赖外部 embedding API |
 | 向量检索 | pgvector，HNSW 索引 + 余弦距离 | 检索在数据库端完成，不再是 Python 里手写循环 |
-| 后台调度 | APScheduler | AsyncIOScheduler，负责提醒到期扫描 |
+| 后台调度 | APScheduler | AsyncIOScheduler，负责提醒到期扫描、每日简报和热点；按 APP_TIMEZONE 时区排程 |
 | 联网搜索 | Tavily REST API | 用 httpx 直接调用，没有引入官方 SDK |
 | Notion 同步 | Notion REST API，版本头 2025-09-03 | 用 httpx 直连，只读导入，没有引入官方 SDK |
 | 前端框架 | React 19 + Vite 8 | 没用状态管理库，纯 useState 和 props |
@@ -178,19 +178,21 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 除了 /api/chat 和 /api/chat/stream 之外，其余接口主要是给前端直接操作数据用的，不经过 agent。所有接口都需要 X-API-Key 请求头。
 
-对话相关：POST /api/chat 是非流式对话，返回内容包含 session_id、reply 和 trace；POST /api/chat/stream 是流式对话，按 Vercel AI SDK 的 UI Message Stream 协议返回 SSE，session id 和是否用过工具通过协议里的自定义 data 事件传递。
+对话相关：POST /api/chat 是非流式对话，返回内容包含 session_id、reply 和 trace；POST /api/chat/stream 是流式对话，按 Vercel AI SDK 的 UI Message Stream 协议返回 SSE，session id 和是否用过工具通过协议里的自定义 data 事件传递。新会话的第一轮会用第一句话并行让 DeepSeek 起一个简短标题（services/session_title.py），回复结束时写库并通过 data-title 事件推给前端，失败就保留截取的前 20 个字。
 
-会话相关：GET /api/sessions 拿会话列表，GET /api/sessions/{id}/messages 拿某个会话的历史消息。
+会话相关：GET /api/sessions 拿会话列表，GET /api/sessions/{id}/messages 拿某个会话的历史消息，DELETE /api/sessions/{id} 删除会话（连同消息和 agent_traces）。
 
-任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id}/complete 标记完成，DELETE /api/tasks/{id} 删除。
+任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id} 修改标题、截止时间、挂靠目标、完成状态（只改请求里出现的字段，传 null 表示清空），PATCH /api/tasks/{id}/complete 标记完成（旧接口，保留给 agent 工具用），DELETE /api/tasks/{id} 删除。
 
-目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
+目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id} 改标题和说明，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
 
-笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，POST 传 category="journal" 会自动走日记的建号逻辑（标题按日期生成，忽略传入的 title），可以带 structured_data 传引导问答和评分；GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source 和 structured_data 字段。
+笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，POST 传 category="journal" 会自动走日记的建号逻辑（标题按日期生成，忽略传入的 title），可以带 structured_data 传引导问答和评分；GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，PATCH /api/notes/{id} 编辑本地笔记的标题和正文（保存后重新分块算向量；Notion 来源返回 403，日记返回 400），POST /api/notes/weekly-review 把周复盘存成一条"周复盘 YYYY-Www"日记（同一周覆盖同一条，周复盘聚合时会排除这类日记），DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source、structured_data、updated_at 字段。
 
-提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期的提醒，前端轮询用这个接口，DELETE /api/reminders/{id} 取消或者说是 dismiss。
+提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期、还没标记已读的提醒，前端轮询用这个接口，PATCH /api/reminders/{id}/acknowledge 标记已读（顶部条幅的"知道了"，提醒本身保留），DELETE /api/reminders/{id} 删除。
 
-简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样。
+简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份，POST /api/digest/today/regenerate 按现在的数据重新生成并覆盖；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样，POST /api/hot-topics/today/regenerate 重新收集，GET /api/hot-topics/dates 列出有记录的日期，GET /api/hot-topics/{YYYY-MM-DD} 查历史某一天。
+
+时间：所有"现在几点"都走 services/clock.py，按环境变量 APP_TIMEZONE（默认 Australia/Sydney）算，不依赖服务器本地时区；库里存的是不带时区的本地时间，外部传进来带时区的时间（比如 agent 给的 ISO 字符串）会先换算。前端 datetime-local 控件给的是浏览器本地时间，所以 APP_TIMEZONE 要跟使用者所在时区一致。
 
 ## 9. 鉴权与安全
 

@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Goal
+from services import clock
 
 TIERS = ("phase", "month", "week")
 # 上级目标的层级要求：phase 没有上级，month 的上级必须是 phase，week 的上级必须是 month
@@ -68,7 +69,23 @@ async def update_goal_progress(db: AsyncSession, goal_id: int, progress: int,
     goal.progress = max(0, min(100, progress))
     if status is not None:
         goal.status = status
-    goal.updated_at = datetime.now()
+    goal.updated_at = clock.now()
+    await db.commit()
+    await db.refresh(goal)
+    return _serialize(goal)
+
+
+async def update_goal(db: AsyncSession, goal_id: int, title: Optional[str] = None,
+                       description: Optional[str] = None) -> Optional[dict]:
+    """改标题/说明；层级和上级不允许在这里改，挪层级牵扯子目标，真要改就删了重建。"""
+    goal = await db.get(Goal, goal_id)
+    if goal is None:
+        return None
+    if title is not None and title.strip():
+        goal.title = title.strip()
+    if description is not None:
+        goal.description = description.strip() or None
+    goal.updated_at = clock.now()
     await db.commit()
     await db.refresh(goal)
     return _serialize(goal)

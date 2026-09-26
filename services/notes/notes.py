@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Note, NoteChunk
+from services import clock
 from .chunking import chunk_text
 from .embeddings import embed_text, embed_texts
 
@@ -15,8 +16,16 @@ OVERSAMPLE = 4
 RATING_LABELS = {"energy": "精力", "stress": "压力", "satisfaction": "满意度", "focus": "专注度"}
 
 
+# 周复盘存成一条日记，标题固定用这个前缀 + ISO 周号（比如"周复盘 2026-W39"），同一周重复生成会覆盖
+WEEKLY_REVIEW_PREFIX = "周复盘"
+
+
 class NoteReadOnlyError(Exception):
-    """外部来源（Notion）的笔记在本地是只读的，不允许删除。"""
+    """外部来源（Notion）的笔记在本地是只读的，不允许删除或编辑。"""
+
+
+class NoteNotEditableError(Exception):
+    """这类笔记不支持在界面上编辑（目前是日记：正文由结构化复盘渲染而来，直接改正文会跟评分数据对不上）。"""
 
 
 def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
@@ -28,6 +37,7 @@ def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
         "source": note.source,
         "structured_data": json.loads(note.structured_data) if note.structured_data else None,
         "created_at": note.created_at.isoformat() if note.created_at else None,
+        "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }
     if with_score is not None:
         data["score"] = round(with_score, 4)
@@ -89,12 +99,70 @@ async def create_note(db: AsyncSession, title: str, content: str, category: str 
 
 async def create_journal_entry(db: AsyncSession, content: str, entry_date: Optional[datetime] = None,
                                 structured_data: Optional[dict] = None) -> dict:
-    entry_date = entry_date or datetime.now()
+    entry_date = entry_date or clock.now()
     title = f"日记 {entry_date.strftime('%Y-%m-%d')}"
     if structured_data:
         content = render_structured_review(structured_data)
     return await create_note(db, title=title, content=content, category="journal", created_at=entry_date,
                               structured_data=structured_data)
+
+
+async def update_note(db: AsyncSession, note_id: int, title: Optional[str] = None,
+                       content: Optional[str] = None) -> Optional[dict]:
+    """改本地笔记的标题/正文，改完重新分块算向量，保证语义检索搜到的是新内容。"""
+    note = await db.get(Note, note_id)
+    if note is None:
+        return None
+    if note.source == "notion":
+        raise NoteReadOnlyError("来自 Notion 的笔记请在 Notion 里修改")
+    if note.category != "note":
+        raise NoteNotEditableError("日记暂不支持编辑")
+
+    new_title = title.strip() if title is not None and title.strip() else note.title
+    new_content = content if content is not None else note.content
+    chunks = await _build_chunks(new_title, new_content)
+
+    await db.execute(delete(NoteChunk).where(NoteChunk.note_id == note.id))
+    note.title = new_title
+    note.content = new_content
+    note.updated_at = clock.now()
+    db.add_all([
+        NoteChunk(note_id=note.id, chunk_index=i, content=text, embedding=embedding)
+        for i, (text, embedding) in enumerate(chunks)
+    ])
+    await db.commit()
+    await db.refresh(note)
+    return _serialize(note)
+
+
+def weekly_review_title(day=None) -> str:
+    year, week, _ = (day or clock.today()).isocalendar()
+    return f"{WEEKLY_REVIEW_PREFIX} {year}-W{week:02d}"
+
+
+async def save_weekly_review(db: AsyncSession, content: str) -> dict:
+    """
+    把知行生成的周复盘存成一条日记，以后在日记列表里能翻到、也能被语义检索搜到。
+    同一周再生成一次就覆盖旧的，不会堆出好几条同一周的复盘。
+    """
+    title = weekly_review_title()
+    existing = (await db.execute(
+        select(Note).where(Note.category == "journal", Note.title == title)
+    )).scalars().first()
+    if existing is None:
+        return await create_note(db, title=title, content=content, category="journal")
+
+    chunks = await _build_chunks(title, content)
+    await db.execute(delete(NoteChunk).where(NoteChunk.note_id == existing.id))
+    existing.content = content
+    existing.updated_at = clock.now()
+    db.add_all([
+        NoteChunk(note_id=existing.id, chunk_index=i, content=text, embedding=embedding)
+        for i, (text, embedding) in enumerate(chunks)
+    ])
+    await db.commit()
+    await db.refresh(existing)
+    return _serialize(existing)
 
 
 async def list_notes(db: AsyncSession, category: Optional[str] = None) -> list[dict]:

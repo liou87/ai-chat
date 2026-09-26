@@ -11,7 +11,7 @@ import LoadError from "./LoadError"
 // 跟聊天开场白共用；不带 refreshKey，不会因为聊天里用了个工具就重新生成一遍。用淡色通栏而不是带边框的卡片，
 // 跟下面的功能卡片区分开，一眼看出这是"知行说的话"而不是一个数据模块。
 // 标出生成时间，让人知道生成之后才加的任务不在里面。
-function DigestCard({ digest, onRetry }) {
+function DigestCard({ digest, onRetry, onRegenerate }) {
   const { colors, isDark } = useTheme()
   const { data, loading, error } = digest
   const generatedAt = data?.created_at
@@ -30,10 +30,15 @@ function DigestCard({ digest, onRetry }) {
       gap: 12,
     }}>
       <AssistantAvatar size={30} />
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, marginBottom: 3 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, marginBottom: 3, display: "flex", alignItems: "baseline", gap: 8 }}>
           {PERSONA_NAME}的今日简报
-          {generatedAt && <span style={{ fontWeight: 400, marginLeft: 8 }}>{generatedAt} 生成</span>}
+          {generatedAt && <span style={{ fontWeight: 400 }}>{generatedAt} 生成</span>}
+          {!loading && (
+            <button onClick={onRegenerate} style={{ marginLeft: "auto", border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 400, color: colors.textSecondary }}>
+              重新生成
+            </button>
+          )}
         </div>
         <div style={{ fontSize: 13.5, color: colors.text, lineHeight: 1.55 }}>
           {loading ? "生成中..." : error ? <LoadError message={error} onRetry={onRetry} /> : (data?.content || "今天还没有简报")}
@@ -74,7 +79,7 @@ function ModuleCard({ title, accent, extra, children }) {
 // 总览只留四块最常看的东西：今日简报、任务、阶段目标、提醒——笔记/日记/AI热点都已经在侧栏有独立页面，
 // 不用在总览里重复摆一遍。任务用得最勤，给它最大的一块；阶段目标和提醒次要，堆在右边窄列，
 // 主次分明（bento 布局），不是四个大小一样的方框摆整齐。
-function WorkbenchPanel({ refreshKey, digest, onRetryDigest }) {
+function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest }) {
   const { colors } = useTheme()
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 24, background: colors.pageBg, minHeight: 0 }}>
@@ -90,7 +95,7 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest }) {
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
 
-      <DigestCard digest={digest} onRetry={onRetryDigest} />
+      <DigestCard digest={digest} onRetry={onRetryDigest} onRegenerate={onRegenerateDigest} />
 
       <div style={{ display: "flex", gap: 16, height: 520 }}>
         <div style={{ flex: 1.6, minWidth: 0 }}>

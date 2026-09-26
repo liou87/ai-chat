@@ -31,6 +31,15 @@ async def create_reminder(request: CreateReminderRequest):
         return await reminders_service.create_reminder(db, message=request.message, remind_at=request.remind_at)
 
 
+@router.patch("/reminders/{reminder_id}/acknowledge")
+async def acknowledge_reminder(reminder_id: int):
+    async with SessionLocal() as db:
+        r = await reminders_service.acknowledge_reminder(db, reminder_id)
+        if r is None:
+            raise HTTPException(status_code=404, detail="提醒不存在")
+        return r
+
+
 @router.delete("/reminders/{reminder_id}")
 async def delete_reminder(reminder_id: int):
     async with SessionLocal() as db:

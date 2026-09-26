@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, I
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from pgvector.sqlalchemy import Vector
-from datetime import datetime
+from services.clock import now as clock_now
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://aichat:aichat@localhost:5432/aichat")
 
@@ -22,7 +22,7 @@ class ChatSession(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(100), default="新对话")          # 会话标题
-    created_at = Column(DateTime, default=datetime.now)    # 创建时间
+    created_at = Column(DateTime, default=clock_now)    # 创建时间
     def __repr__(self):
         return f"ChatSession(id={self.id}, title={self.title!r})"
 
@@ -34,7 +34,7 @@ class Message(Base):
     session_id = Column(Integer, index=True)                # 关联到哪个会话
     role = Column(String(20))                                # user 或 assistant
     content = Column(Text)                                   # 消息内容
-    created_at = Column(DateTime, default=datetime.now)      # 创建时间
+    created_at = Column(DateTime, default=clock_now)      # 创建时间
     def __repr__(self):
         return f"Message(id={self.id}, session_id={self.session_id}, role={self.role!r}, content={self.content!r})"
 
@@ -47,8 +47,8 @@ class Task(Base):
     done = Column(Boolean, default=False)                     # 是否完成
     due_at = Column(DateTime, nullable=True)                  # 截止时间（可选）
     goal_id = Column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True, index=True)  # 挂靠的目标（可选）
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=clock_now)
+    updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
     def __repr__(self):
         return f"Task(id={self.id}, title={self.title!r}, done={self.done})"
 
@@ -67,8 +67,8 @@ class Goal(Base):
     target_date = Column(DateTime, nullable=True)
     progress = Column(Integer, default=0)                       # 0-100
     status = Column(String(20), nullable=True)                  # 自由文本，比如"正常""轻度迟缓""证据不足"
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=clock_now)
+    updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
     def __repr__(self):
         return f"Goal(id={self.id}, tier={self.tier!r}, title={self.title!r}, progress={self.progress})"
 
@@ -83,7 +83,7 @@ class AgentTrace(Base):
     type = Column(String(20))                                  # tool_call / tool_result / final
     name = Column(String(100), nullable=True)                  # 工具名（final 步骤为空）
     payload = Column(Text)                                      # JSON 序列化的详情
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"AgentTrace(session_id={self.session_id}, type={self.type!r}, name={self.name!r})"
 
@@ -100,8 +100,8 @@ class Note(Base):
     external_id = Column(String(100), nullable=True, index=True)   # 来源系统里的 id（比如 Notion 页面 id）
     external_updated_at = Column(DateTime, nullable=True)       # 来源系统的最后编辑时间（UTC），用于增量同步判断
     structured_data = Column(Text, nullable=True)               # 日记复盘的引导问答+评分，JSON 文本，只有 journal 分类会用到
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=clock_now)
+    updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
     def __repr__(self):
         return f"Note(id={self.id}, title={self.title!r}, category={self.category!r})"
 
@@ -134,7 +134,8 @@ class Reminder(Base):
     message = Column(String(300))
     remind_at = Column(DateTime)
     fired = Column(Boolean, default=False)                    # 到期后由后台任务置 True，前端据此弹提示
-    created_at = Column(DateTime, default=datetime.now)
+    acknowledged = Column(Boolean, default=False, server_default=text("false"), nullable=False)  # 用户点了"知道了"，不再弹条幅，但保留历史
+    created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"Reminder(id={self.id}, message={self.message!r}, remind_at={self.remind_at})"
 
@@ -145,7 +146,7 @@ class DailyDigest(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     digest_date = Column(Date, unique=True, index=True, nullable=False)
     content = Column(Text)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"DailyDigest(digest_date={self.digest_date})"
 
@@ -157,7 +158,7 @@ class HotTopics(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     topic_date = Column(Date, unique=True, index=True, nullable=False)
     items = Column(Text)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"HotTopics(topic_date={self.topic_date})"
 

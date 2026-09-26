@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, date as date_cls
+from datetime import datetime, timedelta
 import logging
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Task, Reminder, DailyDigest
-from services import persona
+from services import persona, clock
 from services.llm import get_client, MODEL_NAME
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def _aggregate_today(db: AsyncSession) -> dict:
     """今天到期/已过期的任务，今天的提醒；还没定日期的待办只给个数，不逐条列，避免简报太长。"""
-    now = datetime.now()
+    now = clock.now()
     today_start = datetime(now.year, now.month, now.day)
     today_end = today_start + timedelta(days=1)
 
@@ -55,7 +55,7 @@ def _fallback_text(data: dict) -> str:
 
 
 async def _compose_with_llm(data: dict) -> str:
-    now = datetime.now()
+    now = clock.now()
     prompt = (
         f"{persona.IDENTITY}\n"
         f"现在是 {now.strftime('%Y-%m-%d %H:%M')}，请你用第一人称给用户写一份简短的「今日简报」，"
@@ -81,23 +81,41 @@ def _serialize(digest: DailyDigest) -> dict:
     }
 
 
+async def _compose(db: AsyncSession) -> str:
+    data = await _aggregate_today(db)
+    try:
+        return await _compose_with_llm(data)
+    except Exception:
+        logger.error("生成每日简报失败，改用模板兜底", exc_info=True)
+        return _fallback_text(data)
+
+
+async def regenerate_today_digest(db: AsyncSession) -> dict:
+    """用户手动点"重新生成"：按现在的任务/提醒重新写一份，覆盖今天那条。"""
+    today = clock.today()
+    content = await _compose(db)
+    digest = (await db.execute(select(DailyDigest).where(DailyDigest.digest_date == today))).scalars().first()
+    if digest is None:
+        digest = DailyDigest(digest_date=today)
+        db.add(digest)
+    digest.content = content
+    digest.created_at = clock.now()
+    await db.commit()
+    await db.refresh(digest)
+    return _serialize(digest)
+
+
 async def get_or_create_today_digest(db: AsyncSession) -> dict:
     """
     拿今天的简报，没有就现算一份存起来：一天只会真正生成一次，重复调用（比如用户刷新页面）
     都是直接读库。调 LLM 失败时退化成模板文案，不让整张卡片因为一次 API 失败就空着。
     """
-    today = date_cls.today()
+    today = clock.today()
     existing = (await db.execute(select(DailyDigest).where(DailyDigest.digest_date == today))).scalars().first()
     if existing:
         return _serialize(existing)
 
-    data = await _aggregate_today(db)
-    try:
-        content = await _compose_with_llm(data)
-    except Exception:
-        logger.error("生成每日简报失败，改用模板兜底", exc_info=True)
-        content = _fallback_text(data)
-
+    content = await _compose(db)
     digest = DailyDigest(digest_date=today, content=content)
     try:
         db.add(digest)

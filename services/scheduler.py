@@ -1,13 +1,15 @@
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import SessionLocal
+from services import clock
 from services import reminders as reminders_service
 from services import digest as digest_service
 from services import hot_topics as hot_topics_service
 
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler()
+# 定时任务按用户时区排（services/clock.py），不然部署在 UTC 服务器上"每天 8 点"不是用户那边的 8 点
+scheduler = AsyncIOScheduler(timezone=clock.TZ)
 
 
 async def _check_due_reminders():

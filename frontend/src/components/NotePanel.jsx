@@ -3,6 +3,8 @@ import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, radiusSm, formMaxWidth } from "../theme"
 import { isSubmitEnter } from "../keyboard"
+import { useConfirm } from "../confirm"
+import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 
 // 笔记正文默认只显示前几行，超出才出现"展开"，避免一条长笔记（比如 Notion 长页面）占满整个列表。
@@ -49,6 +51,8 @@ function NoteContent({ text, lines, fontSize }) {
   )
 }
 
+const SEARCH_TOP_K = 5
+
 const RATING_ITEMS = [
   { key: "energy", label: "精力" },
   { key: "stress", label: "压力" },
@@ -82,11 +86,13 @@ function RatingPicker({ label, value, onChange, accent, colors }) {
 }
 
 // 笔记 / 日记复盘共用的内容面板，category 由外层容器决定，accent 决定这张卡片的强调色。
-// 搜索框走语义检索并展示相似度分数，journal 分类下额外提供"生成本周复盘"入口，
-// note 分类下提供"同步 Notion"（只读导入）；Notion 来源的笔记标出来源，且不能在这里删除。
+// 搜索框走语义检索（只取最相关的几条，清空搜索框自动回到完整列表），journal 分类下额外提供"生成本周复盘"入口，
+// note 分类下提供"同步 Notion"（只读导入）；Notion 来源的笔记标出来源，不能在这里编辑或删除。
+// 本地笔记可以编辑，日记不行（正文是结构化复盘渲染出来的，直接改正文会跟评分数据对不上）。
 // mode="expanded" 用于图标栏点开的单模块全页视图：每条笔记独立卡片、字号更大。
 function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode = "compact" }) {
   const { colors, inputStyle, buttonStyle, accentButtonStyle, iconButtonStyle } = useTheme()
+  const confirm = useConfirm()
   const expanded = mode === "expanded"
   const resolvedAccent = accent ?? (category === "journal" ? moduleAccents.journal : moduleAccents.notes)
   const [notes, setNotes] = useState([])
@@ -94,6 +100,8 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [activeQuery, setActiveQuery] = useState("")  // 当前列表是哪个搜索词的结果，空串表示完整列表
+  const [editingId, setEditingId] = useState(null)
   const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
   const [showForm, setShowForm] = useState(false)
@@ -116,11 +124,17 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
     }
   }
 
-  const fetchNotes = () => load(() => apiFetch("/notes", { params: { category } }))
+  const fetchNotes = () => {
+    setActiveQuery("")
+    return load(() => apiFetch("/notes", { params: { category } }))
+  }
 
-  const runSearch = (query) => load(() => apiFetch("/notes/search", { params: { query, category } }))
+  const runSearch = (query) => {
+    setActiveQuery(query)
+    return load(() => apiFetch("/notes/search", { params: { query, category, top_k: SEARCH_TOP_K } }))
+  }
 
-  // 新建/删除：失败时在列表上方提示，成功后重新拉列表
+  // 新建/编辑/删除：失败时在列表上方提示，成功后重新拉列表（在搜索结果里操作的话，重新搜一次）
   const mutate = async (request) => {
     try {
       await request()
@@ -130,7 +144,8 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
       setActionError(e.message)
       return false
     } finally {
-      fetchNotes()
+      if (activeQuery) runSearch(activeQuery)
+      else fetchNotes()
     }
   }
 
@@ -144,6 +159,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
 
   useEffect(() => {
     setSearchQuery("")
+    setEditingId(null)
     setShowForm(false)
     setSyncStatus(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,7 +207,21 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
     }
   }
 
-  const deleteNote = (id) => mutate(() => apiFetch(`/notes/${id}`, { method: "DELETE" }))
+  const deleteNote = async (n) => {
+    const what = category === "journal" ? "日记" : "笔记"
+    if (!(await confirm({ title: `删除${what}`, message: `「${n.title}」删除后无法恢复。` }))) return
+    await mutate(() => apiFetch(`/notes/${n.id}`, { method: "DELETE" }))
+  }
+
+  const saveNote = async (id, changes) => {
+    if (await mutate(() => apiFetch(`/notes/${id}`, { method: "PATCH", body: changes }))) setEditingId(null)
+  }
+
+  // 清空搜索框就自动回到完整列表，不用再按一次"搜"
+  const onSearchChange = (value) => {
+    setSearchQuery(value)
+    if (!value.trim() && activeQuery) fetchNotes()
+  }
 
   const syncNotion = async () => {
     setSyncing(true)
@@ -222,9 +252,10 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
         <input
           value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
+          onChange={e => onSearchChange(e.target.value)}
           onKeyDown={e => isSubmitEnter(e) && refresh()}
           placeholder={category === "journal" ? "语义搜索日记..." : "语义搜索笔记..."}
+          aria-label="语义搜索"
           style={{ ...inputStyle, flex: 1 }}
         />
         <button onClick={refresh} style={buttonStyle}>搜</button>
@@ -322,7 +353,15 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
       {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
       {loading && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {!loading && error && <LoadError message={error} onRetry={refresh} />}
-      {!loading && !error && notes.length === 0 && <div style={{ color: colors.textMuted }}>暂无内容</div>}
+      {activeQuery && !loading && !error && (
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8, display: "flex", gap: 8 }}>
+          <span>与「{activeQuery}」最相关的 {notes.length} 条</span>
+          <button onClick={() => { setSearchQuery(""); fetchNotes() }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.primary }}>
+            清除搜索
+          </button>
+        </div>
+      )}
+      {!loading && !error && notes.length === 0 && <div style={{ color: colors.textMuted }}>{activeQuery ? "没有搜到相关内容" : "暂无内容"}</div>}
 
       {notes.map(n => (
         <div
@@ -351,18 +390,62 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
                 </span>
               )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {n.score !== undefined && (
-                <span style={{ fontSize: 11, color: resolvedAccent }}>{n.score.toFixed(2)}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              <span style={{ fontSize: 11.5, color: colors.textMuted }}>{noteDateText(n)}</span>
+              {n.source !== "notion" && n.category === "note" && editingId !== n.id && (
+                <button onClick={() => setEditingId(n.id)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.textSecondary }} aria-label={`编辑：${n.title}`}>
+                  编辑
+                </button>
               )}
               {n.source !== "notion" && (
-                <button onClick={() => deleteNote(n.id)} style={iconButtonStyle} title="删除" aria-label={`删除：${n.title}`}>×</button>
+                <button onClick={() => deleteNote(n)} style={iconButtonStyle} title="删除" aria-label={`删除：${n.title}`}>×</button>
               )}
             </div>
           </div>
-          <NoteContent text={n.content} lines={expanded ? 4 : 3} fontSize={expanded ? 13 : 12} />
+          {editingId === n.id ? (
+            <NoteEditor note={n} accent={resolvedAccent} onSave={changes => saveNote(n.id, changes)} onCancel={() => setEditingId(null)} />
+          ) : (
+            <NoteContent text={n.content} lines={expanded ? 4 : 3} fontSize={expanded ? 13 : 12} />
+          )}
         </div>
       ))}
+    </div>
+  )
+}
+
+// 列表里的日期：显示创建日期，编辑过的再补一个"编辑于"（同一天编辑的显示时刻，不重复写日期）
+function noteDateText(n) {
+  const created = formatShort(n.created_at, { withTime: false })
+  if (n.updated_at && n.created_at && new Date(n.updated_at) - new Date(n.created_at) > 60000) {
+    const editedDay = formatShort(n.updated_at, { withTime: false })
+    const edited = editedDay === created ? formatShort(n.updated_at).split(" ")[1] : editedDay
+    return `${created} · 编辑于 ${edited}`
+  }
+  return created
+}
+
+function NoteEditor({ note, accent, onSave, onCancel }) {
+  const { inputStyle, buttonStyle, accentButtonStyle } = useTheme()
+  const [title, setTitle] = useState(note.title)
+  const [content, setContent] = useState(note.content)
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!title.trim() || !content.trim()) return
+    setSaving(true)
+    await onSave({ title: title.trim(), content })
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+      <input value={title} onChange={e => setTitle(e.target.value)} aria-label="标题" style={inputStyle} autoFocus />
+      <textarea value={content} onChange={e => setContent(e.target.value)} aria-label="正文" rows={8} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+        <button onClick={onCancel} style={buttonStyle}>取消</button>
+        {/* 保存要重新算向量，会慢一点，给个状态 */}
+        <button onClick={save} disabled={saving} style={{ ...accentButtonStyle(accent), opacity: saving ? 0.6 : 1 }}>{saving ? "保存中..." : "保存"}</button>
+      </div>
     </div>
   )
 }

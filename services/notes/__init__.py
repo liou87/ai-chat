@@ -5,7 +5,11 @@
 # 这种写法调用 notes_service.search_notes(...)，不用因为这次拆包改调用点。
 from .notes import (
     NoteReadOnlyError,
+    NoteNotEditableError,
+    WEEKLY_REVIEW_PREFIX,
     create_note,
+    update_note,
+    save_weekly_review,
     create_journal_entry,
     list_notes,
     get_note_by_external_id,
@@ -17,7 +21,11 @@ from .notes import (
 
 __all__ = [
     "NoteReadOnlyError",
+    "NoteNotEditableError",
+    "WEEKLY_REVIEW_PREFIX",
     "create_note",
+    "update_note",
+    "save_weekly_review",
     "create_journal_entry",
     "list_notes",
     "get_note_by_external_id",

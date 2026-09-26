@@ -16,6 +16,15 @@ class CreateNoteRequest(BaseModel):
     structured_data: Optional[dict] = None   # 日记复盘的引导问答+评分，只有 category="journal" 会用到
 
 
+class UpdateNoteRequest(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+
+class WeeklyReviewRequest(BaseModel):
+    content: str
+
+
 @router.get("/notes")
 async def get_notes(category: Optional[str] = None):
     async with SessionLocal() as db:
@@ -45,6 +54,28 @@ async def sync_notion():
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
         return result
+
+
+@router.post("/notes/weekly-review")
+async def save_weekly_review(request: WeeklyReviewRequest):
+    if not request.content.strip():
+        raise HTTPException(status_code=400, detail="复盘内容为空")
+    async with SessionLocal() as db:
+        return await notes_service.save_weekly_review(db, request.content)
+
+
+@router.patch("/notes/{note_id}")
+async def update_note(note_id: int, request: UpdateNoteRequest):
+    async with SessionLocal() as db:
+        try:
+            note = await notes_service.update_note(db, note_id, title=request.title, content=request.content)
+        except notes_service.NoteReadOnlyError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except notes_service.NoteNotEditableError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if note is None:
+            raise HTTPException(status_code=404, detail="笔记不存在")
+        return note
 
 
 @router.delete("/notes/{note_id}")

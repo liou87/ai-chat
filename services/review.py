@@ -1,7 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import Task, Note
+from services.notes.notes import WEEKLY_REVIEW_PREFIX
+from services import clock
 
 REVIEW_WINDOW_DAYS = 7
 
@@ -12,7 +14,7 @@ async def get_weekly_review(db: AsyncSession) -> dict:
     这里只做数据聚合，不调用 LLM 生成总结——总结交给外层 agent 的自然语言回复，
     工具本身保持确定性、可测试。
     """
-    since = datetime.now() - timedelta(days=REVIEW_WINDOW_DAYS)
+    since = clock.now() - timedelta(days=REVIEW_WINDOW_DAYS)
 
     completed = await db.execute(
         select(Task).where(Task.done == True, Task.updated_at >= since)  # noqa: E712
@@ -23,7 +25,9 @@ async def get_weekly_review(db: AsyncSession) -> dict:
         .order_by(Task.created_at)
     )
     journal_entries = await db.execute(
-        select(Note).where(Note.category == "journal", Note.created_at >= since)
+        # 之前存下来的周复盘本身也是日记，不算进"这周写了什么日记"，免得复盘套复盘
+        select(Note).where(Note.category == "journal", Note.created_at >= since,
+                           Note.title.not_like(f"{WEEKLY_REVIEW_PREFIX}%"))
         .order_by(Note.created_at)
     )
     new_notes = await db.execute(
@@ -33,7 +37,7 @@ async def get_weekly_review(db: AsyncSession) -> dict:
 
     return {
         "period_from": since.strftime("%Y-%m-%d"),
-        "period_to": datetime.now().strftime("%Y-%m-%d"),
+        "period_to": clock.now().strftime("%Y-%m-%d"),
         "completed_tasks": [t.title for t in completed.scalars().all()],
         "pending_tasks": [t.title for t in pending.scalars().all()],
         "journal_entries": [

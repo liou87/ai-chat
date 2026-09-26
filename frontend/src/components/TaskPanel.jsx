@@ -1,30 +1,45 @@
 import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
+import { useConfirm } from "../confirm"
 import { moduleAccents, formMaxWidth } from "../theme"
 import { ModuleIcon } from "../icons"
 import { isSubmitEnter } from "../keyboard"
+import { toInputValue, formatShort } from "../datetime"
 import LoadError from "./LoadError"
+
+const TIER_LABEL = { phase: "阶段", month: "月", week: "周" }
+
+// 未完成按截止时间排，没截止时间的排后面
+const byDue = (a, b) => {
+  if (!a.due_at) return 1
+  if (!b.due_at) return -1
+  return new Date(a.due_at) - new Date(b.due_at)
+}
 
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
 // 保证"聊天里说的"和"面板上看到的"始终一致。
-// mode="compact" 用在总览网格的卡片里；mode="expanded" 用在图标栏点开的单模块全页视图，按完成状态分组、行更宽松。
+// 点任务行在下方展开编辑区（标题 / 截止时间 / 挂靠目标），同一时间只展开一条。
+// mode="compact" 用在总览卡片里，已完成的默认折叠；mode="expanded" 用在单模块全页视图，行更宽松。
 function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" }) {
-  const { colors, inputStyle, accentButtonStyle, iconButtonStyle } = useTheme()
+  const { colors, inputStyle, accentButtonStyle } = useTheme()
+  const confirm = useConfirm()
   const [tasks, setTasks] = useState([])
-  const [goalTitles, setGoalTitles] = useState({})  // goal_id -> title，只用来在任务行下面标一下挂靠的目标
+  const [goals, setGoals] = useState([])
   const [newTitle, setNewTitle] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)          // 列表加载失败
-  const [actionError, setActionError] = useState(null)  // 新建/完成/删除失败
+  const [actionError, setActionError] = useState(null)  // 新建/修改/删除失败
+  const [editingId, setEditingId] = useState(null)
+  const [showDone, setShowDone] = useState(mode === "expanded")
 
   const fetchTasks = async () => {
     setLoading(true)
     try {
-      const [taskList, goals] = await Promise.all([apiFetch("/tasks"), apiFetch("/goals")])
+      const [taskList, goalList] = await Promise.all([apiFetch("/tasks"), apiFetch("/goals")])
       setTasks(taskList)
-      setGoalTitles(Object.fromEntries(goals.map(g => [g.id, g.title])))
+      setGoals(goalList)
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -33,20 +48,23 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     }
   }
 
+  useEffect(() => {
+    fetchTasks()
+  }, [refreshKey])
+
   // 增删改统一走这里：失败时在列表上方提示，成功后重新拉列表
   const mutate = async (request) => {
     try {
       await request()
       setActionError(null)
+      return true
     } catch (e) {
       setActionError(e.message)
+      return false
+    } finally {
+      fetchTasks()
     }
-    fetchTasks()
   }
-
-  useEffect(() => {
-    fetchTasks()
-  }, [refreshKey])
 
   const addTask = async () => {
     if (!newTitle.trim()) return
@@ -55,17 +73,38 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     await mutate(() => apiFetch("/tasks", { method: "POST", body: { title } }))
   }
 
-  const completeTask = (id) => mutate(() => apiFetch(`/tasks/${id}/complete`, { method: "PATCH" }))
+  const toggleDone = (t) => mutate(() => apiFetch(`/tasks/${t.id}`, { method: "PATCH", body: { done: !t.done } }))
 
-  const deleteTask = (id) => mutate(() => apiFetch(`/tasks/${id}`, { method: "DELETE" }))
+  const saveTask = async (id, changes) => {
+    if (await mutate(() => apiFetch(`/tasks/${id}`, { method: "PATCH", body: changes }))) setEditingId(null)
+  }
 
-  const pending = tasks.filter(t => !t.done).sort((a, b) => {
-    if (!a.due_at) return 1
-    if (!b.due_at) return -1
-    return new Date(a.due_at) - new Date(b.due_at)
-  })
+  const deleteTask = async (t) => {
+    if (!(await confirm({ title: "删除任务", message: `「${t.title}」删除后无法恢复。` }))) return
+    if (editingId === t.id) setEditingId(null)
+    await mutate(() => apiFetch(`/tasks/${t.id}`, { method: "DELETE" }))
+  }
+
+  const pending = tasks.filter(t => !t.done).sort(byDue)
   const done = tasks.filter(t => t.done)
   const expanded = mode === "expanded"
+  const goalTitles = Object.fromEntries(goals.map(g => [g.id, g.title]))
+
+  const renderRow = (t) => (
+    <TaskRow
+      key={t.id}
+      t={t}
+      accent={accent}
+      goals={goals}
+      goalTitle={goalTitles[t.goal_id]}
+      expanded={expanded}
+      editing={editingId === t.id}
+      onToggleEdit={() => setEditingId(id => id === t.id ? null : t.id)}
+      onToggleDone={() => toggleDone(t)}
+      onSave={changes => saveTask(t.id, changes)}
+      onDelete={() => deleteTask(t)}
+    />
+  )
 
   return (
     <div>
@@ -82,90 +121,134 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
       </div>
 
       {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
-      {!loading && tasks.length > 0 && !expanded && (
-        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
-          {pending.length} 条未完成 / 共 {tasks.length} 条
-        </div>
-      )}
       {loading && tasks.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {error && <LoadError message={error} onRetry={fetchTasks} />}
       {!loading && !error && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
 
-      {expanded ? (
+      {pending.length > 0 && (
         <>
-          {pending.length > 0 && (
-            <>
-              <SectionLabel colors={colors}>未完成 · {pending.length}</SectionLabel>
-              {pending.map(t => (
-                <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} goalTitles={goalTitles} expanded onComplete={completeTask} onDelete={deleteTask} />
-              ))}
-            </>
-          )}
-          {done.length > 0 && (
-            <>
-              <SectionLabel colors={colors}>已完成 · {done.length}</SectionLabel>
-              {done.map(t => (
-                <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} goalTitles={goalTitles} expanded onComplete={completeTask} onDelete={deleteTask} />
-              ))}
-            </>
-          )}
+          <SectionLabel colors={colors} first>未完成 · {pending.length}</SectionLabel>
+          {pending.map(renderRow)}
         </>
-      ) : (
-        tasks.map(t => (
-          <TaskRow key={t.id} t={t} accent={accent} colors={colors} iconButtonStyle={iconButtonStyle} goalTitles={goalTitles} onComplete={completeTask} onDelete={deleteTask} />
-        ))
+      )}
+      {done.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowDone(s => !s)}
+            aria-expanded={showDone}
+            style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: "16px 0 8px", fontFamily: "inherit" }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: showDone ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+            已完成 · {done.length}
+          </button>
+          {showDone && done.map(renderRow)}
+        </>
       )}
     </div>
   )
 }
 
-function SectionLabel({ children, colors }) {
-  return <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: "16px 0 8px" }}>{children}</div>
+function SectionLabel({ children, colors, first }) {
+  return <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: first ? "4px 0 8px" : "16px 0 8px" }}>{children}</div>
 }
 
-function TaskRow({ t, accent, colors, iconButtonStyle, goalTitles, expanded, onComplete, onDelete }) {
+function TaskRow({ t, accent, goals, goalTitle, expanded, editing, onToggleEdit, onToggleDone, onSave, onDelete }) {
+  const { colors, iconButtonStyle } = useTheme()
   const border = `1px solid ${colors.borderLight}`
+  const overdue = !t.done && t.due_at && new Date(t.due_at) < new Date()
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
         padding: expanded ? "12px 14px" : "8px 0",
         marginBottom: expanded ? 8 : 0,
         borderRadius: expanded ? 10 : 0,
         border: expanded ? border : "none",
-        borderBottom: expanded ? border : border,
+        borderBottom: border,
       }}
     >
-      <input
-        type="checkbox"
-        checked={t.done}
-        onChange={() => !t.done && onComplete(t.id)}
-        disabled={t.done}
-        style={{ accentColor: accent }}
-        aria-label={`完成：${t.title}`}
-      />
-      <span style={{
-        flex: 1,
-        textDecoration: t.done ? "line-through" : "none",
-        color: t.done ? colors.textMuted : colors.text,
-        fontSize: expanded ? 15 : 14,
-      }}>
-        {t.title}
-        {t.goal_id && goalTitles[t.goal_id] && (
-          <div style={{ fontSize: 11, color: moduleAccents.goals, display: "flex", alignItems: "center", gap: 4 }}>
-            <ModuleIcon name="goals" color="currentColor" size={11} />
-            {goalTitles[t.goal_id]}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={t.done}
+          onChange={onToggleDone}
+          style={{ accentColor: accent, cursor: "pointer" }}
+          aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
+        />
+        <button
+          onClick={onToggleEdit}
+          aria-expanded={editing}
+          title="点击编辑"
+          style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+        >
+          <div style={{
+            textDecoration: t.done ? "line-through" : "none",
+            color: t.done ? colors.textMuted : colors.text,
+            fontSize: expanded ? 15 : 14,
+          }}>
+            {t.title}
           </div>
+          {goalTitle && (
+            <div style={{ fontSize: 11, color: moduleAccents.goals, display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+              <ModuleIcon name="goals" color="currentColor" size={11} />
+              {goalTitle}
+            </div>
+          )}
+          {t.due_at && (
+            <div style={{ fontSize: 11, color: overdue ? colors.danger : colors.textMuted, marginTop: 2 }}>
+              截止：{formatShort(t.due_at)}{overdue && "（已过期）"}
+            </div>
+          )}
+        </button>
+        <button onClick={onDelete} style={iconButtonStyle} title="删除" aria-label={`删除：${t.title}`}>×</button>
+      </div>
+      {editing && <TaskEditor t={t} goals={goals} accent={accent} onSave={onSave} onCancel={onToggleEdit} />}
+    </div>
+  )
+}
+
+// 任务的编辑区：标题、截止时间（可清空）、挂靠目标（可不挂）
+function TaskEditor({ t, goals, accent, onSave, onCancel }) {
+  const { colors, inputStyle, buttonStyle, accentButtonStyle } = useTheme()
+  const [title, setTitle] = useState(t.title)
+  const [dueAt, setDueAt] = useState(toInputValue(t.due_at))
+  const [goalId, setGoalId] = useState(t.goal_id ?? "")
+
+  const save = () => {
+    if (!title.trim()) return
+    onSave({
+      title: title.trim(),
+      due_at: dueAt || null,
+      goal_id: goalId === "" ? null : Number(goalId),
+    })
+  }
+
+  const labelStyle = { fontSize: 12, color: colors.textMuted, width: 36, flexShrink: 0 }
+  return (
+    <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: colors.surface, border: `1px solid ${colors.borderLight}`, display: "flex", flexDirection: "column", gap: 8, maxWidth: formMaxWidth }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={labelStyle}>标题</span>
+        <input value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => isSubmitEnter(e) && save()} style={{ ...inputStyle, flex: 1, minWidth: 0 }} autoFocus />
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={labelStyle}>截止</span>
+        <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+        {dueAt && (
+          <button onClick={() => setDueAt("")} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 12, color: colors.textMuted, padding: 0 }}>清除</button>
         )}
-        {t.due_at && (
-          <div style={{ fontSize: 11, color: colors.textMuted }}>
-            截止：{new Date(t.due_at).toLocaleString()}
-          </div>
-        )}
-      </span>
-      <button onClick={() => onDelete(t.id)} style={iconButtonStyle} title="删除" aria-label={`删除：${t.title}`}>×</button>
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={labelStyle}>目标</span>
+        <select value={goalId} onChange={e => setGoalId(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
+          <option value="">不挂靠目标</option>
+          {goals.map(g => <option key={g.id} value={g.id}>{TIER_LABEL[g.tier]}目标：{g.title}</option>)}
+        </select>
+      </label>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 2 }}>
+        <button onClick={onCancel} style={buttonStyle}>取消</button>
+        <button onClick={save} style={accentButtonStyle(accent)}>保存</button>
+      </div>
     </div>
   )
 }

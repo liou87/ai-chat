@@ -23,6 +23,11 @@ class UpdateGoalProgressRequest(BaseModel):
     status: Optional[str] = None
 
 
+class UpdateGoalRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
 @router.get("/goals")
 async def get_goals(tier: Optional[str] = None):
     async with SessionLocal() as db:
@@ -45,6 +50,15 @@ async def create_goal(request: CreateGoalRequest):
 async def update_goal_progress(goal_id: int, request: UpdateGoalProgressRequest):
     async with SessionLocal() as db:
         goal = await goals_service.update_goal_progress(db, goal_id, request.progress, request.status)
+        if goal is None:
+            raise HTTPException(status_code=404, detail="目标不存在")
+        return goal
+
+
+@router.patch("/goals/{goal_id}")
+async def update_goal(goal_id: int, request: UpdateGoalRequest):
+    async with SessionLocal() as db:
+        goal = await goals_service.update_goal(db, goal_id, title=request.title, description=request.description)
         if goal is None:
             raise HTTPException(status_code=404, detail="目标不存在")
         return goal

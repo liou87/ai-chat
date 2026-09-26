@@ -10,3 +10,9 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 async def get_today_digest():
     async with SessionLocal() as db:
         return await digest_service.get_or_create_today_digest(db)
+
+
+@router.post("/digest/today/regenerate")
+async def regenerate_today_digest():
+    async with SessionLocal() as db:
+        return await digest_service.regenerate_today_digest(db)

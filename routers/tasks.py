@@ -15,6 +15,13 @@ class CreateTaskRequest(BaseModel):
     goal_id: Optional[int] = None
 
 
+class UpdateTaskRequest(BaseModel):
+    title: Optional[str] = None
+    done: Optional[bool] = None
+    due_at: Optional[datetime] = None
+    goal_id: Optional[int] = None
+
+
 @router.get("/tasks")
 async def get_tasks(status: str = "all"):
     async with SessionLocal() as db:
@@ -31,6 +38,19 @@ async def create_task(request: CreateTaskRequest):
 async def complete_task(task_id: int):
     async with SessionLocal() as db:
         task = await tasks_service.complete_task(db, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        return task
+
+
+@router.patch("/tasks/{task_id}")
+async def update_task(task_id: int, request: UpdateTaskRequest):
+    # 只处理请求里真正出现的字段：{"due_at": null} 是清空截止时间，不传 due_at 是不动它
+    changes = {k: getattr(request, k) for k in request.model_fields_set}
+    if "done" in changes and changes["done"] is None:
+        del changes["done"]
+    async with SessionLocal() as db:
+        task = await tasks_service.update_task(db, task_id, changes)
         if task is None:
             raise HTTPException(status_code=404, detail="任务不存在")
         return task

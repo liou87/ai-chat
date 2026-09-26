@@ -1,12 +1,13 @@
 import json
 import logging
-from datetime import datetime, timedelta, date as date_cls
+from datetime import timedelta
 import httpx
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import HotTopics
 from services import websearch as websearch_service
+from services import clock
 from services.llm import get_client, MODEL_NAME
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ async def _fetch_github_repos() -> list:
     单个 topic 查询失败（比如撞到限流）只跳过这个 topic，不影响其它的；
     多个 topic 之间可能查到同一个仓库，按 id 去重，按星数从高到低排。
     """
-    since = (datetime.now() - timedelta(days=GITHUB_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    since = (clock.now() - timedelta(days=GITHUB_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     seen = {}
     async with httpx.AsyncClient(timeout=15) as client:
         for topic in GITHUB_TOPICS:
@@ -87,16 +88,20 @@ async def _compose_with_llm(repos: list, news: list) -> list:
     return data.get("items", [])
 
 
-async def get_or_create_today_topics(db: AsyncSession) -> dict:
-    """
-    拿今天的热点列表，没有就现查一份存起来：GitHub 搜索 + Tavily 新闻各自失败都不影响另一边，
-    两边都没查到东西就返回空列表；DeepSeek 筛选失败时退化成不筛选的原始拼接。
-    """
-    today = date_cls.today()
-    existing = (await db.execute(select(HotTopics).where(HotTopics.topic_date == today))).scalars().first()
-    if existing:
-        return {"topic_date": today.isoformat(), "items": json.loads(existing.items)}
+def _serialize(row: HotTopics) -> dict:
+    return {
+        "topic_date": row.topic_date.isoformat(),
+        "items": json.loads(row.items) if row.items else [],
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
 
+
+async def _get_row(db: AsyncSession, day) -> HotTopics | None:
+    return (await db.execute(select(HotTopics).where(HotTopics.topic_date == day))).scalars().first()
+
+
+async def _collect_items() -> list:
+    """GitHub 搜索 + Tavily 新闻各自失败都不影响另一边，两边都没查到东西就返回空列表；DeepSeek 筛选失败时退化成不筛选的原始拼接。"""
     repos = await _fetch_github_repos()
     news = await _fetch_ai_news()
 
@@ -108,14 +113,51 @@ async def get_or_create_today_topics(db: AsyncSession) -> dict:
             logger.error("筛选 AI 热点失败，改用不筛选的兜底列表", exc_info=True)
         if not items:
             items = _fallback_items(repos, news)
+    return items
 
+
+async def get_or_create_today_topics(db: AsyncSession) -> dict:
+    """拿今天的热点列表，没有就现查一份存起来。"""
+    today = clock.today()
+    existing = await _get_row(db, today)
+    if existing:
+        return _serialize(existing)
+
+    items = await _collect_items()
+    row = HotTopics(topic_date=today, items=json.dumps(items, ensure_ascii=False))
     try:
-        db.add(HotTopics(topic_date=today, items=json.dumps(items, ensure_ascii=False)))
+        db.add(row)
         await db.commit()
     except IntegrityError:
         # 极小概率的竞态：调度任务和用户开页面几乎同时触发，读已经存在的那条就行
         await db.rollback()
-        existing = (await db.execute(select(HotTopics).where(HotTopics.topic_date == today))).scalars().first()
-        return {"topic_date": today.isoformat(), "items": json.loads(existing.items)}
+        return _serialize(await _get_row(db, today))
+    await db.refresh(row)
+    return _serialize(row)
 
-    return {"topic_date": today.isoformat(), "items": items}
+
+async def regenerate_today_topics(db: AsyncSession) -> dict:
+    """用户手动点"重新收集"：重新查一遍，覆盖今天那条。会消耗 Tavily 和 DeepSeek 额度。"""
+    today = clock.today()
+    items = await _collect_items()
+    row = await _get_row(db, today)
+    if row is None:
+        row = HotTopics(topic_date=today)
+        db.add(row)
+    row.items = json.dumps(items, ensure_ascii=False)
+    row.created_at = clock.now()
+    await db.commit()
+    await db.refresh(row)
+    return _serialize(row)
+
+
+async def get_topics_by_date(db: AsyncSession, day) -> dict | None:
+    """查看历史某一天的热点，只读库，不会现查（过去的热点补查也没意义）。"""
+    row = await _get_row(db, day)
+    return _serialize(row) if row else None
+
+
+async def list_topic_dates(db: AsyncSession, limit: int = 30) -> list[str]:
+    """有热点记录的日期，新的在前，给前端做日期切换用。"""
+    result = await db.execute(select(HotTopics.topic_date).order_by(HotTopics.topic_date.desc()).limit(limit))
+    return [d.isoformat() for d in result.scalars().all()]

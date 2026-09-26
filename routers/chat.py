@@ -1,6 +1,6 @@
+import asyncio
 import json
 import uuid
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
@@ -9,7 +9,8 @@ from sqlalchemy import select, func
 from fastapi.responses import StreamingResponse
 from services.auth import verify_api_key
 from services.agent import run_agent, run_agent_stream
-from services import persona
+from services import persona, clock
+from services.session_title import generate_title
 from database import SessionLocal, ChatSession, Message
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
 def _build_system_prompt() -> str:
-    now = datetime.now()
+    now = clock.now()
     return (
         f"{persona.IDENTITY}"
         f"当前时间是 {now.strftime('%Y-%m-%d %H:%M:%S')}（{'周' + '一二三四五六日'[now.weekday()]}）。"
@@ -116,6 +117,9 @@ async def chat_stream(request: ChatRequest):
         text_started = False
         tool_used = False
         reply = ""
+        # 新会话：用第一句话并行生成一个标题，回复结束时再取结果，不额外拖慢回复
+        is_new_session = request.session_id is None
+        title_task = asyncio.create_task(generate_title(request.messages[0].content)) if is_new_session else None
 
         async with SessionLocal() as db:
             try:
@@ -154,6 +158,15 @@ async def chat_stream(request: ChatRequest):
                 db.add(Message(session_id=session_id, role="assistant", content=reply))
                 await db.commit()
                 logger.info(f"流式回复完成，session_id: {session_id}")
+
+                if title_task is not None:
+                    title = await title_task
+                    title_task = None
+                    if title:
+                        session = await db.get(ChatSession, session_id)
+                        session.title = title
+                        await db.commit()
+                        yield _sse({"type": "data-title", "data": {"sessionId": session_id, "title": title}})
             except Exception:
                 logger.error("流式请求失败", exc_info=True)
                 if not text_started:
@@ -162,6 +175,8 @@ async def chat_stream(request: ChatRequest):
                             "delta": "\n[出错了，AI 服务暂时不可用，请稍后再试]"})
                 yield _sse({"type": "text-end", "id": message_id})
 
+            if title_task is not None:
+                title_task.cancel()  # 出错提前结束的话，标题任务就不要了
             yield _sse({"type": "data-meta", "data": {"toolUsed": tool_used}})
             yield _sse({"type": "finish"})
             yield "data: [DONE]\n\n"

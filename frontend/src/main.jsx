@@ -4,12 +4,15 @@ import './index.css'
 import App from './App.jsx'
 import { ThemeProvider } from './ThemeContext.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { ConfirmProvider } from './components/ConfirmDialog.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       <ThemeProvider>
-        <App />
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
       </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
