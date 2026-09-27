@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, disabledStyle } from "../theme"
+import { disabledStyle } from "../theme"
 import { ModuleIcon } from "../icons"
 import { formatShort } from "../datetime"
 import { notificationPermission, requestNotificationPermission, REMINDERS_CHANGED_EVENT } from "../notify"
@@ -12,11 +12,10 @@ const byTime = (a, b) => new Date(a.remind_at) - new Date(b.remind_at)
 
 // 提醒管理面板：待触发 / 到期未读 / 已读三组，手动新建、删除，已读的可以一键清理。
 // 到期后的顶部条幅和系统通知由 ReminderBanner 负责，这里是"管理"视图。
-// mode="compact" 用在总览卡片里，只看待触发和到期未读；mode="expanded" 是单模块全页视图，多一个已读分组。
-function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "compact" }) {
-  const { colors, inputStyle, accentButtonStyle, darkButtonStyle } = useTheme()
+// 总览页的"今日安排"卡片是 WorkbenchPanel 自己画的，这里只有单模块全页视图。
+function ReminderPanel({ refreshKey }) {
+  const { colors, inputStyle, darkButtonStyle } = useTheme()
   const confirm = useConfirm()
-  const expanded = mode === "expanded"
   const [reminders, setReminders] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -90,45 +89,45 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
     await mutate(() => Promise.all(done.map(r => apiFetch(`/reminders/${r.id}`, { method: "DELETE" }))))
   }
 
-  const visibleCount = upcoming.length + dueUnread.length + (expanded ? done.length : 0)
+  const visibleCount = upcoming.length + dueUnread.length + done.length
 
   return (
     <div>
-      <div style={{ display: "flex", flexDirection: expanded ? "row" : "column", gap: 6, marginBottom: expanded ? 12 : 12, }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
         <input
           value={message}
           onChange={e => setMessage(e.target.value)}
           placeholder="提醒内容"
           aria-label="提醒内容"
-          style={{ ...inputStyle, flex: expanded ? 2 : undefined }}
+          style={{ ...inputStyle, flex: "2 1 200px" }}
         />
         <input
           type="datetime-local"
           value={remindAt}
           onChange={e => setRemindAt(e.target.value)}
           aria-label="提醒时间"
-          style={{ ...inputStyle, flex: expanded ? 1 : undefined }}
+          style={{ ...inputStyle, flex: "1 1 180px" }}
         />
         <button
           onClick={addReminder}
           disabled={!canAdd}
           title={addHint}
-          style={{ ...(expanded ? darkButtonStyle : accentButtonStyle(accent)), whiteSpace: "nowrap", ...(!canAdd ? disabledStyle : {}) }}
+          style={{ ...darkButtonStyle, whiteSpace: "nowrap", ...(!canAdd ? disabledStyle : {}) }}
         >
           {adding ? "添加中..." : "+ 新建提醒"}
         </button>
       </div>
 
-      {expanded && permission === "default" && (
+      {permission === "default" && (
         <div style={{ fontSize: 12.5, color: colors.textSecondary, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
           <span>页面在后台时也想收到提醒？</span>
           <button onClick={enableNotifications} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12.5, color: colors.primary }}>开启系统通知</button>
         </div>
       )}
-      {expanded && permission === "denied" && (
+      {permission === "denied" && (
         <div style={{ fontSize: 12.5, color: colors.textMuted, marginBottom: 16 }}>系统通知已被浏览器禁止，可以在地址栏左侧的网站设置里重新打开。</div>
       )}
-      {expanded && permission !== "default" && permission !== "denied" && <div style={{ height: 8 }} />}
+      {permission !== "default" && permission !== "denied" && <div style={{ height: 8 }} />}
 
       {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
       {loading && reminders.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
@@ -138,24 +137,24 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
       {dueUnread.length > 0 && (
         <>
           <GroupLabel colors={colors} first>到期未读 · {dueUnread.length}</GroupLabel>
-          {dueUnread.map(r => <ReminderRow key={r.id} r={r} expanded={expanded} onAcknowledge={acknowledge} onDelete={deleteReminder} />)}
+          {dueUnread.map(r => <ReminderRow key={r.id} r={r} onAcknowledge={acknowledge} onDelete={deleteReminder} />)}
         </>
       )}
 
       {upcoming.length > 0 && (
         <>
           <GroupLabel colors={colors} first={dueUnread.length === 0}>待触发 · {upcoming.length}</GroupLabel>
-          {upcoming.map(r => <ReminderRow key={r.id} r={r} expanded={expanded} onDelete={deleteReminder} />)}
+          {upcoming.map(r => <ReminderRow key={r.id} r={r} onDelete={deleteReminder} />)}
         </>
       )}
 
-      {expanded && done.length > 0 && (
+      {done.length > 0 && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <GroupLabel colors={colors} first={dueUnread.length === 0 && upcoming.length === 0}>已读 · {done.length}</GroupLabel>
             <button onClick={clearDone} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.textMuted, marginTop: dueUnread.length === 0 && upcoming.length === 0 ? 0 : 10 }}>清空</button>
           </div>
-          {done.map(r => <ReminderRow key={r.id} r={r} expanded={expanded} onDelete={deleteReminder} />)}
+          {done.map(r => <ReminderRow key={r.id} r={r} onDelete={deleteReminder} />)}
         </>
       )}
     </div>
@@ -166,7 +165,7 @@ function GroupLabel({ children, colors, first }) {
   return <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: first ? "0 0 6px" : "16px 0 6px" }}>{children}</div>
 }
 
-function ReminderRow({ r, expanded, onAcknowledge, onDelete }) {
+function ReminderRow({ r, onAcknowledge, onDelete }) {
   const { colors, iconButtonStyle } = useTheme()
   const unread = r.fired && !r.acknowledged
   const read = r.fired && r.acknowledged
@@ -176,17 +175,16 @@ function ReminderRow({ r, expanded, onAcknowledge, onDelete }) {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        padding: expanded ? "12px 14px" : "8px 0",
-        marginBottom: expanded ? 8 : 0,
-        borderRadius: expanded ? 10 : 0,
-        border: expanded ? `1px solid ${colors.cardBorder}` : "none",
-        background: expanded ? colors.cardBg : "transparent",
-        borderBottom: `1px solid ${colors.borderLight}`,
+        padding: "12px 14px",
+        marginBottom: 8,
+        borderRadius: 10,
+        border: `1px solid ${colors.cardBorder}`,
+        background: colors.cardBg,
         opacity: read ? 0.65 : 1,
       }}
     >
       <ModuleIcon name={r.fired ? "reminders" : "clock"} color={unread ? colors.warningText : colors.textMuted} size={16} />
-      <span style={{ flex: 1, fontSize: expanded ? 15 : 14, color: colors.text }}>
+      <span style={{ flex: 1, fontSize: 15, color: colors.text }}>
         {r.message}
         <div style={{ fontSize: 11, color: colors.textMuted }}>{formatShort(r.remind_at)}</div>
       </span>

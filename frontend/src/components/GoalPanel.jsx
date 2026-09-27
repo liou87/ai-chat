@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, disabledStyle } from "../theme"
+import { disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import LoadError from "./LoadError"
 import { PageHeader, Badge, ProgressBar, Modal, Field } from "./ui"
@@ -21,23 +21,13 @@ function statusTone(status) {
   return "neutral"
 }
 
-// 紧凑视图（总览卡片）用的进度条，跟着模块强调色走
-function AccentBar({ percent, accent, colors }) {
-  return (
-    <div style={{ height: 6, borderRadius: 3, background: colors.borderLight, overflow: "hidden" }}>
-      <div style={{ width: `${percent}%`, height: "100%", background: accent, borderRadius: 3 }} />
-    </div>
-  )
-}
-
 // 目标面板：三层结构（阶段/月/周），月目标、周目标的上级都是可选的。
-// mode="compact" 用在总览卡片里，只列顶层目标的进度；
-// mode="expanded" 是单模块全页视图（参考图风格）：顶层目标排成卡片网格，子目标收在父卡片底部，
-// 新增和编辑都走弹窗，编辑弹窗里可以改标题、里程碑、状态、进度，以及删除（会连带子目标，先确认）。
-function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" }) {
+// 单模块全页视图（参考图风格）：顶层目标排成卡片网格，子目标收在父卡片底部，
+// 新增和编辑都走弹窗，编辑弹窗里可以改标题、里程碑、状态、截止日期、进度，以及删除（会连带子目标，先确认）。
+// 总览页的"目标与下一里程碑"卡片是 WorkbenchPanel 自己画的。
+function GoalPanel({ refreshKey }) {
   const { colors, darkButtonStyle } = useTheme()
   const confirm = useConfirm()
-  const expanded = mode === "expanded"
   const [goals, setGoals] = useState([])
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(false)
@@ -48,8 +38,8 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
   const fetchGoals = async () => {
     setLoading(true)
     try {
-      // 全页视图要显示每个目标挂了多少任务，总览卡片用不到就不多拉一次
-      const [goalList, taskList] = await Promise.all([apiFetch("/goals"), expanded ? apiFetch("/tasks") : []])
+      // 任务用来显示每个目标挂了多少任务
+      const [goalList, taskList] = await Promise.all([apiFetch("/goals"), apiFetch("/tasks")])
       setGoals(goalList)
       setTasks(taskList)
       setError(null)
@@ -62,7 +52,6 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
 
   useEffect(() => {
     fetchGoals()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
 
   const mutate = async (request) => {
@@ -108,30 +97,6 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
     if (linked > 0) lines.push(`挂在它下面的 ${linked} 个任务会保留，只是不再挂靠这个目标。`)
     if (!(await confirm({ title: `删除${TIER_LABEL[goal.tier]}`, message: lines.join("\n") }))) return
     if (await mutate(() => apiFetch(`/goals/${goal.id}`, { method: "DELETE" }))) setEditing(null)
-  }
-
-  if (!expanded) {
-    // 紧凑视图：只看顶层目标的标题和进度条，不是阶段目标的标一下层级
-    return (
-      <div>
-        {loading && roots.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
-        {error && <LoadError message={error} onRetry={fetchGoals} />}
-        {!loading && !error && roots.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
-        {roots.map(g => (
-          <div key={g.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span style={{ color: colors.text }}>
-                {g.tier !== "phase" && <span style={{ fontSize: 11, color: colors.textMuted, marginRight: 6 }}>{TIER_LABEL[g.tier]}</span>}
-                {g.title}
-              </span>
-              <span style={{ color: accent, fontWeight: 600 }}>{g.progress}%</span>
-            </div>
-            <AccentBar percent={g.progress} accent={accent} colors={colors} />
-            {g.description && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 3 }}>{g.description}</div>}
-          </div>
-        ))}
-      </div>
-    )
   }
 
   return (

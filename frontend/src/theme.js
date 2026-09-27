@@ -1,7 +1,8 @@
 // 浅色模式整体偏暖的中性色调（参考 Heptabase 的暖白画布），不用刺眼的纯白/纯黑，
 // pageBg 和 surface 也拉开一点层次，避免"整个界面全是同一种白"的单调感
 export const lightColors = {
-  primary: "#0084ff",
+  // 品牌色：墨绿，跟进度条、今日建议横幅同一套（侧栏图标、头像、你的消息气泡、发送按钮都用它）
+  primary: "#2f5d50",
   primaryText: "#ffffff",
   border: "#e6e0d6",
   borderLight: "#efe9dd",
@@ -18,7 +19,7 @@ export const lightColors = {
   railBg: "#181a23",
   assistantBubble: "#eee7da",
   inputRowBg: "#f5f1ea",
-  selectedBg: "#e8f0fe",
+  selectedBg: "#e4eee9",
   // 单模块页面的配色（参考图风格）：白卡片、近黑主按钮、墨绿进度条和标签，模块色只留在侧栏
   cardBg: "#ffffff",
   cardBorder: "#e8e4dc",
@@ -35,7 +36,8 @@ export const lightColors = {
 }
 
 export const darkColors = {
-  primary: "#0084ff",
+  // 深色模式下的墨绿提亮一档，气泡里的白字还能看清（ink 那个更亮的值是给深底上的文字/进度条用的）
+  primary: "#3d7563",
   primaryText: "#ffffff",
   border: "#33353f",
   borderLight: "#2a2c35",
@@ -52,7 +54,7 @@ export const darkColors = {
   railBg: "#181a23",
   assistantBubble: "#262730",
   inputRowBg: "#23242c",
-  selectedBg: "#1f3a5c",
+  selectedBg: "#1f3a33",
   cardBg: "#1c1d24",
   cardBorder: "#2c2e37",
   ink: "#7fb5a3",
@@ -79,11 +81,6 @@ export const moduleAccents = {
 
 // 图标栏本身固定深色（不跟随明暗主题切换），未激活图标用这个中性灰
 export const railIconColor = "#9a9db0"
-
-// 搜索框、新建输入框、表单这类"控制类"元素的最大宽度：总览卡片本来就窄，用不上；
-// 展开的单模块全页视图容器很宽，这些单行控件不加限制会被拉成很长的条，加了这个才不难看。
-// 列表里的任务行/笔记卡片这类内容多的元素不用这个，让它们正常占满宽度。
-export const formMaxWidth = 480
 
 // 条件不满足（比如必填项没填）时按钮的样式：置灰、鼠标显示禁止，配合 disabled 属性用，
 // 让人一眼看出"现在点不了"，而不是点了没反应以为按钮坏了

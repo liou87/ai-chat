@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, formMaxWidth, disabledStyle } from "../theme"
+import { disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import { toInputValue, formatShort } from "../datetime"
 import LoadError from "./LoadError"
@@ -13,16 +13,13 @@ const TIER_LABEL = { phase: "阶段", month: "月", week: "周" }
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
 // 保证"聊天里说的"和"面板上看到的"始终一致。
-// mode="expanded" 是单模块全页视图（参考图风格）：标题区 + 统计格 + 白卡片列表，新增和编辑都走弹窗；
-// mode="compact" 用在总览卡片里：保留一行快速添加，列表紧凑，已完成默认折叠，点任务同样弹窗编辑。
-function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" }) {
-  const { colors, inputStyle, accentButtonStyle, darkButtonStyle, panelCardStyle } = useTheme()
+// 单模块全页视图（参考图风格）：标题区 + 统计格 + 白卡片列表，新增和编辑都走弹窗。
+// 总览页的"关键任务"卡片是 WorkbenchPanel 自己画的，只复用这里导出的 TaskFormModal。
+function TaskPanel({ refreshKey }) {
+  const { colors, darkButtonStyle, panelCardStyle } = useTheme()
   const confirm = useConfirm()
-  const expanded = mode === "expanded"
   const [tasks, setTasks] = useState([])
   const [goals, setGoals] = useState([])
-  const [newTitle, setNewTitle] = useState("")
-  const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)          // 列表加载失败
   const [actionError, setActionError] = useState(null)  // 新建/修改/删除失败
@@ -61,19 +58,6 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     }
   }
 
-  const canQuickAdd = newTitle.trim() !== "" && !adding
-
-  // 总览卡片里的快速添加：只填标题，其余用默认值。失败时把输入还回去
-  const quickAdd = async () => {
-    if (!canQuickAdd) return
-    const title = newTitle.trim()
-    setNewTitle("")
-    setAdding(true)
-    const ok = await mutate(() => apiFetch("/tasks", { method: "POST", body: { title } }))
-    setAdding(false)
-    if (!ok) setNewTitle(title)
-  }
-
   // 打勾先改界面再发请求（请求加刷新要一两秒，不先改看起来像没反应）；失败时 mutate 重新拉列表会恢复原状
   const toggleDone = (t) => {
     setTasks(list => list.map(x => x.id === t.id ? { ...x, done: !t.done, updated_at: new Date().toISOString() } : x))
@@ -102,9 +86,7 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     <TaskRow
       key={t.id}
       t={t}
-      accent={accent}
       goalTitle={goalTitles[t.goal_id]}
-      expanded={expanded}
       last={last}
       onOpen={() => setEditing(t)}
       onToggleDone={() => toggleDone(t)}
@@ -142,40 +124,6 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     </button>
   )
 
-  if (!expanded) {
-    return (
-      <div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12, maxWidth: formMaxWidth }}>
-          <input
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            onKeyDown={e => isSubmitEnter(e) && quickAdd()}
-            placeholder="新任务..."
-            aria-label="新任务"
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <button
-            onClick={quickAdd}
-            disabled={!canQuickAdd}
-            title={adding ? "添加中..." : !newTitle.trim() ? "先输入任务内容" : "添加任务"}
-            aria-label="添加任务"
-            style={{ ...accentButtonStyle(accent), ...(!canQuickAdd ? disabledStyle : {}) }}
-          >
-            {adding ? "…" : "+"}
-          </button>
-        </div>
-        {status}
-        {!loading && !error && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
-        {pending.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: "4px 0 4px" }}>未完成 · {pending.length}</div>}
-        {pending.map((t, i) => renderRow(t, i === pending.length - 1))}
-        {doneToggle && <div style={{ margin: "14px 0 4px" }}>{doneToggle}</div>}
-        {showDone && done.map((t, i) => renderRow(t, i === done.length - 1))}
-        {modal}
-      </div>
-    )
-  }
-
-  // ---- 全页视图 ----
   const high = tasks.filter(t => t.priority === "high")
   const plannedMinutes = pending.reduce((sum, t) => sum + (t.estimate_minutes || 0), 0)
   const overdueCount = pending.filter(isOverdue).length
@@ -228,7 +176,7 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
   )
 }
 
-function TaskRow({ t, accent, goalTitle, expanded, last, onOpen, onToggleDone }) {
+function TaskRow({ t, goalTitle, last, onOpen, onToggleDone }) {
   const { colors } = useTheme()
   const overdue = isOverdue(t)
   // 附加信息：所属目标 · 预计时长 · 截止时间，有什么显示什么
@@ -239,12 +187,12 @@ function TaskRow({ t, accent, goalTitle, expanded, last, onOpen, onToggleDone })
   ].filter(Boolean)
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: expanded ? 14 : 8, padding: expanded ? "14px 0" : "8px 0", borderBottom: last ? "none" : `1px solid ${colors.borderLight}` }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: last ? "none" : `1px solid ${colors.borderLight}` }}>
       <input
         type="checkbox"
         checked={t.done}
         onChange={onToggleDone}
-        style={{ accentColor: expanded ? colors.ink : accent, cursor: "pointer", width: expanded ? 18 : undefined, height: expanded ? 18 : undefined, flexShrink: 0 }}
+        style={{ accentColor: colors.ink, cursor: "pointer", width: 18, height: 18, flexShrink: 0 }}
         aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
       />
       <button
@@ -253,8 +201,8 @@ function TaskRow({ t, accent, goalTitle, expanded, last, onOpen, onToggleDone })
         style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
       >
         <div style={{
-          fontSize: expanded ? 15 : 14,
-          fontWeight: expanded ? 600 : 400,
+          fontSize: 15,
+          fontWeight: 600,
           color: t.done ? colors.textMuted : colors.text,
           textDecoration: t.done ? "line-through" : "none",
         }}>
@@ -266,7 +214,7 @@ function TaskRow({ t, accent, goalTitle, expanded, last, onOpen, onToggleDone })
           </div>
         )}
       </button>
-      {expanded && !t.done && <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{PRIORITY_LABEL[t.priority] ?? "中"}</Badge>}
+      {!t.done && <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{PRIORITY_LABEL[t.priority] ?? "中"}</Badge>}
     </div>
   )
 }

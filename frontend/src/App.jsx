@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
+import { remarkPlugins } from "./markdown"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { API, authHeaders, apiFetch } from "./api"
@@ -409,19 +410,19 @@ function App() {
       case "goals":
         return (
           <ModulePage>
-            <GoalPanel refreshKey={workbenchRefreshKey} accent={ink} mode="expanded" />
+            <GoalPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
       case "tasks":
         return (
           <ModulePage>
-            <TaskPanel refreshKey={workbenchRefreshKey} accent={ink} mode="expanded" />
+            <TaskPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
       case "notes":
         return (
           <ModulePage eyebrow="知识库 · 支持语义搜索" title="笔记" width={860}>
-            <NotePanel refreshKey={workbenchRefreshKey} category="note" accent={ink} mode="expanded" />
+            <NotePanel refreshKey={workbenchRefreshKey} category="note" accent={ink} />
           </ModulePage>
         )
       case "journal":
@@ -431,7 +432,6 @@ function App() {
               refreshKey={workbenchRefreshKey}
               category="journal"
               accent={ink}
-              mode="expanded"
               onRequestWeeklyReview={onRequestWeeklyReview}
             />
           </ModulePage>
@@ -439,7 +439,7 @@ function App() {
       case "reminders":
         return (
           <ModulePage eyebrow="到期后顶部弹出，并发系统通知" title="提醒" width={860}>
-            <ReminderPanel refreshKey={workbenchRefreshKey} accent={ink} mode="expanded" />
+            <ReminderPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
       case "hotTopics":
@@ -655,7 +655,7 @@ function App() {
                             whiteSpace: msg.role === "user" ? "pre-wrap" : undefined,
                           }}>
                             {msg.role === "assistant"
-                              ? <ReactMarkdown>{part.text}</ReactMarkdown>
+                              ? <div className="md md-chat"><ReactMarkdown remarkPlugins={remarkPlugins}>{part.text}</ReactMarkdown></div>
                               : part.text
                             }
                           </span>

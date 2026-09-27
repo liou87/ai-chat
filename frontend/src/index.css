@@ -32,3 +32,26 @@ code {
 .zx-avatar-dot {
   animation: zx-thinking-dot 1.1s ease-in-out infinite;
 }
+
+/* 笔记正文的 Markdown：紧凑版排版，标题只比正文略大，段落和列表间距收小，
+   跟卡片里的小字号协调；颜色继承外层，深浅色模式自动跟着走 */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 0.6em; }
+.md h1, .md h2, .md h3, .md h4 { font-size: 1.08em; font-weight: 700; margin: 0.9em 0 0.35em; line-height: 1.4; }
+.md h1 { font-size: 1.15em; }
+.md ul, .md ol { margin: 0.2em 0 0.6em; padding-left: 1.4em; }
+.md li { margin: 0.15em 0; }
+.md blockquote { margin: 0.4em 0; padding-left: 0.8em; border-left: 3px solid currentColor; opacity: 0.8; }
+.md hr { border: none; border-top: 1px solid currentColor; opacity: 0.2; margin: 0.8em 0; }
+.md a { color: inherit; text-decoration: underline; }
+.md pre { overflow-x: auto; }
+.md strong { font-weight: 700; }
+.md table { border-collapse: collapse; margin: 0.4em 0 0.8em; font-size: 0.95em; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid rgba(128, 128, 128, 0.3); padding: 4px 10px; text-align: left; }
+.md th { font-weight: 600; background: rgba(128, 128, 128, 0.08); }
+.md del { opacity: 0.6; }
+.md input[type="checkbox"] { margin: 0 6px 0 0; vertical-align: middle; }
+.md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }
+/* 聊天气泡里的段落间距再收一点，气泡本身有内边距 */
+.md-chat p { margin: 0 0 0.45em; }

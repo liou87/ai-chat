@@ -1,19 +1,33 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
+import ReactMarkdown from "react-markdown"
+import { remarkPlugins } from "../markdown"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
-import { moduleAccents, radiusSm, formMaxWidth, disabledStyle } from "../theme"
+import { moduleAccents, radiusSm, disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import { useConfirm } from "../confirm"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 
-// 笔记正文默认只显示前几行，超出才出现"展开"，避免一条长笔记（比如 Notion 长页面）占满整个列表。
-// 是否溢出靠实际测量（scrollHeight 大于 clientHeight），不靠字数估算，聊天面板收起、窗口变宽时会重新测。
+// 渲染前把单个换行变成 Markdown 的硬换行（行尾两个空格）：手写笔记和 Notion 导入的内容里有很多
+// "一行一句"的单换行，不处理的话 Markdown 会把它们合并成一段。代码块里的内容原样保留。
+function preserveLineBreaks(text) {
+  return (text || "")
+    .split(/(```[\s\S]*?```)/g)
+    .map(part => part.startsWith("```") ? part : part.replace(/([^\n])\n(?!\n)/g, "$1  \n"))
+    .join("")
+}
+
+// 笔记正文按 Markdown 渲染（周复盘、Notion 笔记里都有标题、加粗、列表），
+// 默认只显示前几行的高度，超出才出现"展开"，底部加一层渐隐，避免一条长笔记占满整个列表。
+// 是否溢出靠实际测量（scrollHeight 大于 clientHeight），窗口变宽变窄时会重新测。
 function NoteContent({ text, lines, fontSize }) {
   const { colors } = useTheme()
   const ref = useRef(null)
   const [open, setOpen] = useState(false)
   const [overflows, setOverflows] = useState(false)
+  const lineHeight = 1.6
+  const collapsedHeight = `${lines * lineHeight}em`
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -27,17 +41,19 @@ function NoteContent({ text, lines, fontSize }) {
     return () => observer.disconnect()
   }, [text, lines, open])
 
-  const clamp = open ? {} : {
-    display: "-webkit-box",
-    WebkitLineClamp: lines,
-    WebkitBoxOrient: "vertical",
-    overflow: "hidden",
-  }
-
   return (
-    <div style={{ marginTop: 4 }}>
-      <div ref={ref} style={{ fontSize, color: colors.textSecondary, whiteSpace: "pre-wrap", ...clamp }}>
-        {text}
+    <div style={{ marginTop: 6 }}>
+      <div style={{ position: "relative" }}>
+        <div
+          ref={ref}
+          className="md"
+          style={{ fontSize, lineHeight, color: colors.textSecondary, maxHeight: open ? undefined : collapsedHeight, overflow: "hidden" }}
+        >
+          <ReactMarkdown remarkPlugins={remarkPlugins}>{preserveLineBreaks(text)}</ReactMarkdown>
+        </div>
+        {!open && overflows && (
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "1.8em", background: `linear-gradient(to bottom, transparent, ${colors.cardBg})`, pointerEvents: "none" }} />
+        )}
       </div>
       {overflows && (
         <button
@@ -89,14 +105,12 @@ function RatingPicker({ label, value, onChange, accent, colors }) {
 // 搜索框走语义检索（只取最相关的几条，清空搜索框自动回到完整列表），journal 分类下额外提供"生成本周复盘"入口，
 // note 分类下提供"同步 Notion"（只读导入）；Notion 来源的笔记标出来源，不能在这里编辑或删除。
 // 本地笔记可以编辑，日记不行（正文是结构化复盘渲染出来的，直接改正文会跟评分数据对不上）。
-// mode="expanded" 用于图标栏点开的单模块全页视图：每条笔记独立卡片、字号更大。
-function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode = "compact" }) {
-  const { colors, inputStyle, buttonStyle, accentButtonStyle, iconButtonStyle, darkButtonStyle } = useTheme()
+// 只用在单模块全页视图里：每条笔记一张白卡片，主要按钮用近黑实心（参考图风格）。
+function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
+  const { colors, inputStyle, buttonStyle, iconButtonStyle, darkButtonStyle } = useTheme()
   const confirm = useConfirm()
-  const expanded = mode === "expanded"
   const resolvedAccent = accent ?? (category === "journal" ? moduleAccents.journal : moduleAccents.notes)
-  // 主要按钮：全页视图用近黑实心（参考图风格），总览卡片里保持模块色描边
-  const primaryBtn = expanded ? darkButtonStyle : accentButtonStyle(resolvedAccent)
+  const primaryBtn = darkButtonStyle
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -259,16 +273,9 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
 
   return (
     <div>
-      {/* 总览卡片里表单限宽；全页视图里内容栏本身已经限宽，表单跟列表等宽 */}
-      <div style={{ maxWidth: expanded ? undefined : formMaxWidth }}>
-      {!expanded && category === "journal" && (
-        <button onClick={onRequestWeeklyReview} style={{ ...primaryBtn, width: "100%", marginBottom: 12 }}>
-          生成本周复盘
-        </button>
-      )}
-
-      {/* 全页视图：搜索和操作按钮排成一行，按钮按内容宽度，主按钮近黑；总览卡片里空间窄，搜索单独一行 */}
-      <div style={{ display: "flex", gap: 6, marginBottom: expanded ? 16 : 8, flexWrap: "wrap" }}>
+      <div>
+      {/* 搜索和操作按钮排成一行，按钮按内容宽度，主按钮近黑 */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         <input
           value={searchQuery}
           onChange={e => onSearchChange(e.target.value)}
@@ -278,49 +285,27 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
           style={{ ...inputStyle, flex: 1, minWidth: 180 }}
         />
         <button onClick={refresh} style={buttonStyle}>搜</button>
-        {expanded && category === "journal" && (
+        {category === "journal" && (
           <button onClick={onRequestWeeklyReview} style={buttonStyle}>生成本周复盘</button>
         )}
-        {expanded && category === "note" && (
+        {category === "note" && (
           <button onClick={syncNotion} disabled={syncing} style={{ ...buttonStyle, cursor: syncing ? "wait" : "pointer", opacity: syncing ? 0.6 : 1 }}>
             {syncing ? "同步中..." : "同步 Notion"}
           </button>
         )}
-        {expanded && !showForm && (
+        {!showForm && (
           <button onClick={() => setShowForm(true)} style={darkButtonStyle}>
             + {category === "journal" ? "写今天的日记" : "新建笔记"}
           </button>
         )}
       </div>
-      {expanded && syncStatus && (
+      {syncStatus && (
         <div style={{ fontSize: 12, margin: "-8px 0 12px", color: syncStatus.isError ? colors.danger : colors.textMuted }}>
           {syncStatus.text}
         </div>
       )}
 
-      {!showForm ? (expanded ? null : (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => setShowForm(true)} style={{ ...primaryBtn, flex: 1 }}>
-              + {category === "journal" ? "写今天的日记" : "新建笔记"}
-            </button>
-            {category === "note" && (
-              <button
-                onClick={syncNotion}
-                disabled={syncing}
-                style={{ ...buttonStyle, cursor: syncing ? "wait" : "pointer", opacity: syncing ? 0.6 : 1 }}
-              >
-                {syncing ? "同步中..." : "同步 Notion"}
-              </button>
-            )}
-          </div>
-          {syncStatus && (
-            <div style={{ fontSize: 12, marginTop: 6, color: syncStatus.isError ? colors.danger : colors.textMuted }}>
-              {syncStatus.text}
-            </div>
-          )}
-        </div>
-      )) : category === "journal" ? (
+      {!showForm ? null : category === "journal" ? (
         <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           <input
             value={review.done}
@@ -408,17 +393,16 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
         <div
           key={n.id}
           style={{
-            padding: expanded ? "16px 20px" : "8px 0",
-            background: expanded ? colors.cardBg : "transparent",
-            marginBottom: expanded ? 10 : 0,
-            borderRadius: expanded ? 10 : 0,
-            border: expanded ? `1px solid ${colors.cardBorder}` : "none",
-            borderBottom: `1px solid ${colors.borderLight}`,
+            padding: "16px 20px",
+            background: colors.cardBg,
+            marginBottom: 10,
+            borderRadius: 10,
+            border: `1px solid ${colors.cardBorder}`,
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <strong style={{ fontSize: expanded ? 15.5 : 14, color: colors.text }}>{n.title}</strong>
+              <strong style={{ fontSize: 15.5, color: colors.text }}>{n.title}</strong>
               {n.source === "notion" && (
                 <span style={{
                   fontSize: 10.5,
@@ -447,7 +431,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
           {editingId === n.id ? (
             <NoteEditor note={n} onSave={changes => saveNote(n.id, changes)} onCancel={() => setEditingId(null)} />
           ) : (
-            <NoteContent text={n.content} lines={expanded ? 4 : 3} fontSize={expanded ? 13 : 12} />
+            <NoteContent text={n.content} lines={4} fontSize={13} />
           )}
         </div>
       ))}
