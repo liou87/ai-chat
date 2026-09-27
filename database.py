@@ -53,6 +53,8 @@ class Task(Base):
     done = Column(Boolean, default=False)                     # 是否完成
     due_at = Column(DateTime, nullable=True)                  # 截止时间（可选）
     goal_id = Column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True, index=True)  # 挂靠的目标（可选）
+    priority = Column(String(10), default="medium", server_default=text("'medium'"), nullable=False)  # high / medium / low
+    estimate_minutes = Column(Integer, nullable=True)         # 预计花多少分钟（可选），任务页统计"计划时长"用
     created_at = Column(DateTime, default=clock_now)
     updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
     def __repr__(self):

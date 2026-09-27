@@ -400,33 +400,37 @@ function App() {
   const lastMessage = messages[messages.length - 1]
   const showThinking = loading && !(lastMessage?.role === "assistant" && lastMessage.parts.some(p => (p.type === "text" && p.text) || p.type.startsWith("tool-")))
 
+  // 单模块页面统一用参考图风格：居中限宽的内容栏、白卡片、墨绿强调色（模块色只留在侧栏）。
+  // 任务和目标页标题区右侧的"新增"按钮要打开组件内部的弹窗，所以由组件自己渲染标题区；
+  // 其它几页标题区由 ModulePage 统一画。笔记、日记、提醒、热点偏阅读，内容栏窄一点
   const renderMain = () => {
+    const ink = colors.ink
     switch (activeView) {
       case "goals":
         return (
-          <ModulePage iconName="goals" title="目标" accent={moduleAccents.goals}>
-            <GoalPanel refreshKey={workbenchRefreshKey} accent={moduleAccents.goals} mode="expanded" />
+          <ModulePage>
+            <GoalPanel refreshKey={workbenchRefreshKey} accent={ink} mode="expanded" />
           </ModulePage>
         )
       case "tasks":
         return (
-          <ModulePage iconName="tasks" title="任务" accent={moduleAccents.tasks}>
-            <TaskPanel refreshKey={workbenchRefreshKey} accent={moduleAccents.tasks} mode="expanded" />
+          <ModulePage>
+            <TaskPanel refreshKey={workbenchRefreshKey} accent={ink} mode="expanded" />
           </ModulePage>
         )
       case "notes":
         return (
-          <ModulePage iconName="notes" title="笔记" accent={moduleAccents.notes}>
-            <NotePanel refreshKey={workbenchRefreshKey} category="note" accent={moduleAccents.notes} mode="expanded" />
+          <ModulePage eyebrow="知识库 · 支持语义搜索" title="笔记" width={860}>
+            <NotePanel refreshKey={workbenchRefreshKey} category="note" accent={ink} mode="expanded" />
           </ModulePage>
         )
       case "journal":
         return (
-          <ModulePage iconName="journal" title="日记" accent={moduleAccents.journal}>
+          <ModulePage eyebrow="每日复盘 · 周复盘" title="日记" width={860}>
             <NotePanel
               refreshKey={workbenchRefreshKey}
               category="journal"
-              accent={moduleAccents.journal}
+              accent={ink}
               mode="expanded"
               onRequestWeeklyReview={onRequestWeeklyReview}
             />
@@ -434,13 +438,13 @@ function App() {
         )
       case "reminders":
         return (
-          <ModulePage iconName="reminders" title="提醒" accent={moduleAccents.reminders}>
-            <ReminderPanel refreshKey={workbenchRefreshKey} accent={moduleAccents.reminders} mode="expanded" />
+          <ModulePage eyebrow="到期后顶部弹出，并发系统通知" title="提醒" width={860}>
+            <ReminderPanel refreshKey={workbenchRefreshKey} accent={ink} mode="expanded" />
           </ModulePage>
         )
       case "hotTopics":
         return (
-          <ModulePage iconName="hotTopics" title="热点" subtitle="AI/agent 领域，每天自动收集一次" accent={moduleAccents.hotTopics}>
+          <ModulePage eyebrow="AI / agent 领域，每天自动收集一次" title="今日热点" width={860}>
             <HotTopicsPanel />
           </ModulePage>
         )

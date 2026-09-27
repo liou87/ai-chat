@@ -91,10 +91,12 @@ function RatingPicker({ label, value, onChange, accent, colors }) {
 // 本地笔记可以编辑，日记不行（正文是结构化复盘渲染出来的，直接改正文会跟评分数据对不上）。
 // mode="expanded" 用于图标栏点开的单模块全页视图：每条笔记独立卡片、字号更大。
 function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode = "compact" }) {
-  const { colors, inputStyle, buttonStyle, accentButtonStyle, iconButtonStyle } = useTheme()
+  const { colors, inputStyle, buttonStyle, accentButtonStyle, iconButtonStyle, darkButtonStyle } = useTheme()
   const confirm = useConfirm()
   const expanded = mode === "expanded"
   const resolvedAccent = accent ?? (category === "journal" ? moduleAccents.journal : moduleAccents.notes)
+  // 主要按钮：全页视图用近黑实心（参考图风格），总览卡片里保持模块色描边
+  const primaryBtn = expanded ? darkButtonStyle : accentButtonStyle(resolvedAccent)
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -257,29 +259,49 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
 
   return (
     <div>
-      <div style={{ maxWidth: formMaxWidth }}>
-      {category === "journal" && (
-        <button onClick={onRequestWeeklyReview} style={{ ...accentButtonStyle(resolvedAccent), width: "100%", marginBottom: 12 }}>
+      {/* 总览卡片里表单限宽；全页视图里内容栏本身已经限宽，表单跟列表等宽 */}
+      <div style={{ maxWidth: expanded ? undefined : formMaxWidth }}>
+      {!expanded && category === "journal" && (
+        <button onClick={onRequestWeeklyReview} style={{ ...primaryBtn, width: "100%", marginBottom: 12 }}>
           生成本周复盘
         </button>
       )}
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+      {/* 全页视图：搜索和操作按钮排成一行，按钮按内容宽度，主按钮近黑；总览卡片里空间窄，搜索单独一行 */}
+      <div style={{ display: "flex", gap: 6, marginBottom: expanded ? 16 : 8, flexWrap: "wrap" }}>
         <input
           value={searchQuery}
           onChange={e => onSearchChange(e.target.value)}
           onKeyDown={e => isSubmitEnter(e) && refresh()}
           placeholder={category === "journal" ? "语义搜索日记..." : "语义搜索笔记..."}
           aria-label="语义搜索"
-          style={{ ...inputStyle, flex: 1 }}
+          style={{ ...inputStyle, flex: 1, minWidth: 180 }}
         />
         <button onClick={refresh} style={buttonStyle}>搜</button>
+        {expanded && category === "journal" && (
+          <button onClick={onRequestWeeklyReview} style={buttonStyle}>生成本周复盘</button>
+        )}
+        {expanded && category === "note" && (
+          <button onClick={syncNotion} disabled={syncing} style={{ ...buttonStyle, cursor: syncing ? "wait" : "pointer", opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? "同步中..." : "同步 Notion"}
+          </button>
+        )}
+        {expanded && !showForm && (
+          <button onClick={() => setShowForm(true)} style={darkButtonStyle}>
+            + {category === "journal" ? "写今天的日记" : "新建笔记"}
+          </button>
+        )}
       </div>
+      {expanded && syncStatus && (
+        <div style={{ fontSize: 12, margin: "-8px 0 12px", color: syncStatus.isError ? colors.danger : colors.textMuted }}>
+          {syncStatus.text}
+        </div>
+      )}
 
-      {!showForm ? (
+      {!showForm ? (expanded ? null : (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => setShowForm(true)} style={{ ...accentButtonStyle(resolvedAccent), flex: 1 }}>
+            <button onClick={() => setShowForm(true)} style={{ ...primaryBtn, flex: 1 }}>
               + {category === "journal" ? "写今天的日记" : "新建笔记"}
             </button>
             {category === "note" && (
@@ -298,7 +320,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             </div>
           )}
         </div>
-      ) : category === "journal" ? (
+      )) : category === "journal" ? (
         <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           <input
             value={review.done}
@@ -338,7 +360,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             style={{ ...inputStyle, resize: "vertical" }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={addNote} disabled={!canSave} title={!journalFilled ? saveHint : undefined} style={{ ...accentButtonStyle(resolvedAccent), flex: 1, ...(!canSave ? disabledStyle : {}) }}>
+            <button onClick={addNote} disabled={!canSave} title={!journalFilled ? saveHint : undefined} style={{ ...primaryBtn, flex: 1, ...(!canSave ? disabledStyle : {}) }}>
               {saving ? "保存中..." : "保存"}
             </button>
             <button onClick={() => { setShowForm(false); setReview(emptyReview); setNewContent("") }} style={buttonStyle}>取消</button>
@@ -360,7 +382,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             style={{ ...inputStyle, resize: "vertical" }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={addNote} disabled={!canSave} title={!noteFilled ? saveHint : undefined} style={{ ...accentButtonStyle(resolvedAccent), flex: 1, ...(!canSave ? disabledStyle : {}) }}>
+            <button onClick={addNote} disabled={!canSave} title={!noteFilled ? saveHint : undefined} style={{ ...primaryBtn, flex: 1, ...(!canSave ? disabledStyle : {}) }}>
               {saving ? "保存中..." : "保存"}
             </button>
             <button onClick={() => setShowForm(false)} style={buttonStyle}>取消</button>
@@ -386,10 +408,11 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
         <div
           key={n.id}
           style={{
-            padding: expanded ? "14px 16px" : "8px 0",
+            padding: expanded ? "16px 20px" : "8px 0",
+            background: expanded ? colors.cardBg : "transparent",
             marginBottom: expanded ? 10 : 0,
             borderRadius: expanded ? 10 : 0,
-            border: expanded ? `1px solid ${colors.borderLight}` : "none",
+            border: expanded ? `1px solid ${colors.cardBorder}` : "none",
             borderBottom: `1px solid ${colors.borderLight}`,
           }}
         >
@@ -422,7 +445,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             </div>
           </div>
           {editingId === n.id ? (
-            <NoteEditor note={n} accent={resolvedAccent} onSave={changes => saveNote(n.id, changes)} onCancel={() => setEditingId(null)} />
+            <NoteEditor note={n} onSave={changes => saveNote(n.id, changes)} onCancel={() => setEditingId(null)} />
           ) : (
             <NoteContent text={n.content} lines={expanded ? 4 : 3} fontSize={expanded ? 13 : 12} />
           )}
@@ -443,8 +466,8 @@ function noteDateText(n) {
   return created
 }
 
-function NoteEditor({ note, accent, onSave, onCancel }) {
-  const { inputStyle, buttonStyle, accentButtonStyle } = useTheme()
+function NoteEditor({ note, onSave, onCancel }) {
+  const { inputStyle, buttonStyle, darkButtonStyle } = useTheme()
   const [title, setTitle] = useState(note.title)
   const [content, setContent] = useState(note.content)
   const [saving, setSaving] = useState(false)
@@ -467,7 +490,7 @@ function NoteEditor({ note, accent, onSave, onCancel }) {
           onClick={save}
           disabled={saving || !title.trim() || !content.trim()}
           title={!title.trim() || !content.trim() ? "标题和正文都不能为空" : undefined}
-          style={{ ...accentButtonStyle(accent), ...(saving || !title.trim() || !content.trim() ? disabledStyle : {}) }}
+          style={{ ...darkButtonStyle, ...(saving || !title.trim() || !content.trim() ? disabledStyle : {}) }}
         >
           {saving ? "保存中..." : "保存"}
         </button>

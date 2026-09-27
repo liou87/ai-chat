@@ -3,28 +3,49 @@ import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
 import { moduleAccents, formMaxWidth, disabledStyle } from "../theme"
-import { ModuleIcon } from "../icons"
 import { isSubmitEnter } from "../keyboard"
 import { toInputValue, formatShort } from "../datetime"
 import LoadError from "./LoadError"
+import { PageHeader, Badge, Modal, Field, Segmented } from "./ui"
 
 const TIER_LABEL = { phase: "阶段", month: "月", week: "周" }
+const PRIORITY_OPTIONS = [
+  { value: "high", label: "高" },
+  { value: "medium", label: "中" },
+  { value: "low", label: "低" },
+]
+const PRIORITY_LABEL = { high: "高", medium: "中", low: "低" }
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 }
+const PRIORITY_TONE = { high: "danger", medium: "neutral", low: "neutral" }
 
-// 未完成按截止时间排，没截止时间的排后面
-const byDue = (a, b) => {
+// 未完成的排序：先按优先级（高→低），同优先级按截止时间，没截止时间的排后面
+const byPriorityThenDue = (a, b) => {
+  const p = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
+  if (p !== 0) return p
   if (!a.due_at) return 1
   if (!b.due_at) return -1
   return new Date(a.due_at) - new Date(b.due_at)
 }
 
+// 分钟数 -> "5h 20m" / "45m"
+function formatMinutes(total) {
+  if (!total) return "—"
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`
+}
+
+const isOverdue = (t) => !t.done && t.due_at && new Date(t.due_at) < new Date()
+
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
 // 保证"聊天里说的"和"面板上看到的"始终一致。
-// 点任务行在下方展开编辑区（标题 / 截止时间 / 挂靠目标），同一时间只展开一条。
-// mode="compact" 用在总览卡片里，已完成的默认折叠；mode="expanded" 用在单模块全页视图，行更宽松。
+// mode="expanded" 是单模块全页视图（参考图风格）：标题区 + 统计格 + 白卡片列表，新增和编辑都走弹窗；
+// mode="compact" 用在总览卡片里：保留一行快速添加，列表紧凑，已完成默认折叠，点任务同样弹窗编辑。
 function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" }) {
-  const { colors, inputStyle, accentButtonStyle } = useTheme()
+  const { colors, inputStyle, accentButtonStyle, darkButtonStyle, panelCardStyle } = useTheme()
   const confirm = useConfirm()
+  const expanded = mode === "expanded"
   const [tasks, setTasks] = useState([])
   const [goals, setGoals] = useState([])
   const [newTitle, setNewTitle] = useState("")
@@ -32,8 +53,8 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)          // 列表加载失败
   const [actionError, setActionError] = useState(null)  // 新建/修改/删除失败
-  const [editingId, setEditingId] = useState(null)
-  const [showDone, setShowDone] = useState(mode === "expanded")
+  const [editing, setEditing] = useState(null)      // null | "new" | 任务对象
+  const [showDone, setShowDone] = useState(false)
 
   const fetchTasks = async () => {
     setLoading(true)
@@ -67,11 +88,11 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     }
   }
 
-  const canAdd = newTitle.trim() !== "" && !adding
+  const canQuickAdd = newTitle.trim() !== "" && !adding
 
-  // 失败时把输入还回去，免得刚打的字丢了
-  const addTask = async () => {
-    if (!canAdd) return
+  // 总览卡片里的快速添加：只填标题，其余用默认值。失败时把输入还回去
+  const quickAdd = async () => {
+    if (!canQuickAdd) return
     const title = newTitle.trim()
     setNewTitle("")
     setAdding(true)
@@ -82,196 +103,264 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
 
   const toggleDone = (t) => mutate(() => apiFetch(`/tasks/${t.id}`, { method: "PATCH", body: { done: !t.done } }))
 
-  const saveTask = async (id, changes) => {
-    if (await mutate(() => apiFetch(`/tasks/${id}`, { method: "PATCH", body: changes }))) setEditingId(null)
+  // 弹窗保存：新建走 POST，编辑走 PATCH；成功才关弹窗，失败保留填的内容
+  const submitForm = async (values) => {
+    const ok = editing === "new"
+      ? await mutate(() => apiFetch("/tasks", { method: "POST", body: values }))
+      : await mutate(() => apiFetch(`/tasks/${editing.id}`, { method: "PATCH", body: values }))
+    if (ok) setEditing(null)
+    return ok
   }
 
   const deleteTask = async (t) => {
     if (!(await confirm({ title: "删除任务", message: `「${t.title}」删除后无法恢复。` }))) return
-    if (editingId === t.id) setEditingId(null)
-    await mutate(() => apiFetch(`/tasks/${t.id}`, { method: "DELETE" }))
+    if (await mutate(() => apiFetch(`/tasks/${t.id}`, { method: "DELETE" }))) setEditing(null)
   }
 
-  const pending = tasks.filter(t => !t.done).sort(byDue)
+  const pending = tasks.filter(t => !t.done).sort(byPriorityThenDue)
   const done = tasks.filter(t => t.done)
-  const expanded = mode === "expanded"
   const goalTitles = Object.fromEntries(goals.map(g => [g.id, g.title]))
 
-  const renderRow = (t) => (
+  const renderRow = (t, last) => (
     <TaskRow
       key={t.id}
       t={t}
       accent={accent}
-      goals={goals}
       goalTitle={goalTitles[t.goal_id]}
       expanded={expanded}
-      editing={editingId === t.id}
-      onToggleEdit={() => setEditingId(id => id === t.id ? null : t.id)}
+      last={last}
+      onOpen={() => setEditing(t)}
       onToggleDone={() => toggleDone(t)}
-      onSave={changes => saveTask(t.id, changes)}
-      onDelete={() => deleteTask(t)}
     />
   )
 
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: expanded ? 20 : 12, maxWidth: formMaxWidth }}>
-        <input
-          value={newTitle}
-          onChange={e => setNewTitle(e.target.value)}
-          onKeyDown={e => isSubmitEnter(e) && addTask()}
-          placeholder="新任务..."
-          aria-label="新任务"
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <button
-          onClick={addTask}
-          disabled={!canAdd}
-          title={adding ? "添加中..." : !newTitle.trim() ? "先输入任务内容" : "添加任务"}
-          aria-label="添加任务"
-          style={{ ...accentButtonStyle(accent), ...(!canAdd ? disabledStyle : {}) }}
-        >
-          {adding ? "…" : "+"}
-        </button>
-      </div>
-
-      {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
+  const status = (
+    <>
+      {actionError && <div style={{ marginBottom: 10 }}><LoadError message={actionError} /></div>}
       {loading && tasks.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {error && <LoadError message={error} onRetry={fetchTasks} />}
-      {!loading && !error && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
-
-      {pending.length > 0 && (
-        <>
-          <SectionLabel colors={colors} first>未完成 · {pending.length}</SectionLabel>
-          {pending.map(renderRow)}
-        </>
-      )}
-      {done.length > 0 && (
-        <>
-          <button
-            onClick={() => setShowDone(s => !s)}
-            aria-expanded={showDone}
-            style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: "16px 0 8px", fontFamily: "inherit" }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: showDone ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-            已完成 · {done.length}
-          </button>
-          {showDone && done.map(renderRow)}
-        </>
-      )}
-    </div>
+    </>
   )
-}
 
-function SectionLabel({ children, colors, first }) {
-  return <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: first ? "4px 0 8px" : "16px 0 8px" }}>{children}</div>
-}
+  const modal = editing && (
+    <TaskFormModal
+      task={editing === "new" ? null : editing}
+      goals={goals}
+      onSubmit={submitForm}
+      onDelete={editing === "new" ? null : () => deleteTask(editing)}
+      onClose={() => setEditing(null)}
+    />
+  )
 
-function TaskRow({ t, accent, goals, goalTitle, expanded, editing, onToggleEdit, onToggleDone, onSave, onDelete }) {
-  const { colors, iconButtonStyle } = useTheme()
-  const border = `1px solid ${colors.borderLight}`
-  const overdue = !t.done && t.due_at && new Date(t.due_at) < new Date()
-  return (
-    <div
-      style={{
-        padding: expanded ? "12px 14px" : "8px 0",
-        marginBottom: expanded ? 8 : 0,
-        borderRadius: expanded ? 10 : 0,
-        border: expanded ? border : "none",
-        borderBottom: border,
-      }}
+  const doneToggle = done.length > 0 && (
+    <button
+      onClick={() => setShowDone(s => !s)}
+      aria-expanded={showDone}
+      style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: colors.textMuted, fontFamily: "inherit" }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input
-          type="checkbox"
-          checked={t.done}
-          onChange={onToggleDone}
-          style={{ accentColor: accent, cursor: "pointer" }}
-          aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
-        />
-        <button
-          onClick={onToggleEdit}
-          aria-expanded={editing}
-          title="点击编辑"
-          style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
-        >
-          <div style={{
-            textDecoration: t.done ? "line-through" : "none",
-            color: t.done ? colors.textMuted : colors.text,
-            fontSize: expanded ? 15 : 14,
-          }}>
-            {t.title}
-          </div>
-          {goalTitle && (
-            <div style={{ fontSize: 11, color: moduleAccents.goals, display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
-              <ModuleIcon name="goals" color="currentColor" size={11} />
-              {goalTitle}
-            </div>
-          )}
-          {t.due_at && (
-            <div style={{ fontSize: 11, color: overdue ? colors.danger : colors.textMuted, marginTop: 2 }}>
-              截止：{formatShort(t.due_at)}{overdue && "（已过期）"}
-            </div>
-          )}
-        </button>
-        <button onClick={onDelete} style={iconButtonStyle} title="删除" aria-label={`删除：${t.title}`}>×</button>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: showDone ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+      已完成 · {done.length}
+    </button>
+  )
+
+  if (!expanded) {
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, maxWidth: formMaxWidth }}>
+          <input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => isSubmitEnter(e) && quickAdd()}
+            placeholder="新任务..."
+            aria-label="新任务"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button
+            onClick={quickAdd}
+            disabled={!canQuickAdd}
+            title={adding ? "添加中..." : !newTitle.trim() ? "先输入任务内容" : "添加任务"}
+            aria-label="添加任务"
+            style={{ ...accentButtonStyle(accent), ...(!canQuickAdd ? disabledStyle : {}) }}
+          >
+            {adding ? "…" : "+"}
+          </button>
+        </div>
+        {status}
+        {!loading && !error && tasks.length === 0 && <div style={{ color: colors.textMuted }}>暂无任务</div>}
+        {pending.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, margin: "4px 0 4px" }}>未完成 · {pending.length}</div>}
+        {pending.map((t, i) => renderRow(t, i === pending.length - 1))}
+        {doneToggle && <div style={{ margin: "14px 0 4px" }}>{doneToggle}</div>}
+        {showDone && done.map((t, i) => renderRow(t, i === done.length - 1))}
+        {modal}
       </div>
-      {editing && <TaskEditor t={t} goals={goals} accent={accent} onSave={onSave} onCancel={onToggleEdit} />}
+    )
+  }
+
+  // ---- 全页视图 ----
+  const high = tasks.filter(t => t.priority === "high")
+  const plannedMinutes = pending.reduce((sum, t) => sum + (t.estimate_minutes || 0), 0)
+  const overdueCount = pending.filter(isOverdue).length
+  const stats = [
+    { label: "已完成", value: `${done.length} / ${tasks.length}` },
+    { label: "关键任务", value: `${high.filter(t => t.done).length} / ${high.length}` },
+    { label: "计划时长", value: formatMinutes(plannedMinutes) },
+    { label: "已延期", value: overdueCount, warn: overdueCount > 0 },
+  ]
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="按优先级排序"
+        title="任务"
+        action={<button onClick={() => setEditing("new")} style={darkButtonStyle}>+ 新增任务</button>}
+      />
+
+      {/* 统计格：四格连成一条，格与格之间用细线分隔 */}
+      <div style={{ ...panelCardStyle, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", marginBottom: 20, overflow: "hidden" }}>
+        {stats.map((s, i) => (
+          <div key={s.label} style={{ padding: "14px 18px", borderLeft: i === 0 ? "none" : `1px solid ${colors.cardBorder}` }}>
+            <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>{s.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: s.warn ? colors.dangerInk : colors.text, letterSpacing: -0.3 }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {status}
+
+      <div style={{ ...panelCardStyle, padding: "18px 22px 8px" }}>
+        <div style={{ fontSize: 12, color: colors.textMuted }}>优先处理</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: colors.text, margin: "2px 0 6px" }}>待办事项 · {pending.length}</div>
+        {!loading && !error && pending.length === 0 && (
+          <div style={{ color: colors.textMuted, padding: "14px 0 18px", fontSize: 14 }}>
+            {tasks.length === 0 ? "还没有任务，点右上角「新增任务」开始" : "全部完成了"}
+          </div>
+        )}
+        {pending.map((t, i) => renderRow(t, i === pending.length - 1))}
+      </div>
+
+      {done.length > 0 && (
+        <div style={{ ...panelCardStyle, padding: "14px 22px", marginTop: 16 }}>
+          {doneToggle}
+          {showDone && <div style={{ marginTop: 6 }}>{done.map((t, i) => renderRow(t, i === done.length - 1))}</div>}
+        </div>
+      )}
+      {modal}
     </div>
   )
 }
 
-// 任务的编辑区：标题、截止时间（可清空）、挂靠目标（可不挂）
-function TaskEditor({ t, goals, accent, onSave, onCancel }) {
-  const { colors, inputStyle, buttonStyle, accentButtonStyle } = useTheme()
-  const [title, setTitle] = useState(t.title)
-  const [dueAt, setDueAt] = useState(toInputValue(t.due_at))
-  const [goalId, setGoalId] = useState(t.goal_id ?? "")
+function TaskRow({ t, accent, goalTitle, expanded, last, onOpen, onToggleDone }) {
+  const { colors } = useTheme()
+  const overdue = isOverdue(t)
+  // 附加信息：所属目标 · 预计时长 · 截止时间，有什么显示什么
+  const meta = [
+    goalTitle,
+    t.estimate_minutes ? `${t.estimate_minutes} 分钟` : null,
+    t.due_at ? `截止 ${formatShort(t.due_at)}${overdue ? "（已延期）" : ""}` : null,
+  ].filter(Boolean)
 
-  const save = () => {
-    if (!title.trim()) return
-    onSave({
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: expanded ? 14 : 8, padding: expanded ? "14px 0" : "8px 0", borderBottom: last ? "none" : `1px solid ${colors.borderLight}` }}>
+      <input
+        type="checkbox"
+        checked={t.done}
+        onChange={onToggleDone}
+        style={{ accentColor: expanded ? colors.ink : accent, cursor: "pointer", width: expanded ? 18 : undefined, height: expanded ? 18 : undefined, flexShrink: 0 }}
+        aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
+      />
+      <button
+        onClick={onOpen}
+        title="点击编辑"
+        style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+      >
+        <div style={{
+          fontSize: expanded ? 15 : 14,
+          fontWeight: expanded ? 600 : 400,
+          color: t.done ? colors.textMuted : colors.text,
+          textDecoration: t.done ? "line-through" : "none",
+        }}>
+          {t.title}
+        </div>
+        {meta.length > 0 && (
+          <div style={{ fontSize: 12, color: overdue ? colors.dangerInk : colors.textMuted, marginTop: 3 }}>
+            {meta.join(" · ")}
+          </div>
+        )}
+      </button>
+      {expanded && !t.done && <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{PRIORITY_LABEL[t.priority] ?? "中"}</Badge>}
+    </div>
+  )
+}
+
+// 新增/编辑任务的弹窗：标题、优先级、预计时长、截止时间、挂靠目标；编辑时左下角有删除
+function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
+  const { inputStyle, buttonStyle, darkButtonStyle, colors } = useTheme()
+  const [title, setTitle] = useState(task?.title ?? "")
+  const [priority, setPriority] = useState(task?.priority ?? "medium")
+  const [minutes, setMinutes] = useState(task?.estimate_minutes ? String(task.estimate_minutes) : "")
+  const [dueAt, setDueAt] = useState(toInputValue(task?.due_at))
+  const [goalId, setGoalId] = useState(task?.goal_id ?? "")
+  const [saving, setSaving] = useState(false)
+
+  const canSave = title.trim() !== "" && !saving
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    await onSubmit({
       title: title.trim(),
+      priority,
+      estimate_minutes: minutes ? Number(minutes) : null,
       due_at: dueAt || null,
       goal_id: goalId === "" ? null : Number(goalId),
     })
+    setSaving(false)
   }
 
-  const labelStyle = { fontSize: 12, color: colors.textMuted, width: 36, flexShrink: 0 }
   return (
-    <div style={{ marginTop: 10, padding: 12, borderRadius: 8, background: colors.surface, border: `1px solid ${colors.borderLight}`, display: "flex", flexDirection: "column", gap: 8, maxWidth: formMaxWidth }}>
-      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>标题</span>
-        <input value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => isSubmitEnter(e) && save()} style={{ ...inputStyle, flex: 1, minWidth: 0 }} autoFocus />
-      </label>
-      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>截止</span>
-        <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
-        {dueAt && (
-          <button onClick={() => setDueAt("")} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 12, color: colors.textMuted, padding: 0 }}>清除</button>
-        )}
-      </label>
-      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={labelStyle}>目标</span>
-        <select value={goalId} onChange={e => setGoalId(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
+    <Modal
+      title={task ? "编辑任务" : "新增任务"}
+      onClose={onClose}
+      footer={
+        <>
+          {onDelete && (
+            <button onClick={onDelete} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 13, color: colors.danger }}>删除任务</button>
+          )}
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={buttonStyle}>取消</button>
+          <button onClick={save} disabled={!canSave} title={!title.trim() ? "先填任务内容" : undefined} style={{ ...darkButtonStyle, ...(!canSave ? disabledStyle : {}) }}>
+            {saving ? "保存中..." : "保存"}
+          </button>
+        </>
+      }
+    >
+      <Field label="任务内容">
+        <input value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => isSubmitEnter(e) && save()} placeholder="比如：完成 CET-6 阅读真题一套" style={inputStyle} />
+      </Field>
+      <Field label="优先级" group>
+        <Segmented value={priority} options={PRIORITY_OPTIONS} onChange={setPriority} />
+      </Field>
+      <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <Field label="预计时长（分钟）">
+            <input type="number" min={1} step={5} value={minutes} onChange={e => setMinutes(e.target.value.replace(/[^\d]/g, ""))} placeholder="可选" style={inputStyle} />
+          </Field>
+        </div>
+        <div style={{ flex: 1.4 }}>
+          <Field label="截止时间">
+            <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} style={inputStyle} />
+          </Field>
+        </div>
+      </div>
+      <Field label="所属目标">
+        <select value={goalId} onChange={e => setGoalId(e.target.value)} style={inputStyle}>
           <option value="">不挂靠目标</option>
           {goals.map(g => <option key={g.id} value={g.id}>{TIER_LABEL[g.tier]}目标：{g.title}</option>)}
         </select>
-      </label>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 2 }}>
-        <button onClick={onCancel} style={buttonStyle}>取消</button>
-        <button
-          onClick={save}
-          disabled={!title.trim()}
-          title={!title.trim() ? "标题不能为空" : undefined}
-          style={{ ...accentButtonStyle(accent), ...(!title.trim() ? disabledStyle : {}) }}
-        >
-          保存
-        </button>
-      </div>
-    </div>
+      </Field>
+    </Modal>
   )
 }
 

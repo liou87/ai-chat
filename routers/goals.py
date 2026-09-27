@@ -26,6 +26,7 @@ class UpdateGoalProgressRequest(BaseModel):
 class UpdateGoalRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    status: Optional[str] = None             # 自由文本，比如"正常""轻度迟缓"；传空字符串表示清空
 
 
 @router.get("/goals")
@@ -58,7 +59,8 @@ async def update_goal_progress(goal_id: int, request: UpdateGoalProgressRequest)
 @router.patch("/goals/{goal_id}")
 async def update_goal(goal_id: int, request: UpdateGoalRequest):
     async with SessionLocal() as db:
-        goal = await goals_service.update_goal(db, goal_id, title=request.title, description=request.description)
+        goal = await goals_service.update_goal(db, goal_id, title=request.title, description=request.description,
+                                               status=request.status)
         if goal is None:
             raise HTTPException(status_code=404, detail="目标不存在")
         return goal

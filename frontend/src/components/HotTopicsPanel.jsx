@@ -8,7 +8,7 @@ import LoadError from "./LoadError"
 // 每天收集一次的 AI/agent 领域热点（GitHub 新仓库 + 联网搜到的新闻，DeepSeek 挑过并写了一句话理由），
 // 点条目直接跳转原链接。顶部可以切换日期看历史，今天的可以手动重新收集。
 function HotTopicsPanel() {
-  const { colors, inputStyle, buttonStyle } = useTheme()
+  const { colors, inputStyle, buttonStyle, panelCardStyle } = useTheme()
   const confirm = useConfirm()
   const [dates, setDates] = useState([])
   const [day, setDay] = useState("today")   // "today" 或者 "YYYY-MM-DD"
@@ -85,7 +85,9 @@ function HotTopicsPanel() {
         <div style={{ color: colors.textMuted }}>{isToday ? "今天还没收集到" : "这一天没有收集到内容"}</div>
       )}
 
-      {!loading && !regenerating && !error && items.map((it, i) => (
+      {!loading && !regenerating && !error && items.length > 0 && (
+      <div style={{ ...panelCardStyle, padding: "4px 22px" }}>
+      {items.map((it, i) => (
         <a
           key={i}
           href={it.url}
@@ -93,7 +95,7 @@ function HotTopicsPanel() {
           rel="noreferrer"
           style={{
             display: "block",
-            padding: "14px 0",
+            padding: "16px 0",
             borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none",
             textDecoration: "none",
           }}
@@ -102,6 +104,8 @@ function HotTopicsPanel() {
           {it.summary && <div style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4, lineHeight: 1.5 }}>{it.summary}</div>}
         </a>
       ))}
+      </div>
+      )}
     </div>
   )
 }

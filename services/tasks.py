@@ -13,13 +13,33 @@ def _serialize(task: Task) -> dict:
         "done": task.done,
         "due_at": task.due_at.isoformat() if task.due_at else None,
         "goal_id": task.goal_id,
+        "priority": task.priority,
+        "estimate_minutes": task.estimate_minutes,
         "created_at": task.created_at.isoformat() if task.created_at else None,
     }
 
 
+PRIORITIES = ("high", "medium", "low")
+
+
+def _clean_priority(value: Optional[str]) -> str:
+    return value if value in PRIORITIES else "medium"
+
+
+def _clean_minutes(value) -> Optional[int]:
+    """预计时长：正整数分钟，别的一律当没填（agent 偶尔会传 0 或负数、字符串）。"""
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        return None
+    return minutes if minutes > 0 else None
+
+
 async def create_task(db: AsyncSession, title: str, due_at: Optional[datetime] = None,
-                       goal_id: Optional[int] = None) -> dict:
-    task = Task(title=title, due_at=clock.to_local(due_at), goal_id=goal_id)
+                       goal_id: Optional[int] = None, priority: Optional[str] = None,
+                       estimate_minutes: Optional[int] = None) -> dict:
+    task = Task(title=title, due_at=clock.to_local(due_at), goal_id=goal_id,
+                priority=_clean_priority(priority), estimate_minutes=_clean_minutes(estimate_minutes))
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -49,7 +69,7 @@ async def complete_task(db: AsyncSession, task_id: int) -> Optional[dict]:
 
 
 # update_task 允许改的字段；没传的字段保持不变，传 None 表示清空（比如去掉截止时间、取消挂靠目标）
-UPDATABLE_FIELDS = ("title", "done", "due_at", "goal_id")
+UPDATABLE_FIELDS = ("title", "done", "due_at", "goal_id", "priority", "estimate_minutes")
 
 
 async def update_task(db: AsyncSession, task_id: int, changes: dict) -> Optional[dict]:
@@ -63,6 +83,10 @@ async def update_task(db: AsyncSession, task_id: int, changes: dict) -> Optional
             value = clock.to_local(value)
         if field == "title" and not (value or "").strip():
             continue  # 标题不允许改成空
+        if field == "priority":
+            value = _clean_priority(value)
+        if field == "estimate_minutes":
+            value = _clean_minutes(value)
         setattr(task, field, value)
     task.updated_at = clock.now()
     await db.commit()

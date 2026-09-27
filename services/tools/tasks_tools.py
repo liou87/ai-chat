@@ -10,7 +10,8 @@ async def _create_task(db: AsyncSession, args: dict) -> dict:
             due_at = datetime.fromisoformat(args["due_at"])
         except ValueError:
             due_at = None
-    return await tasks_service.create_task(db, title=args["title"], due_at=due_at, goal_id=args.get("goal_id"))
+    return await tasks_service.create_task(db, title=args["title"], due_at=due_at, goal_id=args.get("goal_id"),
+                                           priority=args.get("priority"), estimate_minutes=args.get("estimate_minutes"))
 
 
 async def _list_tasks(db: AsyncSession, args: dict) -> dict:
@@ -49,6 +50,14 @@ TOOLS = [
                             "type": "integer",
                             "description": "要挂靠的目标 id（可选）。不知道 id 就先调用 list_goals 查出来，"
                                             "用户没提目标就留空，不要凭空猜一个",
+                        },
+                        "priority": {
+                            "type": "string", "enum": ["high", "medium", "low"],
+                            "description": "优先级，用户说了重要/紧急就填 high，说了不急就填 low，没提就留空（默认 medium）",
+                        },
+                        "estimate_minutes": {
+                            "type": "integer",
+                            "description": "预计要花多少分钟（可选），用户提到大概要多久时换算成分钟，没提就留空",
                         },
                     },
                     "required": ["title"],

@@ -1,21 +1,16 @@
 import { useTheme } from "../ThemeContext"
-import { ModuleIcon } from "../icons"
+import { PageHeader } from "./ui"
 
-// 单模块的宽松全页视图：图标栏点某个模块时展示，跟总览网格共用同一个主区域位置
-function ModulePage({ iconName, title, subtitle, accent, extra, children }) {
-  const { colors, isDark } = useTheme()
+// 单模块页面的容器：内容放在一个居中、限宽的栏里，两侧留白对称，不会只有右边空一大块。
+// 传了 title 就在顶部画标题区；任务、目标这类标题区右侧有"新增"按钮、按钮要打开组件内部弹窗的，
+// 不传 title，由组件自己渲染 PageHeader。
+// width 是内容栏的最大宽度：卡片网格/表格类给宽一点，笔记这种阅读类给窄一点
+function ModulePage({ eyebrow, title, action, width = 1080, children }) {
+  const { colors } = useTheme()
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: "28px 32px", background: colors.pageBg, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexShrink: 0 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: accent + (isDark ? "33" : "1f"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <ModuleIcon name={iconName} color={accent} size={18} />
-        </div>
-        <span style={{ fontSize: 20, fontWeight: 600, color: colors.text }}>{title}</span>
-        {subtitle && <span style={{ fontSize: 13, color: colors.textMuted }}>{subtitle}</span>}
-        <div style={{ flex: 1 }} />
-        {extra}
-      </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+    <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", background: colors.pageBg }}>
+      <div style={{ maxWidth: width, margin: "0 auto", padding: "32px 32px 48px", boxSizing: "border-box" }}>
+        {title && <PageHeader eyebrow={eyebrow} title={title} action={action} />}
         {children}
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, formMaxWidth, disabledStyle } from "../theme"
+import { moduleAccents, disabledStyle } from "../theme"
 import { ModuleIcon } from "../icons"
 import { formatShort } from "../datetime"
 import { notificationPermission, requestNotificationPermission, REMINDERS_CHANGED_EVENT } from "../notify"
@@ -14,7 +14,7 @@ const byTime = (a, b) => new Date(a.remind_at) - new Date(b.remind_at)
 // 到期后的顶部条幅和系统通知由 ReminderBanner 负责，这里是"管理"视图。
 // mode="compact" 用在总览卡片里，只看待触发和到期未读；mode="expanded" 是单模块全页视图，多一个已读分组。
 function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "compact" }) {
-  const { colors, inputStyle, accentButtonStyle } = useTheme()
+  const { colors, inputStyle, accentButtonStyle, darkButtonStyle } = useTheme()
   const confirm = useConfirm()
   const expanded = mode === "expanded"
   const [reminders, setReminders] = useState([])
@@ -94,7 +94,7 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
 
   return (
     <div>
-      <div style={{ display: "flex", flexDirection: expanded ? "row" : "column", gap: 6, marginBottom: expanded ? 12 : 12, maxWidth: expanded ? formMaxWidth * 1.4 : undefined }}>
+      <div style={{ display: "flex", flexDirection: expanded ? "row" : "column", gap: 6, marginBottom: expanded ? 12 : 12, }}>
         <input
           value={message}
           onChange={e => setMessage(e.target.value)}
@@ -113,7 +113,7 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
           onClick={addReminder}
           disabled={!canAdd}
           title={addHint}
-          style={{ ...accentButtonStyle(accent), whiteSpace: "nowrap", ...(!canAdd ? disabledStyle : {}) }}
+          style={{ ...(expanded ? darkButtonStyle : accentButtonStyle(accent)), whiteSpace: "nowrap", ...(!canAdd ? disabledStyle : {}) }}
         >
           {adding ? "添加中..." : "+ 新建提醒"}
         </button>
@@ -179,7 +179,8 @@ function ReminderRow({ r, expanded, onAcknowledge, onDelete }) {
         padding: expanded ? "12px 14px" : "8px 0",
         marginBottom: expanded ? 8 : 0,
         borderRadius: expanded ? 10 : 0,
-        border: expanded ? `1px solid ${colors.borderLight}` : "none",
+        border: expanded ? `1px solid ${colors.cardBorder}` : "none",
+        background: expanded ? colors.cardBg : "transparent",
         borderBottom: `1px solid ${colors.borderLight}`,
         opacity: read ? 0.65 : 1,
       }}

@@ -183,9 +183,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 会话相关：GET /api/sessions 拿会话列表，GET /api/sessions/{id}/messages 拿某个会话的历史消息，DELETE /api/sessions/{id} 删除会话（连同消息和 agent_traces）。
 
-任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id} 修改标题、截止时间、挂靠目标、完成状态（只改请求里出现的字段，传 null 表示清空），PATCH /api/tasks/{id}/complete 标记完成（旧接口，保留给 agent 工具用），DELETE /api/tasks/{id} 删除。
+任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id} 修改标题、截止时间、挂靠目标、优先级（high/medium/low）、预计时长（estimate_minutes，分钟）、完成状态（只改请求里出现的字段，传 null 表示清空），PATCH /api/tasks/{id}/complete 标记完成（旧接口，保留给 agent 工具用），DELETE /api/tasks/{id} 删除。
 
-目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id} 改标题和说明，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
+目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id} 改标题、说明（界面上叫"下一里程碑"）和状态；月目标、周目标的上级是可选的，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
 
 笔记相关：GET 和 POST /api/notes 支持用 category 参数区分笔记还是日记，POST 传 category="journal" 会自动走日记的建号逻辑（标题按日期生成，忽略传入的 title），可以带 structured_data 传引导问答和评分；GET /api/notes/search 做语义搜索，支持 query、top_k、category 参数，POST /api/notes/sync-notion 触发 Notion 同步，PATCH /api/notes/{id} 编辑本地笔记的标题和正文（保存后重新分块算向量；Notion 来源返回 403，日记返回 400），POST /api/notes/weekly-review 把周复盘存成一条"周复盘 YYYY-Www"日记（同一周覆盖同一条，周复盘聚合时会排除这类日记），DELETE /api/notes/{id} 删除，遇到 Notion 来源的笔记返回 403。笔记的返回结构里带 source、structured_data、updated_at 字段。
 

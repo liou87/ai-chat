@@ -19,6 +19,19 @@ export const lightColors = {
   assistantBubble: "#eee7da",
   inputRowBg: "#f5f1ea",
   selectedBg: "#e8f0fe",
+  // 单模块页面的配色（参考图风格）：白卡片、近黑主按钮、墨绿进度条和标签，模块色只留在侧栏
+  cardBg: "#ffffff",
+  cardBorder: "#e8e4dc",
+  ink: "#2f5d50",
+  inkSoft: "#e4eee9",
+  btnDark: "#1d1f23",
+  btnDarkText: "#ffffff",
+  warnSoft: "#f7ecd6",
+  warnInk: "#8a5a12",
+  neutralSoft: "#eeebe5",
+  neutralInk: "#6b655c",
+  dangerSoft: "#f8e4e1",
+  dangerInk: "#a33a2e",
 }
 
 export const darkColors = {
@@ -40,6 +53,18 @@ export const darkColors = {
   assistantBubble: "#262730",
   inputRowBg: "#23242c",
   selectedBg: "#1f3a5c",
+  cardBg: "#1c1d24",
+  cardBorder: "#2c2e37",
+  ink: "#7fb5a3",
+  inkSoft: "#1f3a33",
+  btnDark: "#ececec",
+  btnDarkText: "#15161b",
+  warnSoft: "#3d3419",
+  warnInk: "#e8c46a",
+  neutralSoft: "#2a2c35",
+  neutralInk: "#a6a8b3",
+  dangerSoft: "#3d2220",
+  dangerInk: "#f0a097",
 }
 
 // 四个模块的识别色，明暗主题下保持不变——都是中等饱和度，在浅色/深色卡片背景上都读得清楚
@@ -122,5 +147,21 @@ export function buildStyles(colors) {
     padding: 2,
   }
 
-  return { cardStyle, inputStyle, buttonStyle, primaryButtonStyle, accentButtonStyle, iconButtonStyle }
+  // 页面主操作按钮（"+ 新增任务"这类）：近黑实心，深色模式下反过来是近白
+  const darkButtonStyle = {
+    ...buttonStyle,
+    background: colors.btnDark,
+    color: colors.btnDarkText,
+    border: `1px solid ${colors.btnDark}`,
+    fontWeight: 500,
+  }
+
+  // 模块页面里的白卡片容器
+  const panelCardStyle = {
+    background: colors.cardBg,
+    border: `1px solid ${colors.cardBorder}`,
+    borderRadius: radiusMd,
+  }
+
+  return { cardStyle, inputStyle, buttonStyle, primaryButtonStyle, accentButtonStyle, iconButtonStyle, darkButtonStyle, panelCardStyle }
 }
