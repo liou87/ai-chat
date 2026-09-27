@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, formMaxWidth } from "../theme"
+import { moduleAccents, formMaxWidth, disabledStyle } from "../theme"
 import { ModuleIcon } from "../icons"
 import { isSubmitEnter } from "../keyboard"
 import { toInputValue, formatShort } from "../datetime"
@@ -28,6 +28,7 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
   const [tasks, setTasks] = useState([])
   const [goals, setGoals] = useState([])
   const [newTitle, setNewTitle] = useState("")
+  const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)          // 列表加载失败
   const [actionError, setActionError] = useState(null)  // 新建/修改/删除失败
@@ -66,11 +67,17 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     }
   }
 
+  const canAdd = newTitle.trim() !== "" && !adding
+
+  // 失败时把输入还回去，免得刚打的字丢了
   const addTask = async () => {
-    if (!newTitle.trim()) return
-    const title = newTitle
+    if (!canAdd) return
+    const title = newTitle.trim()
     setNewTitle("")
-    await mutate(() => apiFetch("/tasks", { method: "POST", body: { title } }))
+    setAdding(true)
+    const ok = await mutate(() => apiFetch("/tasks", { method: "POST", body: { title } }))
+    setAdding(false)
+    if (!ok) setNewTitle(title)
   }
 
   const toggleDone = (t) => mutate(() => apiFetch(`/tasks/${t.id}`, { method: "PATCH", body: { done: !t.done } }))
@@ -117,7 +124,15 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
           aria-label="新任务"
           style={{ ...inputStyle, flex: 1 }}
         />
-        <button onClick={addTask} style={accentButtonStyle(accent)} aria-label="添加任务">+</button>
+        <button
+          onClick={addTask}
+          disabled={!canAdd}
+          title={adding ? "添加中..." : !newTitle.trim() ? "先输入任务内容" : "添加任务"}
+          aria-label="添加任务"
+          style={{ ...accentButtonStyle(accent), ...(!canAdd ? disabledStyle : {}) }}
+        >
+          {adding ? "…" : "+"}
+        </button>
       </div>
 
       {actionError && <div style={{ marginBottom: 8 }}><LoadError message={actionError} /></div>}
@@ -247,7 +262,14 @@ function TaskEditor({ t, goals, accent, onSave, onCancel }) {
       </label>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 2 }}>
         <button onClick={onCancel} style={buttonStyle}>取消</button>
-        <button onClick={save} style={accentButtonStyle(accent)}>保存</button>
+        <button
+          onClick={save}
+          disabled={!title.trim()}
+          title={!title.trim() ? "标题不能为空" : undefined}
+          style={{ ...accentButtonStyle(accent), ...(!title.trim() ? disabledStyle : {}) }}
+        >
+          保存
+        </button>
       </div>
     </div>
   )

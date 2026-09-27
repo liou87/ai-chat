@@ -2,12 +2,13 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, formMaxWidth } from "../theme"
+import { moduleAccents, formMaxWidth, disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import LoadError from "./LoadError"
 
 const TIER_LABEL = { phase: "阶段目标", month: "月目标", week: "周目标" }
 const PARENT_TIER = { phase: null, month: "phase", week: "month" }
+const TIER_ORDER = { phase: 0, month: 1, week: 2 }
 
 // 进度条：跟主题走，accent 是当前颜色，percent 是 0-100
 function ProgressBar({ percent, accent, colors }) {
@@ -31,6 +32,7 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ tier: "phase", parent_id: "", title: "", description: "" })
 
   const fetchGoals = async () => {
@@ -66,25 +68,32 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
     }
   }
 
-  const phases = goals.filter(g => g.tier === "phase")
+  // 顶层目标：没有上级的都算（阶段目标，以及没挂上级的月目标/周目标），按阶段、月、周排
+  const roots = goals.filter(g => g.parent_id == null).sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier])
   const byParent = (parentId) => goals.filter(g => g.parent_id === parentId)
   const tasksOf = (goalId) => tasks.filter(t => t.goal_id === goalId)
   const parentOptions = goals.filter(g => g.tier === PARENT_TIER[form.tier])
 
   const countDescendants = (id) => byParent(id).reduce((n, child) => n + 1 + countDescendants(child.id), 0)
 
+  const canSave = form.title.trim() !== "" && !saving
+
+  // 上级是可选的：月目标、周目标不挂上级也能建。保存失败时保留表单内容
   const addGoal = async () => {
-    if (!form.title.trim()) return
-    if (PARENT_TIER[form.tier] && !form.parent_id) return  // month/week 必须选上级
+    if (!canSave) return
     const body = {
-      title: form.title,
+      title: form.title.trim(),
       tier: form.tier,
       parent_id: form.parent_id ? Number(form.parent_id) : null,
       description: form.description || null,
     }
-    setForm({ tier: "phase", parent_id: "", title: "", description: "" })
-    setShowForm(false)
-    await mutate(() => apiFetch("/goals", { method: "POST", body }))
+    setSaving(true)
+    const ok = await mutate(() => apiFetch("/goals", { method: "POST", body }))
+    setSaving(false)
+    if (ok) {
+      setForm({ tier: "phase", parent_id: "", title: "", description: "" })
+      setShowForm(false)
+    }
   }
 
   const updateProgress = (id, progress) =>
@@ -103,16 +112,19 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
   }
 
   if (!expanded) {
-    // 紧凑视图：只看阶段目标的标题和进度条
+    // 紧凑视图：只看顶层目标的标题和进度条，不是阶段目标的标一下层级
     return (
       <div>
-        {loading && phases.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
+        {loading && roots.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
         {error && <LoadError message={error} onRetry={fetchGoals} />}
-        {!loading && !error && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
-        {phases.map(g => (
+        {!loading && !error && roots.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
+        {roots.map(g => (
           <div key={g.id} style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span style={{ color: colors.text }}>{g.title}</span>
+              <span style={{ color: colors.text }}>
+                {g.tier !== "phase" && <span style={{ fontSize: 11, color: colors.textMuted, marginRight: 6 }}>{TIER_LABEL[g.tier]}</span>}
+                {g.title}
+              </span>
               <span style={{ color: accent, fontWeight: 600 }}>{g.progress}%</span>
             </div>
             <ProgressBar percent={g.progress} accent={accent} colors={colors} />
@@ -150,15 +162,22 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
                 style={{ ...inputStyle, flex: 1 }}
                 aria-label="上级目标"
               >
-                <option value="">选择上级（{TIER_LABEL[PARENT_TIER[form.tier]]}）</option>
-                {parentOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                <option value="">不挂上级（可选）</option>
+                {parentOptions.map(p => <option key={p.id} value={p.id}>{TIER_LABEL[p.tier]}：{p.title}</option>)}
               </select>
             )}
           </div>
+          {PARENT_TIER[form.tier] && parentOptions.length === 0 && (
+            <div style={{ fontSize: 12, color: colors.textMuted }}>
+              还没有{TIER_LABEL[PARENT_TIER[form.tier]]}，可以先不挂，以后想归到某个{TIER_LABEL[PARENT_TIER[form.tier]]}下再说
+            </div>
+          )}
           <input
             value={form.title}
             onChange={e => setForm({ ...form, title: e.target.value })}
-            placeholder="目标标题"
+            onKeyDown={e => isSubmitEnter(e) && addGoal()}
+            placeholder="目标标题（必填）"
+            aria-label="目标标题"
             style={inputStyle}
           />
           <input
@@ -168,7 +187,14 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
             style={inputStyle}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={addGoal} style={{ ...accentButtonStyle(accent), flex: 1 }}>保存</button>
+            <button
+              onClick={addGoal}
+              disabled={!canSave}
+              title={!form.title.trim() ? "先填目标标题" : undefined}
+              style={{ ...accentButtonStyle(accent), flex: 1, ...(!canSave ? disabledStyle : {}) }}
+            >
+              {saving ? "保存中..." : "保存"}
+            </button>
             <button onClick={() => setShowForm(false)} style={{ padding: "7px 12px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.surface, color: colors.text, cursor: "pointer" }}>取消</button>
           </div>
         </div>
@@ -178,10 +204,10 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
       {actionError && <div style={{ marginBottom: 10 }}><LoadError message={actionError} /></div>}
       {loading && goals.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {error && <LoadError message={error} onRetry={fetchGoals} />}
-      {!loading && !error && phases.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
+      {!loading && !error && roots.length === 0 && <div style={{ color: colors.textMuted }}>暂无目标</div>}
 
-      {phases.map(phase => (
-        <GoalNode key={phase.id} goal={phase} depth={0} accent={accent} byParent={byParent} tasksOf={tasksOf}
+      {roots.map(root => (
+        <GoalNode key={root.id} goal={root} depth={0} accent={accent} byParent={byParent} tasksOf={tasksOf}
                   onUpdateProgress={updateProgress} onUpdate={updateGoal} onDelete={deleteGoal} />
       ))}
     </div>
@@ -263,7 +289,14 @@ function GoalNode({ goal, depth, accent, byParent, tasksOf, onUpdateProgress, on
             />
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
               <button onClick={() => setEditing(false)} style={buttonStyle}>取消</button>
-              <button onClick={saveEdit} style={accentButtonStyle(accent)}>保存</button>
+              <button
+                onClick={saveEdit}
+                disabled={!draft.title.trim()}
+                title={!draft.title.trim() ? "标题不能为空" : undefined}
+                style={{ ...accentButtonStyle(accent), ...(!draft.title.trim() ? disabledStyle : {}) }}
+              >
+                保存
+              </button>
             </div>
           </div>
         ) : (

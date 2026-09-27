@@ -60,6 +60,10 @@ export const railIconColor = "#9a9db0"
 // 列表里的任务行/笔记卡片这类内容多的元素不用这个，让它们正常占满宽度。
 export const formMaxWidth = 480
 
+// 条件不满足（比如必填项没填）时按钮的样式：置灰、鼠标显示禁止，配合 disabled 属性用，
+// 让人一眼看出"现在点不了"，而不是点了没反应以为按钮坏了
+export const disabledStyle = { opacity: 0.45, cursor: "not-allowed" }
+
 export const radiusSm = 6
 export const radiusMd = 12
 

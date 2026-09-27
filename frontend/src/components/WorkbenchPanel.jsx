@@ -98,7 +98,7 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest 
     </ModuleCard>
   )
   const goalsCard = (
-    <ModuleCard title="阶段目标" accent={moduleAccents.goals}>
+    <ModuleCard title="目标" accent={moduleAccents.goals}>
       <GoalPanel refreshKey={refreshKey} accent={moduleAccents.goals} />
     </ModuleCard>
   )
@@ -113,7 +113,7 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: "4px 10px", marginBottom: 16, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <span style={{ fontSize: 19, fontWeight: 600, color: colors.text }}>工作台总览</span>
-          {!singleColumn && <span style={{ fontSize: 13, color: colors.textMuted }}>今日简报 · 任务 · 阶段目标 · 提醒</span>}
+          {!singleColumn && <span style={{ fontSize: 13, color: colors.textMuted }}>今日简报 · 任务 · 目标 · 提醒</span>}
         </div>
         <span style={{ fontSize: 13, color: colors.textMuted }}>
           {new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}

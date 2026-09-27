@@ -40,14 +40,14 @@ TOOLS = [
             "function": {
                 "name": "create_goal",
                 "description": "创建一个目标，分三层：phase（阶段目标）、month（月目标）、week（周目标）。"
-                                "month 必须挂在某个 phase 下面，week 必须挂在某个 month 下面，"
-                                "如果不知道上级目标的 id，先调用 list_goals 查出来。",
+                                "month 可以挂在某个 phase 下面，week 可以挂在某个 month 下面，上级是可选的；"
+                                "用户提到的目标明显属于某个已有的更大目标时再挂，不确定有没有合适的上级就先调用 list_goals 看看。",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "title": {"type": "string", "description": "目标标题"},
                         "tier": {"type": "string", "enum": ["phase", "month", "week"], "description": "目标层级"},
-                        "parent_id": {"type": "integer", "description": "上级目标 id，phase 不需要，month/week 必填"},
+                        "parent_id": {"type": "integer", "description": "上级目标 id，可选；phase 不能有上级，month 的上级只能是 phase，week 的上级只能是 month"},
                         "description": {"type": "string", "description": "补充说明，比如下一个里程碑是什么"},
                         "target_date": {
                             "type": "string",

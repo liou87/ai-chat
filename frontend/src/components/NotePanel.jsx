@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
-import { moduleAccents, radiusSm, formMaxWidth } from "../theme"
+import { moduleAccents, radiusSm, formMaxWidth, disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import { useConfirm } from "../confirm"
 import { formatShort } from "../datetime"
@@ -105,6 +105,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
   const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
   const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null)   // { text, isError }
 
@@ -170,11 +171,26 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, category])
 
+  // 能不能保存：日记任意填一项就行（三道问题、四项评分、自由记录），笔记标题和正文都要有
+  const journalFilled = review.done.trim() || review.blocker.trim() || review.tomorrow.trim()
+    || Object.values(review.ratings).some(v => v != null) || newContent.trim()
+  const noteFilled = newTitle.trim() && newContent.trim()
+  const canSave = Boolean(category === "journal" ? journalFilled : noteFilled) && !saving
+  const saveHint = category === "journal" ? "至少填一项再保存" : "标题和正文都要填"
+
   const addNote = async () => {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      await submitNote()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submitNote = async () => {
     if (category === "journal") {
       const { done, blocker, tomorrow, ratings } = review
-      const hasRating = Object.values(ratings).some(v => v != null)
-      if (!done.trim() && !blocker.trim() && !tomorrow.trim() && !hasRating && !newContent.trim()) return
       const ok = await mutate(() => apiFetch("/notes", {
         method: "POST",
         body: {
@@ -195,7 +211,6 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
       return
     }
 
-    if (!newContent.trim() || !newTitle.trim()) return
     const ok = await mutate(() => apiFetch("/notes", {
       method: "POST",
       body: { title: newTitle, content: newContent, category },
@@ -323,7 +338,9 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             style={{ ...inputStyle, resize: "vertical" }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={addNote} style={{ ...accentButtonStyle(resolvedAccent), flex: 1 }}>保存</button>
+            <button onClick={addNote} disabled={!canSave} title={!journalFilled ? saveHint : undefined} style={{ ...accentButtonStyle(resolvedAccent), flex: 1, ...(!canSave ? disabledStyle : {}) }}>
+              {saving ? "保存中..." : "保存"}
+            </button>
             <button onClick={() => { setShowForm(false); setReview(emptyReview); setNewContent("") }} style={buttonStyle}>取消</button>
           </div>
         </div>
@@ -343,7 +360,9 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent, mode =
             style={{ ...inputStyle, resize: "vertical" }}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={addNote} style={{ ...accentButtonStyle(resolvedAccent), flex: 1 }}>保存</button>
+            <button onClick={addNote} disabled={!canSave} title={!noteFilled ? saveHint : undefined} style={{ ...accentButtonStyle(resolvedAccent), flex: 1, ...(!canSave ? disabledStyle : {}) }}>
+              {saving ? "保存中..." : "保存"}
+            </button>
             <button onClick={() => setShowForm(false)} style={buttonStyle}>取消</button>
           </div>
         </div>
@@ -444,7 +463,14 @@ function NoteEditor({ note, accent, onSave, onCancel }) {
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
         <button onClick={onCancel} style={buttonStyle}>取消</button>
         {/* 保存要重新算向量，会慢一点，给个状态 */}
-        <button onClick={save} disabled={saving} style={{ ...accentButtonStyle(accent), opacity: saving ? 0.6 : 1 }}>{saving ? "保存中..." : "保存"}</button>
+        <button
+          onClick={save}
+          disabled={saving || !title.trim() || !content.trim()}
+          title={!title.trim() || !content.trim() ? "标题和正文都不能为空" : undefined}
+          style={{ ...accentButtonStyle(accent), ...(saving || !title.trim() || !content.trim() ? disabledStyle : {}) }}
+        >
+          {saving ? "保存中..." : "保存"}
+        </button>
       </div>
     </div>
   )

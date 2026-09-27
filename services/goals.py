@@ -6,7 +6,8 @@ from database import Goal
 from services import clock
 
 TIERS = ("phase", "month", "week")
-# 上级目标的层级要求：phase 没有上级，month 的上级必须是 phase，week 的上级必须是 month
+# 上级目标的层级要求：phase 没有上级；month 可以挂在某个 phase 下，week 可以挂在某个 month 下。
+# 上级是可选的——不是每个周目标都属于某个更大的计划，强制先建阶段目标再建月目标，门槛太高
 PARENT_TIER = {"phase": None, "month": "phase", "week": "month"}
 
 
@@ -37,9 +38,8 @@ async def create_goal(db: AsyncSession, title: str, tier: str, parent_id: Option
     expected_parent_tier = PARENT_TIER[tier]
     if expected_parent_tier is None:
         parent_id = None  # phase 不允许有上级，传了也忽略
-    else:
-        if parent_id is None:
-            raise InvalidGoalHierarchy(f"{tier} 必须指定一个 {expected_parent_tier} 类型的上级目标")
+    elif parent_id is not None:
+        # 不挂上级可以；挂的话层级得对得上
         parent = await db.get(Goal, parent_id)
         if parent is None or parent.tier != expected_parent_tier:
             raise InvalidGoalHierarchy(f"{tier} 的上级目标必须是 {expected_parent_tier} 类型")

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
-import { moduleAccents, formMaxWidth } from "../theme"
+import { moduleAccents, formMaxWidth, disabledStyle } from "../theme"
 import { ModuleIcon } from "../icons"
 import { formatShort } from "../datetime"
 import { notificationPermission, requestNotificationPermission, REMINDERS_CHANGED_EVENT } from "../notify"
@@ -23,6 +23,7 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
   const [actionError, setActionError] = useState(null)
   const [message, setMessage] = useState("")
   const [remindAt, setRemindAt] = useState("")
+  const [adding, setAdding] = useState(false)
   const [permission, setPermission] = useState(notificationPermission)
 
   const fetchReminders = async () => {
@@ -57,11 +58,16 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
 
   const enableNotifications = async () => setPermission(await requestNotificationPermission())
 
+  const canAdd = message.trim() !== "" && remindAt !== "" && !adding
+  const addHint = !message.trim() && !remindAt ? "填写提醒内容和时间" : !message.trim() ? "填写提醒内容" : !remindAt ? "选择提醒时间" : undefined
+
   const addReminder = async () => {
-    if (!message.trim() || !remindAt) return
+    if (!canAdd) return
     // 新建提醒是一次用户点击，顺带请求通知权限，浏览器不会拦
     if (permission === "default") enableNotifications()
-    const ok = await mutate(() => apiFetch("/reminders", { method: "POST", body: { message, remind_at: remindAt } }))
+    setAdding(true)
+    const ok = await mutate(() => apiFetch("/reminders", { method: "POST", body: { message: message.trim(), remind_at: remindAt } }))
+    setAdding(false)
     if (ok) {
       setMessage("")
       setRemindAt("")
@@ -103,7 +109,14 @@ function ReminderPanel({ refreshKey, accent = moduleAccents.reminders, mode = "c
           aria-label="提醒时间"
           style={{ ...inputStyle, flex: expanded ? 1 : undefined }}
         />
-        <button onClick={addReminder} style={{ ...accentButtonStyle(accent), whiteSpace: "nowrap" }}>+ 新建提醒</button>
+        <button
+          onClick={addReminder}
+          disabled={!canAdd}
+          title={addHint}
+          style={{ ...accentButtonStyle(accent), whiteSpace: "nowrap", ...(!canAdd ? disabledStyle : {}) }}
+        >
+          {adding ? "添加中..." : "+ 新建提醒"}
+        </button>
       </div>
 
       {expanded && permission === "default" && (
