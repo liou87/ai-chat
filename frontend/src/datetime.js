@@ -31,3 +31,25 @@ export function dayBucket(iso) {
   if (diffDays < 7) return "最近 7 天"
   return "更早"
 }
+
+// 距离某个日期还有几天（按日历日算，今天是 0，过去是负数）；倒计时和目标截止日期用
+export function daysUntil(iso) {
+  const d = new Date(iso)
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((target - today) / 86400000)
+}
+
+// 本周一 0 点（周一作为一周的开始），总览"本周概览"用
+export function startOfWeek() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return d
+}
+
+// 是不是今天（按本地日历日）
+export function isToday(iso) {
+  return iso ? daysUntil(iso) === 0 : false
+}

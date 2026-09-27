@@ -16,6 +16,8 @@ def _serialize(task: Task) -> dict:
         "priority": task.priority,
         "estimate_minutes": task.estimate_minutes,
         "created_at": task.created_at.isoformat() if task.created_at else None,
+        # 完成状态变化时会更新这个时间，总览的"本周完成"按它近似判断是哪天完成的
+        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
     }
 
 

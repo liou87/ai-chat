@@ -75,9 +75,13 @@ async def update_goal_progress(db: AsyncSession, goal_id: int, progress: int,
     return _serialize(goal)
 
 
+_UNSET = object()  # 区分"没传"和"传了 None（清空）"
+
+
 async def update_goal(db: AsyncSession, goal_id: int, title: Optional[str] = None,
-                       description: Optional[str] = None, status: Optional[str] = None) -> Optional[dict]:
-    """改标题/说明/状态；层级和上级不允许在这里改，挪层级牵扯子目标，真要改就删了重建。"""
+                       description: Optional[str] = None, status: Optional[str] = None,
+                       target_date=_UNSET) -> Optional[dict]:
+    """改标题/说明/状态/截止日期；层级和上级不允许在这里改，挪层级牵扯子目标，真要改就删了重建。"""
     goal = await db.get(Goal, goal_id)
     if goal is None:
         return None
@@ -87,6 +91,8 @@ async def update_goal(db: AsyncSession, goal_id: int, title: Optional[str] = Non
         goal.description = description.strip() or None
     if status is not None:
         goal.status = status.strip()[:20] or None
+    if target_date is not _UNSET:
+        goal.target_date = clock.to_local(target_date)
     goal.updated_at = clock.now()
     await db.commit()
     await db.refresh(goal)

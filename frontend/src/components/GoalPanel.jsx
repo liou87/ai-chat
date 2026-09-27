@@ -6,6 +6,7 @@ import { moduleAccents, disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import LoadError from "./LoadError"
 import { PageHeader, Badge, ProgressBar, Modal, Field } from "./ui"
+import { daysUntil, formatShort } from "../datetime"
 
 const TIER_LABEL = { phase: "阶段目标", month: "月目标", week: "周目标" }
 const PARENT_TIER = { phase: null, month: "phase", week: "month" }
@@ -91,7 +92,7 @@ function GoalPanel({ refreshKey, accent = moduleAccents.goals, mode = "compact" 
     } else {
       const id = editing.id
       ok = await mutate(async () => {
-        await apiFetch(`/goals/${id}`, { method: "PATCH", body: { title: fields.title, description: fields.description ?? "", status: fields.status ?? "" } })
+        await apiFetch(`/goals/${id}`, { method: "PATCH", body: { title: fields.title, description: fields.description ?? "", status: fields.status ?? "", target_date: fields.target_date } })
         if (progress !== editing.progress) await apiFetch(`/goals/${id}/progress`, { method: "PATCH", body: { progress } })
       })
     }
@@ -188,6 +189,7 @@ function GoalCard({ goal, byParent, tasksOf, onOpen }) {
         {goal.description && (
           <div style={{ fontSize: 14, color: colors.textSecondary, marginTop: 6, lineHeight: 1.5 }}>下一里程碑：{goal.description}</div>
         )}
+        {goal.target_date && <TargetDateLine date={goal.target_date} />}
         <div style={{ marginTop: 22 }}>
           <ProgressBar percent={goal.progress} />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginTop: 8 }}>
@@ -209,6 +211,18 @@ function GoalCard({ goal, byParent, tasksOf, onOpen }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// 截止日期那一行：还剩几天；过期了标红
+function TargetDateLine({ date }) {
+  const { colors } = useTheme()
+  const days = daysUntil(date)
+  const text = days > 0 ? `还有 ${days} 天` : days === 0 ? "今天截止" : `已过期 ${-days} 天`
+  return (
+    <div style={{ fontSize: 12.5, color: days < 0 ? colors.dangerInk : colors.textMuted, marginTop: 6 }}>
+      截止 {formatShort(date, { withTime: false })} · {text}
     </div>
   )
 }
@@ -244,6 +258,7 @@ function GoalFormModal({ goal, goals, onSubmit, onDelete, onClose }) {
   const [description, setDescription] = useState(goal?.description ?? "")
   const [status, setStatus] = useState(goal?.status ?? "")
   const [progress, setProgress] = useState(goal?.progress ?? 0)
+  const [targetDate, setTargetDate] = useState(goal?.target_date ? goal.target_date.slice(0, 10) : "")
   const [saving, setSaving] = useState(false)
 
   const parentTier = PARENT_TIER[tier]
@@ -258,6 +273,7 @@ function GoalFormModal({ goal, goals, onSubmit, onDelete, onClose }) {
       title: title.trim(),
       description: description.trim() || null,
       status: status.trim() || null,
+      target_date: targetDate || null,
       progress,
       ...(goal ? {} : { tier, parent_id: parentId === "" ? null : Number(parentId) }),
     })
@@ -313,6 +329,9 @@ function GoalFormModal({ goal, goals, onSubmit, onDelete, onClose }) {
       </Field>
       <Field label="下一里程碑">
         <input value={description} onChange={e => setDescription(e.target.value)} placeholder="可选，比如：完成两次有效完整模考" style={inputStyle} />
+      </Field>
+      <Field label="截止日期" hint="可选，填了会在总览页显示倒计时">
+        <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} style={inputStyle} />
       </Field>
       <Field label="状态" group>
         <input value={status} onChange={e => setStatus(e.target.value)} placeholder="可选，比如：正常、轻度迟缓" maxLength={20} aria-label="状态" style={inputStyle} />

@@ -449,7 +449,16 @@ function App() {
           </ModulePage>
         )
       default:
-        return <WorkbenchPanel refreshKey={workbenchRefreshKey} digest={digest} onRetryDigest={loadDigest} onRegenerateDigest={regenerateDigest} />
+        return (
+          <WorkbenchPanel
+            refreshKey={workbenchRefreshKey}
+            digest={digest}
+            onRetryDigest={loadDigest}
+            onRegenerateDigest={regenerateDigest}
+            onNavigate={setActiveView}
+            onRequestWeeklyReview={onRequestWeeklyReview}
+          />
+        )
     }
   }
 

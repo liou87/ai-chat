@@ -7,36 +7,9 @@ import { isSubmitEnter } from "../keyboard"
 import { toInputValue, formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import { PageHeader, Badge, Modal, Field, Segmented } from "./ui"
+import { PRIORITY_OPTIONS, PRIORITY_LABEL, PRIORITY_TONE, byPriorityThenDue, formatMinutes, isOverdue } from "../taskMeta"
 
 const TIER_LABEL = { phase: "阶段", month: "月", week: "周" }
-const PRIORITY_OPTIONS = [
-  { value: "high", label: "高" },
-  { value: "medium", label: "中" },
-  { value: "low", label: "低" },
-]
-const PRIORITY_LABEL = { high: "高", medium: "中", low: "低" }
-const PRIORITY_RANK = { high: 0, medium: 1, low: 2 }
-const PRIORITY_TONE = { high: "danger", medium: "neutral", low: "neutral" }
-
-// 未完成的排序：先按优先级（高→低），同优先级按截止时间，没截止时间的排后面
-const byPriorityThenDue = (a, b) => {
-  const p = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
-  if (p !== 0) return p
-  if (!a.due_at) return 1
-  if (!b.due_at) return -1
-  return new Date(a.due_at) - new Date(b.due_at)
-}
-
-// 分钟数 -> "5h 20m" / "45m"
-function formatMinutes(total) {
-  if (!total) return "—"
-  const h = Math.floor(total / 60)
-  const m = total % 60
-  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`
-}
-
-const isOverdue = (t) => !t.done && t.due_at && new Date(t.due_at) < new Date()
-
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
 // 保证"聊天里说的"和"面板上看到的"始终一致。
@@ -101,7 +74,11 @@ function TaskPanel({ refreshKey, accent = moduleAccents.tasks, mode = "compact" 
     if (!ok) setNewTitle(title)
   }
 
-  const toggleDone = (t) => mutate(() => apiFetch(`/tasks/${t.id}`, { method: "PATCH", body: { done: !t.done } }))
+  // 打勾先改界面再发请求（请求加刷新要一两秒，不先改看起来像没反应）；失败时 mutate 重新拉列表会恢复原状
+  const toggleDone = (t) => {
+    setTasks(list => list.map(x => x.id === t.id ? { ...x, done: !t.done, updated_at: new Date().toISOString() } : x))
+    return mutate(() => apiFetch(`/tasks/${t.id}`, { method: "PATCH", body: { done: !t.done } }))
+  }
 
   // 弹窗保存：新建走 POST，编辑走 PATCH；成功才关弹窗，失败保留填的内容
   const submitForm = async (values) => {
@@ -295,7 +272,7 @@ function TaskRow({ t, accent, goalTitle, expanded, last, onOpen, onToggleDone })
 }
 
 // 新增/编辑任务的弹窗：标题、优先级、预计时长、截止时间、挂靠目标；编辑时左下角有删除
-function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
+export function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
   const { inputStyle, buttonStyle, darkButtonStyle, colors } = useTheme()
   const [title, setTitle] = useState(task?.title ?? "")
   const [priority, setPriority] = useState(task?.priority ?? "medium")
