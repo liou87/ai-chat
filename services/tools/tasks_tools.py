@@ -3,6 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services import tasks as tasks_service
 
 
+def _parse_time(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 async def _create_task(db: AsyncSession, args: dict) -> dict:
     due_at = None
     if args.get("due_at"):
@@ -11,7 +20,8 @@ async def _create_task(db: AsyncSession, args: dict) -> dict:
         except ValueError:
             due_at = None
     return await tasks_service.create_task(db, title=args["title"], due_at=due_at, goal_id=args.get("goal_id"),
-                                           priority=args.get("priority"), estimate_minutes=args.get("estimate_minutes"))
+                                           priority=args.get("priority"), estimate_minutes=args.get("estimate_minutes"),
+                                           planned_start=_parse_time(args.get("planned_start")))
 
 
 async def _list_tasks(db: AsyncSession, args: dict) -> dict:
@@ -58,6 +68,11 @@ TOOLS = [
                         "estimate_minutes": {
                             "type": "integer",
                             "description": "预计要花多少分钟（可选），用户提到大概要多久时换算成分钟，没提就留空",
+                        },
+                        "planned_start": {
+                            "type": "string",
+                            "description": "计划几点开始做（可选），ISO 8601，例如 2026-09-29T14:00:00。"
+                                            "用户说了「下午两点做」这类具体时间才填，跟截止时间 due_at 不是一回事",
                         },
                     },
                     "required": ["title"],

@@ -55,6 +55,7 @@ class Task(Base):
     goal_id = Column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True, index=True)  # 挂靠的目标（可选）
     priority = Column(String(10), default="medium", server_default=text("'medium'"), nullable=False)  # high / medium / low
     estimate_minutes = Column(Integer, nullable=True)         # 预计花多少分钟（可选），任务页统计"计划时长"用
+    planned_start = Column(DateTime, nullable=True)           # 计划几点开始做（可选），配合预计时长在总览"今日安排"里显示成时间块
     created_at = Column(DateTime, default=clock_now)
     updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
     def __repr__(self):

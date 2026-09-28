@@ -8,7 +8,7 @@ import LoadError from "./LoadError"
 // 每天收集一次的 AI/agent 领域热点（GitHub 新仓库 + 联网搜到的新闻，DeepSeek 挑过并写了一句话理由），
 // 点条目直接跳转原链接。顶部可以切换日期看历史，今天的可以手动重新收集。
 function HotTopicsPanel() {
-  const { colors, inputStyle, buttonStyle, panelCardStyle } = useTheme()
+  const { colors, inputStyle, buttonStyle } = useTheme()
   const confirm = useConfirm()
   const [dates, setDates] = useState([])
   const [day, setDay] = useState("today")   // "today" 或者 "YYYY-MM-DD"
@@ -86,26 +86,46 @@ function HotTopicsPanel() {
       )}
 
       {!loading && !regenerating && !error && items.length > 0 && (
-      <div style={{ ...panelCardStyle, padding: "4px 22px" }}>
-      {items.map((it, i) => (
-        <a
-          key={i}
-          href={it.url}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            display: "block",
-            padding: "16px 0",
-            borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none",
-            textDecoration: "none",
-          }}
-        >
-          <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{it.title}</div>
-          {it.summary && <div style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4, lineHeight: 1.5 }}>{it.summary}</div>}
-        </a>
-      ))}
-      </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <TopicGroup eyebrow="模型、产品、框架动态" title="最新消息" items={items.filter(it => kindOf(it) === "news")} />
+          <TopicGroup eyebrow="最近一个月新建的 agent / RAG 项目" title="GitHub 新项目" items={items.filter(it => kindOf(it) === "github")} />
+        </div>
       )}
+    </div>
+  )
+}
+
+// 以前存的热点没有 kind 字段，按链接判断
+const kindOf = (it) => it.kind ?? (it.url?.includes("github.com") ? "github" : "news")
+
+function TopicGroup({ eyebrow, title, items }) {
+  const { colors, panelCardStyle } = useTheme()
+  if (items.length === 0) return null
+  return (
+    <div style={{ ...panelCardStyle, padding: "18px 22px 6px" }}>
+      <div style={{ fontSize: 12, color: colors.textMuted }}>{eyebrow}</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: colors.text, margin: "2px 0 4px" }}>{title} · {items.length}</div>
+      {items.map((it, i) => {
+        // 附加信息：新闻显示来源网站和发布日期，仓库显示星数
+        const meta = kindOf(it) === "github"
+          ? (it.stars != null ? `★ ${it.stars}` : "GitHub")
+          : [it.source, it.published_date ? formatShort(it.published_date, { withTime: false }) : null].filter(Boolean).join(" · ")
+        return (
+          <a
+            key={it.url || i}
+            href={it.url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ display: "block", padding: "14px 0", borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none", textDecoration: "none" }}
+          >
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{it.title}</span>
+              {meta && <span style={{ fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{meta}</span>}
+            </div>
+            {it.summary && <div style={{ fontSize: 13.5, color: colors.textSecondary, marginTop: 5, lineHeight: 1.55 }}>{it.summary}</div>}
+          </a>
+        )
+      })}
     </div>
   )
 }

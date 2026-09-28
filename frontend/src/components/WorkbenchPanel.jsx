@@ -3,10 +3,11 @@ import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { PERSONA_NAME } from "../persona"
 import { useElementWidth } from "../hooks"
+import { disabledStyle } from "../theme"
 import { formatShort, daysUntil, startOfWeek, isToday } from "../datetime"
 import { PRIORITY_LABEL, PRIORITY_TONE, byPriorityThenDue, formatMinutes, isOverdue } from "../taskMeta"
 import LoadError from "./LoadError"
-import { Badge, ProgressBar } from "./ui"
+import { Badge, ProgressBar, Modal } from "./ui"
 import { TaskFormModal } from "./TaskPanel"
 
 // 主区域窄于这个宽度，两列卡片改成单列
@@ -125,7 +126,7 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest,
             onAdd={() => setAdding(true)}
             onViewAll={() => onNavigate("tasks")}
           />
-          <ScheduleCard loaded={loaded} tasks={pending} reminders={reminders} onViewAll={() => onNavigate("reminders")} />
+          <ScheduleCard loaded={loaded} tasks={tasks} reminders={reminders} onToggle={toggleDone} onChanged={fetchAll} onViewAll={() => onNavigate("reminders")} />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: singleColumn ? "1fr" : "1.6fr 1fr", gap: 16 }}>
@@ -248,44 +249,180 @@ function KeyTasksCard({ loaded, keyTasks, pendingCount, doneToday, goals, onTogg
   )
 }
 
-// 今日安排：今天的提醒 + 今天到期的任务，按时间排。最近一个还没到点的高亮成"下一项"，已经过点的变灰
-function ScheduleCard({ loaded, tasks, reminders, onViewAll }) {
-  const { colors } = useTheme()
+const DEFAULT_BLOCK_MINUTES = 30   // 没填预计时长的任务，时间块按半小时画（跟后端排法一致）
+const MIN_FREE_MINUTES = 45        // 两项之间空出这么久以上，才显示成"空闲"
+
+const minutesBetween = (a, b) => Math.round((b - a) / 60000)
+function durationText(min) {
+  if (min < 60) return `${min} 分钟`
+  const h = Math.floor(min / 60), m = min % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
+}
+
+// 今日安排：
+// - 有"计划开始"的任务画成时间块（开始 + 预计时长），今天的提醒和今天截止的任务是时间点；
+// - 正在进行的时间块高亮成"进行中 · 还剩 N 分钟"，可以直接点完成；没有进行中的就高亮下一项；
+// - 两项之间空出 45 分钟以上显示"空闲"；
+// - 右上角"让知行排一下"：知行按优先级、时长、截止时间排出草稿，确认后才写进任务。
+function ScheduleCard({ loaded, tasks, reminders, onToggle, onChanged, onViewAll }) {
+  const { colors, darkButtonStyle, buttonStyle } = useTheme()
+  const [draft, setDraft] = useState(null)       // null | { items, note }
+  const [planning, setPlanning] = useState(false)
+  const [planError, setPlanError] = useState(null)
   const now = new Date()
-  const items = [
-    ...reminders.filter(r => isToday(r.remind_at)).map(r => ({ key: `r${r.id}`, at: new Date(r.remind_at), title: r.message, kind: "提醒" })),
-    ...tasks.filter(t => isToday(t.due_at)).map(t => ({ key: `t${t.id}`, at: new Date(t.due_at), title: t.title, kind: t.estimate_minutes ? `任务 · ${t.estimate_minutes} 分钟` : "任务截止" })),
-  ].sort((a, b) => a.at - b.at)
-  const next = items.find(i => i.at >= now)
-  const rest = items.filter(i => i !== next)
-  const minutesLeft = next ? Math.round((next.at - now) / 60000) : 0
-  const leftText = minutesLeft < 60 ? `还有 ${minutesLeft} 分钟` : `还有 ${Math.floor(minutesLeft / 60)} 小时${minutesLeft % 60 ? ` ${minutesLeft % 60} 分` : ""}`
+
+  const blocks = tasks
+    .filter(t => t.planned_start && isToday(t.planned_start))
+    .map(t => {
+      const start = new Date(t.planned_start)
+      const end = new Date(start.getTime() + (t.estimate_minutes || DEFAULT_BLOCK_MINUTES) * 60000)
+      return { key: `b${t.id}`, type: "block", start, end, title: t.title, task: t, done: t.done }
+    })
+  const points = [
+    ...reminders.filter(r => isToday(r.remind_at)).map(r => ({ key: `r${r.id}`, type: "point", start: new Date(r.remind_at), title: r.message, kind: "提醒" })),
+    ...tasks.filter(t => !t.done && isToday(t.due_at) && !(t.planned_start && isToday(t.planned_start)))
+      .map(t => ({ key: `d${t.id}`, type: "point", start: new Date(t.due_at), title: t.title, kind: "截止" })),
+  ]
+  const items = [...blocks, ...points].sort((a, b) => a.start - b.start)
+  const current = blocks.find(b => !b.done && b.start <= now && now < b.end)
+  const next = items.find(i => !i.done && i.start > now)
+  const highlight = current ?? next
+  const rest = items.filter(i => i !== highlight)
+  const unscheduled = tasks.filter(t => !t.done && !(t.planned_start && isToday(t.planned_start))).length
+
+  // 第一段超过 45 分钟的空档（只看从现在往后的时间）
+  let freeSlot = null
+  let cursor = current ? current.end : now
+  for (const i of items.filter(i => !i.done && i.start > now)) {
+    if (minutesBetween(cursor, i.start) >= MIN_FREE_MINUTES) { freeSlot = { from: cursor, to: i.start }; break }
+    cursor = i.type === "block" ? (i.end > cursor ? i.end : cursor) : cursor
+  }
+
+  const suggest = async () => {
+    setPlanning(true)
+    setPlanError(null)
+    try {
+      setDraft(await apiFetch("/schedule/today/suggest", { method: "POST" }))
+    } catch (e) {
+      setPlanError(e.message)
+    } finally {
+      setPlanning(false)
+    }
+  }
+
+  const applyDraft = async () => {
+    try {
+      await apiFetch("/schedule/today/apply", { method: "POST", body: { items: draft.items.map(i => ({ task_id: i.task_id, start: i.start })) } })
+      setDraft(null)
+      onChanged()
+    } catch (e) {
+      setPlanError(e.message)
+      setDraft(null)
+    }
+  }
+
+  const planButton = unscheduled > 0 && (
+    <button onClick={suggest} disabled={planning} style={{ border: "none", background: "none", padding: 0, cursor: planning ? "wait" : "pointer", fontSize: 14, color: colors.ink, fontFamily: "inherit" }}>
+      {planning ? "知行在排…" : blocks.length ? "重新排一下" : "让知行排一下"}
+    </button>
+  )
 
   return (
-    <Card eyebrow="今日安排" title="当前与下一项" links={[{ label: "全部提醒", onClick: onViewAll }]}>
+    <Card eyebrow="今日安排" title="当前与下一项" extra={planButton} links={[{ label: "全部提醒", onClick: onViewAll }]}>
+      {planError && <div style={{ marginBottom: 8 }}><LoadError message={planError} /></div>}
+
       {loaded && items.length === 0 && (
-        <Empty>今天没有定时的安排。给提醒或任务的截止时间设在今天，就会出现在这里</Empty>
-      )}
-      {next && (
-        <div style={{ background: colors.neutralSoft, borderLeft: `3px solid ${colors.text}`, borderRadius: 4, padding: "12px 16px", marginBottom: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: colors.textSecondary }}>
-            <span>{timeOf(next.at)} · {next.kind}</span>
-            <span style={{ color: colors.ink }}>{leftText}</span>
+        <div style={{ padding: "10px 0 4px" }}>
+          <div style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 1.6 }}>
+            {unscheduled > 0
+              ? `今天还没排时间，手上有 ${unscheduled} 项待办。让知行按优先级和预计时长排进今天剩下的时间？`
+              : "今天没有安排，也没有待办。"}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: colors.text, marginTop: 6 }}>{next.title}</div>
+          {unscheduled > 0 && (
+            <button onClick={suggest} disabled={planning} style={{ ...darkButtonStyle, marginTop: 12, cursor: planning ? "wait" : "pointer" }}>
+              {planning ? "知行在排…" : "让知行排一下今天"}
+            </button>
+          )}
         </div>
       )}
+
+      {highlight && (
+        <div style={{ background: colors.neutralSoft, borderLeft: `3px solid ${colors.text}`, borderRadius: 4, padding: "12px 16px", marginBottom: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: colors.textSecondary }}>
+            <span>
+              {highlight.type === "block" ? `${timeOf(highlight.start)}–${timeOf(highlight.end)}` : `${timeOf(highlight.start)} · ${highlight.kind}`}
+            </span>
+            <span style={{ color: colors.ink }}>
+              {highlight === current
+                ? `进行中 · 还剩 ${durationText(minutesBetween(now, current.end))}`
+                : `${durationText(minutesBetween(now, highlight.start))}后`}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: colors.text }}>{highlight.title}</div>
+            {highlight === current && (
+              <button onClick={() => onToggle(current.task)} style={{ ...buttonStyle, padding: "4px 12px", fontSize: 13 }}>完成</button>
+            )}
+          </div>
+        </div>
+      )}
+
       {rest.map((i, idx) => {
-        const past = i.at < now
+        const past = i.type === "block" ? i.end <= now : i.start <= now
+        const faded = past || i.done
+        const showFreeBefore = freeSlot && freeSlot.to.getTime() === i.start.getTime()
+        const label = i.done ? "已完成" : past ? "已过" : i.type === "block" ? durationText(minutesBetween(i.start, i.end)) : i.kind
         return (
-          <div key={i.key} style={{ display: "flex", alignItems: "baseline", gap: 16, padding: "11px 0", borderBottom: idx < rest.length - 1 ? `1px solid ${colors.borderLight}` : "none", opacity: past ? 0.5 : 1 }}>
-            <span style={{ fontSize: 15, color: colors.text, width: 48, flexShrink: 0 }}>{timeOf(i.at)}</span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: colors.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.title}</span>
-            <span style={{ fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{past ? "已过" : i.kind}</span>
+          <div key={i.key}>
+            {showFreeBefore && <FreeRow slot={freeSlot} />}
+            <div style={{ display: "flex", alignItems: "baseline", gap: 14, padding: "10px 0", borderBottom: idx < rest.length - 1 ? `1px solid ${colors.borderLight}` : "none", opacity: faded ? 0.5 : 1 }}>
+              <span style={{ fontSize: 14, color: colors.text, width: i.type === "block" ? 92 : 48, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                {i.type === "block" ? `${timeOf(i.start)}–${timeOf(i.end)}` : timeOf(i.start)}
+              </span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: colors.text, textDecoration: i.done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.title}</span>
+              <span style={{ fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{label}</span>
+            </div>
           </div>
         )
       })}
+
+      {draft && (
+        <Modal
+          title="知行的安排建议"
+          onClose={() => setDraft(null)}
+          footer={
+            <>
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setDraft(null)} style={buttonStyle}>取消</button>
+              <button onClick={applyDraft} disabled={draft.items.length === 0} style={{ ...darkButtonStyle, ...(draft.items.length === 0 ? disabledStyle : {}) }}>采用这个安排</button>
+            </>
+          }
+        >
+          {draft.note && <div style={{ fontSize: 13.5, color: colors.textSecondary, lineHeight: 1.6, background: colors.inkSoft, borderRadius: 6, padding: "10px 12px" }}>{draft.note}</div>}
+          {draft.items.length === 0 && <div style={{ fontSize: 14, color: colors.textMuted }}>没有排出可用的时间段。</div>}
+          <div>
+            {draft.items.map((i, idx) => (
+              <div key={i.task_id} style={{ display: "flex", alignItems: "baseline", gap: 14, padding: "9px 0", borderBottom: idx < draft.items.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
+                <span style={{ fontSize: 14, color: colors.text, width: 92, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{timeOf(i.start)}–{timeOf(i.end)}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: colors.text }}>{i.title}</span>
+                <span style={{ fontSize: 12, color: colors.textMuted }}>{durationText(i.minutes)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: colors.textMuted }}>采用后会写进这些任务的「计划开始」，之后在任务弹窗里也能改。</div>
+        </Modal>
+      )}
     </Card>
+  )
+}
+
+function FreeRow({ slot }) {
+  const { colors } = useTheme()
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 14, padding: "8px 0", borderBottom: `1px dashed ${colors.borderLight}` }}>
+      <span style={{ fontSize: 13, color: colors.textMuted, width: 92, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{timeOf(slot.from)}–{timeOf(slot.to)}</span>
+      <span style={{ flex: 1, fontSize: 13, color: colors.textMuted }}>空闲 {durationText(minutesBetween(slot.from, slot.to))}</span>
+    </div>
   )
 }
 
@@ -345,7 +482,7 @@ function WeekCard({ tasks, journal, onReview }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 14 }}>
         {cells.map(c => (
           <div key={c.label} style={{ background: colors.neutralSoft, borderRadius: 6, padding: "12px 6px", textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: colors.text }}>{c.value}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: colors.text, whiteSpace: "nowrap" }}>{c.value}</div>
             <div style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 4 }}>{c.label}</div>
           </div>
         ))}

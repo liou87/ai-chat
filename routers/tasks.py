@@ -15,6 +15,7 @@ class CreateTaskRequest(BaseModel):
     goal_id: Optional[int] = None
     priority: Optional[str] = None           # high / medium / low，不传默认 medium
     estimate_minutes: Optional[int] = None
+    planned_start: Optional[datetime] = None  # 计划几点开始做
 
 
 class UpdateTaskRequest(BaseModel):
@@ -24,6 +25,7 @@ class UpdateTaskRequest(BaseModel):
     goal_id: Optional[int] = None
     priority: Optional[str] = None
     estimate_minutes: Optional[int] = None
+    planned_start: Optional[datetime] = None
 
 
 @router.get("/tasks")
@@ -36,7 +38,8 @@ async def get_tasks(status: str = "all"):
 async def create_task(request: CreateTaskRequest):
     async with SessionLocal() as db:
         return await tasks_service.create_task(db, title=request.title, due_at=request.due_at, goal_id=request.goal_id,
-                                               priority=request.priority, estimate_minutes=request.estimate_minutes)
+                                               priority=request.priority, estimate_minutes=request.estimate_minutes,
+                                               planned_start=request.planned_start)
 
 
 @router.patch("/tasks/{task_id}/complete")

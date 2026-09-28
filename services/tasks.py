@@ -15,6 +15,7 @@ def _serialize(task: Task) -> dict:
         "goal_id": task.goal_id,
         "priority": task.priority,
         "estimate_minutes": task.estimate_minutes,
+        "planned_start": task.planned_start.isoformat() if task.planned_start else None,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         # 完成状态变化时会更新这个时间，总览的"本周完成"按它近似判断是哪天完成的
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
@@ -39,9 +40,10 @@ def _clean_minutes(value) -> Optional[int]:
 
 async def create_task(db: AsyncSession, title: str, due_at: Optional[datetime] = None,
                        goal_id: Optional[int] = None, priority: Optional[str] = None,
-                       estimate_minutes: Optional[int] = None) -> dict:
+                       estimate_minutes: Optional[int] = None, planned_start: Optional[datetime] = None) -> dict:
     task = Task(title=title, due_at=clock.to_local(due_at), goal_id=goal_id,
-                priority=_clean_priority(priority), estimate_minutes=_clean_minutes(estimate_minutes))
+                priority=_clean_priority(priority), estimate_minutes=_clean_minutes(estimate_minutes),
+                planned_start=clock.to_local(planned_start))
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -71,7 +73,7 @@ async def complete_task(db: AsyncSession, task_id: int) -> Optional[dict]:
 
 
 # update_task 允许改的字段；没传的字段保持不变，传 None 表示清空（比如去掉截止时间、取消挂靠目标）
-UPDATABLE_FIELDS = ("title", "done", "due_at", "goal_id", "priority", "estimate_minutes")
+UPDATABLE_FIELDS = ("title", "done", "due_at", "goal_id", "priority", "estimate_minutes", "planned_start")
 
 
 async def update_task(db: AsyncSession, task_id: int, changes: dict) -> Optional[dict]:
@@ -81,7 +83,7 @@ async def update_task(db: AsyncSession, task_id: int, changes: dict) -> Optional
     for field, value in changes.items():
         if field not in UPDATABLE_FIELDS:
             continue
-        if field == "due_at":
+        if field in ("due_at", "planned_start"):
             value = clock.to_local(value)
         if field == "title" and not (value or "").strip():
             continue  # 标题不允许改成空

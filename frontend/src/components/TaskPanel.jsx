@@ -179,9 +179,10 @@ function TaskPanel({ refreshKey }) {
 function TaskRow({ t, goalTitle, last, onOpen, onToggleDone }) {
   const { colors } = useTheme()
   const overdue = isOverdue(t)
-  // 附加信息：所属目标 · 预计时长 · 截止时间，有什么显示什么
+  // 附加信息：所属目标 · 计划开始 · 预计时长 · 截止时间，有什么显示什么
   const meta = [
     goalTitle,
+    t.planned_start && !t.done ? `计划 ${formatShort(t.planned_start)}` : null,
     t.estimate_minutes ? `${t.estimate_minutes} 分钟` : null,
     t.due_at ? `截止 ${formatShort(t.due_at)}${overdue ? "（已延期）" : ""}` : null,
   ].filter(Boolean)
@@ -219,13 +220,14 @@ function TaskRow({ t, goalTitle, last, onOpen, onToggleDone }) {
   )
 }
 
-// 新增/编辑任务的弹窗：标题、优先级、预计时长、截止时间、挂靠目标；编辑时左下角有删除
+// 新增/编辑任务的弹窗：标题、优先级、预计时长、计划开始、截止时间、挂靠目标；编辑时左下角有删除
 export function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
   const { inputStyle, buttonStyle, darkButtonStyle, colors } = useTheme()
   const [title, setTitle] = useState(task?.title ?? "")
   const [priority, setPriority] = useState(task?.priority ?? "medium")
   const [minutes, setMinutes] = useState(task?.estimate_minutes ? String(task.estimate_minutes) : "")
   const [dueAt, setDueAt] = useState(toInputValue(task?.due_at))
+  const [plannedStart, setPlannedStart] = useState(toInputValue(task?.planned_start))
   const [goalId, setGoalId] = useState(task?.goal_id ?? "")
   const [saving, setSaving] = useState(false)
 
@@ -239,6 +241,7 @@ export function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
       priority,
       estimate_minutes: minutes ? Number(minutes) : null,
       due_at: dueAt || null,
+      planned_start: plannedStart || null,
       goal_id: goalId === "" ? null : Number(goalId),
     })
     setSaving(false)
@@ -274,11 +277,14 @@ export function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
           </Field>
         </div>
         <div style={{ flex: 1.4 }}>
-          <Field label="截止时间">
-            <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} style={inputStyle} />
+          <Field label="计划开始">
+            <input type="datetime-local" value={plannedStart} onChange={e => setPlannedStart(e.target.value)} style={inputStyle} />
           </Field>
         </div>
       </div>
+      <Field label="截止时间" hint="计划开始 + 预计时长会在总览的「今日安排」里显示成时间块">
+        <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} style={inputStyle} />
+      </Field>
       <Field label="所属目标">
         <select value={goalId} onChange={e => setGoalId(e.target.value)} style={inputStyle}>
           <option value="">不挂靠目标</option>
