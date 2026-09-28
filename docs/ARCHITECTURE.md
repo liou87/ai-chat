@@ -183,7 +183,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 会话相关：GET /api/sessions 拿会话列表，GET /api/sessions/{id}/messages 拿某个会话的历史消息，DELETE /api/sessions/{id} 删除会话（连同消息和 agent_traces）。
 
-任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id} 修改标题、截止时间、挂靠目标、优先级（high/medium/low）、预计时长（estimate_minutes，分钟）、完成状态（只改请求里出现的字段，传 null 表示清空），PATCH /api/tasks/{id}/complete 标记完成（旧接口，保留给 agent 工具用），DELETE /api/tasks/{id} 删除。
+任务相关：GET 和 POST /api/tasks 分别是列表和新建（POST 可以带 goal_id），PATCH /api/tasks/{id} 修改标题、截止时间、挂靠目标、优先级（high/medium/low）、预计时长（estimate_minutes，分钟）、计划开始时间（planned_start）、完成状态（只改请求里出现的字段，传 null 表示清空），PATCH /api/tasks/{id}/complete 标记完成（旧接口，保留给 agent 工具用），DELETE /api/tasks/{id} 删除。
 
 目标相关：GET 和 POST /api/goals 是列表和新建，PATCH /api/goals/{id} 改标题、说明（界面上叫"下一里程碑"）和状态；月目标、周目标的上级是可选的，PATCH /api/goals/{id}/progress 更新进度，DELETE /api/goals/{id} 删除（级联删子目标）。
 
@@ -191,7 +191,9 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 提醒相关：GET 和 POST /api/reminders 是列表和新建，GET /api/reminders/due 拿已经到期、还没标记已读的提醒，前端轮询用这个接口，PATCH /api/reminders/{id}/acknowledge 标记已读（顶部条幅的"知道了"，提醒本身保留），DELETE /api/reminders/{id} 删除。
 
-简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份，POST /api/digest/today/regenerate 按现在的数据重新生成并覆盖；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样，POST /api/hot-topics/today/regenerate 重新收集，GET /api/hot-topics/dates 列出有记录的日期，GET /api/hot-topics/{YYYY-MM-DD} 查历史某一天。
+简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份，POST /api/digest/today/regenerate 按现在的数据重新生成并覆盖；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样，POST /api/hot-topics/today/regenerate 重新收集，GET /api/hot-topics/dates 列出有记录的日期，GET /api/hot-topics/{YYYY-MM-DD} 查历史某一天。热点分两组各有名额：Tavily 新闻模式搜最近两天的中英文消息挑 5 条，GitHub 最近一个月新建的 agent/RAG 仓库挑 3 个，最近 7 天推过的链接不再重复，每条带 kind（news/github）。
+
+今日安排：POST /api/schedule/today/suggest 让 DeepSeek 把待办按优先级、预计时长、截止时间排进今天剩下的时间（凌晨 6 点前从早上 8 点排起），只返回草稿不写库，结果在 services/schedule.py 里再校验（不早于现在、不重叠、不超过 23 点），模型失败时退回贪心排法；POST /api/schedule/today/apply 在用户确认后把开始时间写进任务的 planned_start。
 
 时间：所有"现在几点"都走 services/clock.py，按环境变量 APP_TIMEZONE（默认 Australia/Sydney）算，不依赖服务器本地时区；库里存的是不带时区的本地时间，外部传进来带时区的时间（比如 agent 给的 ISO 字符串）会先换算。前端 datetime-local 控件给的是浏览器本地时间，所以 APP_TIMEZONE 要跟使用者所在时区一致。
 
