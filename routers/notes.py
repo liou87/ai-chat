@@ -56,6 +56,16 @@ async def sync_notion():
         return result
 
 
+# 单条笔记/资料的全文（资料库列表和聊天里的引用标签只有预览，点开时取全文）
+@router.get("/notes/{note_id}")
+async def get_note(note_id: int):
+    async with SessionLocal() as db:
+        note = await notes_service.get_note(db, note_id)
+        if note is None:
+            raise HTTPException(status_code=404, detail="笔记不存在")
+        return note
+
+
 @router.post("/notes/weekly-review")
 async def save_weekly_review(request: WeeklyReviewRequest):
     if not request.content.strip():

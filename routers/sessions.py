@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, delete
 from database import SessionLocal, ChatSession, Message, AgentTrace
+from services import memory as memory_service
 from services.auth import verify_api_key
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
@@ -33,6 +34,7 @@ async def delete_session(session_id: int):
             raise HTTPException(status_code=404, detail="会话不存在")
         await db.execute(delete(Message).where(Message.session_id == session_id))
         await db.execute(delete(AgentTrace).where(AgentTrace.session_id == session_id))
+        await memory_service.delete_session_memory(db, session_id)
         await db.delete(session)
         await db.commit()
         return {"deleted": True}

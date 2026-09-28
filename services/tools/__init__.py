@@ -6,7 +6,8 @@ from .notes_tools import TOOLS as _NOTES_TOOLS
 from .reminders_tools import TOOLS as _REMINDERS_TOOLS
 from .goals_tools import TOOLS as _GOALS_TOOLS
 from .websearch_tools import TOOLS as _WEBSEARCH_TOOLS
+from .memory_library_tools import TOOLS as _MEMORY_LIBRARY_TOOLS
 
-TOOLS = _TASKS_TOOLS + _NOTES_TOOLS + _REMINDERS_TOOLS + _GOALS_TOOLS + _WEBSEARCH_TOOLS
+TOOLS = _TASKS_TOOLS + _NOTES_TOOLS + _REMINDERS_TOOLS + _GOALS_TOOLS + _WEBSEARCH_TOOLS + _MEMORY_LIBRARY_TOOLS
 TOOL_SCHEMAS = [t["schema"] for t in TOOLS]
 TOOL_HANDLERS = {t["schema"]["function"]["name"]: t["handler"] for t in TOOLS}

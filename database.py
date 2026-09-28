@@ -109,6 +109,7 @@ class Note(Base):
     external_id = Column(String(100), nullable=True, index=True)   # 来源系统里的 id（比如 Notion 页面 id）
     external_updated_at = Column(DateTime, nullable=True)       # 来源系统的最后编辑时间（UTC），用于增量同步判断
     structured_data = Column(Text, nullable=True)               # 日记复盘的引导问答+评分，JSON 文本，只有 journal 分类会用到
+    url = Column(String(1000), nullable=True)                   # 资料库条目的原文链接（热点收藏、导入的网页、GitHub 仓库）
     created_at = Column(DateTime, default=clock_now)
     updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
     def __repr__(self):
@@ -131,6 +132,27 @@ class NoteChunk(Base):
 Index(
     "ix_note_chunks_embedding_hnsw",
     NoteChunk.embedding,
+    postgresql_using="hnsw",
+    postgresql_ops={"embedding": "vector_cosine_ops"},
+)
+
+# memory_chunks 表：对话记忆。每轮对话结束后把"用户问的 + 知行答的"存一条、算一个向量，
+# 知行需要回忆以前聊过什么时用 search_memory 工具检索。删会话时按 session_id 一起删
+class MemoryChunk(Base):
+    __tablename__ = "memory_chunks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, index=True, nullable=False)
+    content = Column(Text, nullable=False)                      # "用户：…… 知行：……"一问一答，太长的截断
+    embedding = Column(Vector(512), nullable=False)
+    created_at = Column(DateTime, default=clock_now)
+    def __repr__(self):
+        return f"MemoryChunk(session_id={self.session_id}, id={self.id})"
+
+
+Index(
+    "ix_memory_chunks_embedding_hnsw",
+    MemoryChunk.embedding,
     postgresql_using="hnsw",
     postgresql_ops={"embedding": "vector_cosine_ops"},
 )

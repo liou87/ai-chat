@@ -11,6 +11,8 @@ import GoalPanel from "./components/GoalPanel"
 import NotePanel from "./components/NotePanel"
 import ReminderPanel from "./components/ReminderPanel"
 import HotTopicsPanel from "./components/HotTopicsPanel"
+import LibraryPanel from "./components/LibraryPanel"
+import NoteViewerModal from "./components/NoteViewerModal"
 import AssistantAvatar from "./components/AssistantAvatar"
 import { PERSONA_NAME } from "./persona"
 import ReminderBanner from "./components/ReminderBanner"
@@ -41,7 +43,9 @@ const TOOL_LABELS = {
   complete_task: "完成任务",
   delete_task: "删除任务",
   save_note: "保存笔记",
-  search_notes: "搜索笔记",
+  search_notes: "检索知识库",
+  search_memory: "回忆以前的对话",
+  save_link: "收藏链接",
   sync_notion_notes: "同步 Notion",
   add_journal_entry: "写日记",
   get_weekly_review: "生成周复盘",
@@ -102,6 +106,7 @@ const NAV_ITEMS = [
   { key: "goals", label: "目标", icon: "goals", accent: moduleAccents.goals },
   { key: "tasks", label: "任务", icon: "tasks", accent: moduleAccents.tasks },
   { key: "notes", label: "笔记", icon: "notes", accent: moduleAccents.notes },
+  { key: "library", label: "资料库", icon: "library", accent: moduleAccents.library },
   { key: "journal", label: "日记", icon: "journal", accent: moduleAccents.journal },
   { key: "reminders", label: "提醒", icon: "reminders", accent: moduleAccents.reminders },
   { key: "hotTopics", label: "热点", icon: "hotTopics", accent: moduleAccents.hotTopics },
@@ -120,6 +125,7 @@ function App() {
   const [openMenu, setOpenMenu] = useState(null)  // null | "history" | "more"，聊天头部的两个下拉
   const [historyLoadError, setHistoryLoadError] = useState(null)
   const [chatNotice, setChatNotice] = useState(null)  // 聊天区底部的一行状态，比如"周复盘已存入日记"
+  const [viewingNote, setViewingNote] = useState(null)  // 聊天里点了引用标签，要看全文的笔记/资料 id
 
   // ---- 布局：侧栏窄屏收起、聊天面板拖动调宽 ----
   const windowWidth = useWindowWidth()
@@ -442,6 +448,12 @@ function App() {
             <ReminderPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
+      case "library":
+        return (
+          <ModulePage width={900}>
+            <LibraryPanel refreshKey={workbenchRefreshKey} />
+          </ModulePage>
+        )
       case "hotTopics":
         return (
           <ModulePage eyebrow="AI / agent 领域，每天自动收集一次" title="今日热点" width={860}>
@@ -475,6 +487,7 @@ function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif", background: colors.pageBg, color: colors.text, userSelect: resizingChat ? "none" : undefined, cursor: resizingChat ? "col-resize" : undefined }}>
       <ReminderBanner refreshKey={workbenchRefreshKey} onChange={() => setWorkbenchRefreshKey(k => k + 1)} />
+      {viewingNote && <NoteViewerModal noteId={viewingNote} onClose={() => setViewingNote(null)} />}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
         {/* 侧栏：品牌标 + 总览/六模块导航（图标+文字），不用悬停就知道每个入口是什么 + 主题切换 + 头像。
@@ -663,12 +676,7 @@ function App() {
                       }
                       // 工具调用/结果这类 part 的 type 是 "tool-<工具名>"，只是一个不抢眼的小提示
                       if (part.type.startsWith("tool-")) {
-                        return (
-                          <span key={pi} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: part.state === "output-error" ? colors.danger : colors.textMuted }}>
-                            <ModuleIcon name="tool" color="currentColor" size={11} />
-                            {toolStatusText(part)}
-                          </span>
-                        )
+                        return <ToolPart key={pi} part={part} onOpenNote={setViewingNote} onOpenSession={loadSession} />
                       }
                       return null
                     })}
@@ -733,6 +741,46 @@ function App() {
           </aside>
         )}
       </div>
+    </div>
+  )
+}
+
+// 聊天里的一次工具调用：一行"正在… / 已…"的小字；检索知识库和回忆对话的结果下面再列出引用标签，
+// 让人看得到知行参考了哪些资料——点资料看全文，点以前的对话直接打开那个会话。
+// 只有当前这次对话里有：历史会话只存了文字，没存工具调用
+function ToolPart({ part, onOpenNote, onOpenSession }) {
+  const { colors } = useTheme()
+  const name = part.type.slice(5)
+  const out = part.state === "output-available" ? part.output : null
+  const citations = name === "search_notes" && out?.notes?.length
+    ? out.notes.map(n => ({ key: `n${n.id}`, label: n.title, tag: n.source, onClick: () => onOpenNote(n.id) }))
+    : name === "search_memory" && out?.memories?.length
+      ? [...new Map(out.memories.map(m => [m.session_id, m])).values()].map(m => ({
+          key: `m${m.session_id}`, label: m.session_title, tag: m.date ? `${Number(m.date.slice(5, 7))}月${Number(m.date.slice(8, 10))}日的对话` : "以前的对话",
+          onClick: () => onOpenSession(m.session_id),
+        }))
+      : []
+  return (
+    <div>
+      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: part.state === "output-error" ? colors.danger : colors.textMuted }}>
+        <ModuleIcon name="tool" color="currentColor" size={11} />
+        {toolStatusText(part)}{citations.length > 0 && ` · 参考了 ${citations.length} 条`}
+      </span>
+      {citations.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+          {citations.map(c => (
+            <button
+              key={c.key}
+              onClick={c.onClick}
+              title={c.label}
+              style={{ display: "inline-flex", alignItems: "baseline", gap: 5, maxWidth: 260, border: `1px solid ${colors.cardBorder}`, background: colors.cardBg, borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              <span style={{ fontSize: 11, color: colors.ink, flexShrink: 0 }}>{c.tag}</span>
+              <span style={{ fontSize: 12, color: colors.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

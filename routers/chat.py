@@ -11,6 +11,7 @@ from services.auth import verify_api_key
 from services.agent import run_agent, run_agent_stream
 from services import persona, clock
 from services.session_title import generate_title
+from services import memory as memory_service
 from database import SessionLocal, ChatSession, Message
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,10 @@ def _build_system_prompt() -> str:
         f"当前时间是 {now.strftime('%Y-%m-%d %H:%M:%S')}（{'周' + '一二三四五六日'[now.weekday()]}）。"
         "可以帮忙管理任务清单，记笔记、检索笔记，记日记/复盘，设置日程提醒，以及联网搜索。"
         "涉及新建、查询、完成、删除任务时，必须调用对应的工具来操作，不要凭空编造任务数据或直接臆测结果。"
-        "用户让你记点什么、记录下来时，调用 save_note；用户问的问题可能之前记过笔记，"
-        "先调用 search_notes 检索一下，再结合检索结果回答，不要凭记忆瞎编。"
+        "用户让你记点什么、记录下来时，调用 save_note；用户问的问题可能之前记过笔记或收藏过相关资料，"
+        "先调用 search_notes 检索知识库（包括笔记、日记和资料库），再结合检索结果回答，不要凭记忆瞎编；"
+        "用了检索结果就在回答里说明出处，出处只写资料标题，不要写 id 之类的内部编号。用户提到以前聊过的事时，调用 search_memory 回忆以前的对话。"
+        "用户给了一个链接想存下来时，调用 save_link 收藏进资料库。"
         "用户想记日记/复盘/反思时，调用 add_journal_entry；用户想要周复盘、总结这周做了什么时，"
         "先调用 get_weekly_review 拿到这周的任务/日记/笔记原始数据，再自己组织语言生成总结，"
         "不要在工具返回的数据之外编造具体的事项。"
@@ -158,6 +161,9 @@ async def chat_stream(request: ChatRequest):
                 db.add(Message(session_id=session_id, role="assistant", content=reply))
                 await db.commit()
                 logger.info(f"流式回复完成，session_id: {session_id}")
+
+                # 这一问一答记进对话记忆（失败只记日志）；正文已经全部推给前端了，这一步只是晚一点点收尾
+                await memory_service.remember_turn(db, session_id, last_user_msg.content, reply)
 
                 if title_task is not None:
                     title = await title_task

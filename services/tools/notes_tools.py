@@ -11,9 +11,25 @@ async def _save_note(db: AsyncSession, args: dict) -> dict:
     )
 
 
+# 来源的中文名，给模型和前端引用标签用
+SOURCE_LABEL = {"local": "笔记", "notion": "Notion", "hot_topic": "热点收藏", "web": "网页", "github": "GitHub", "pdf": "PDF"}
+
+
 async def _search_notes(db: AsyncSession, args: dict) -> dict:
+    """
+    搜笔记、日记和资料库。只把命中的那一段（snippet）给模型，不给全文：资料库里一篇文章可能几万字，
+    全文塞进上下文会撑爆。前端的"参考了哪些资料"标签也用这里返回的 id/title/url/来源。
+    """
     results = await notes_service.search_notes(db, query=args["query"], top_k=args.get("top_k", 5))
-    return {"notes": results}
+    return {"notes": [{
+        "id": n["id"],
+        "title": n["title"],
+        "category": n["category"],
+        "source": SOURCE_LABEL.get(n["source"], n["source"]) if n["category"] != "journal" else "日记",
+        "url": n.get("url"),
+        "snippet": n["snippet"],
+        "score": n.get("score"),
+    } for n in results]}
 
 
 async def _sync_notion_notes(db: AsyncSession, args: dict) -> dict:
@@ -75,7 +91,8 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "search_notes",
-                "description": "基于语义在笔记知识库里检索相关内容，用户问的问题可能答案就在过去记的笔记里",
+                "description": "基于语义检索知识库：用户自己的笔记、日记，以及资料库里收藏的文章、GitHub 仓库、网页和 PDF。"
+                                "用户问的问题可能答案就在这些资料里；返回命中的片段和出处",
                 "parameters": {
                     "type": "object",
                     "properties": {

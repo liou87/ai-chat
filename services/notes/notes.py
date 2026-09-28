@@ -36,6 +36,7 @@ def _serialize(note: Note, with_score: Optional[float] = None) -> dict:
         "category": note.category,
         "source": note.source,
         "structured_data": json.loads(note.structured_data) if note.structured_data else None,
+        "url": note.url,
         "created_at": note.created_at.isoformat() if note.created_at else None,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }
@@ -78,11 +79,12 @@ async def _build_chunks(title: str, content: str) -> list:
 
 
 async def create_note(db: AsyncSession, title: str, content: str, category: str = "note",
-                       created_at: Optional[datetime] = None, structured_data: Optional[dict] = None) -> dict:
+                       created_at: Optional[datetime] = None, structured_data: Optional[dict] = None,
+                       source: str = "local", url: Optional[str] = None) -> dict:
     # 先算向量再开始写库，避免慢的推理过程占着事务
     chunks = await _build_chunks(title, content)
 
-    note = Note(title=title, content=content, category=category,
+    note = Note(title=title, content=content, category=category, source=source, url=url,
                 structured_data=json.dumps(structured_data, ensure_ascii=False) if structured_data else None)
     if created_at:
         note.created_at = created_at
@@ -237,10 +239,12 @@ async def search_notes(db: AsyncSession, query: str, top_k: int = 5, category: O
     语义检索在分块上做：用 HNSW 索引按余弦距离取最近的 top_k * OVERSAMPLE 个分块，
     再按笔记去重，每条笔记只保留得分最高的那个分块，最后取前 top_k 条笔记。
     按分类过滤发生在近似最近邻查找之后，所以过滤后结果可能少于 top_k，多取几倍分块能缓解。
+    每条结果带上命中的那个分块（snippet）：agent 工具只把 snippet 给模型，不给全文——
+    资料库里一篇文章可能几万字，全文塞进上下文会撑爆。
     """
     query_embedding = await embed_text(query)
     distance = NoteChunk.embedding.cosine_distance(query_embedding).label("distance")
-    stmt = select(NoteChunk.note_id, distance).join(Note, Note.id == NoteChunk.note_id)
+    stmt = select(NoteChunk.note_id, distance, NoteChunk.content).join(Note, Note.id == NoteChunk.note_id)
     if category:
         stmt = stmt.where(Note.category == category)
     stmt = stmt.order_by(distance).limit(top_k * OVERSAMPLE)
@@ -248,13 +252,19 @@ async def search_notes(db: AsyncSession, query: str, top_k: int = 5, category: O
     rows = (await db.execute(stmt)).all()
 
     # rows 已经按距离从近到远排好，每条笔记第一次出现的就是它得分最高的分块
-    best = {}
-    for note_id, dist in rows:
+    best, snippets = {}, {}
+    for note_id, dist, chunk_text in rows:
         if note_id not in best:
             best[note_id] = dist
+            snippets[note_id] = chunk_text
     note_ids = list(best)[:top_k]
     if not note_ids:
         return []
 
     notes = {n.id: n for n in (await db.execute(select(Note).where(Note.id.in_(note_ids)))).scalars().all()}
-    return [_serialize(notes[i], with_score=1 - best[i]) for i in note_ids if i in notes]
+    return [{**_serialize(notes[i], with_score=1 - best[i]), "snippet": snippets[i]} for i in note_ids if i in notes]
+
+
+async def get_note(db: AsyncSession, note_id: int) -> Optional[dict]:
+    note = await db.get(Note, note_id)
+    return _serialize(note) if note else None

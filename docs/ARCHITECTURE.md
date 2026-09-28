@@ -193,6 +193,10 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份，POST /api/digest/today/regenerate 按现在的数据重新生成并覆盖；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样，POST /api/hot-topics/today/regenerate 重新收集，GET /api/hot-topics/dates 列出有记录的日期，GET /api/hot-topics/{YYYY-MM-DD} 查历史某一天。热点分两组各有名额：Tavily 新闻模式搜最近两天的中英文消息挑 5 条，GitHub 最近一个月新建的 agent/RAG 仓库挑 3 个，最近 7 天推过的链接不再重复，每条带 kind（news/github）。
 
+资料库：GET /api/library 列出收藏的资料（只有预览），POST /api/library/url 收藏一个链接（GitHub 仓库取 README，其它网页用 Tavily Extract 抓正文并去掉开头的导航；标题优先用网页自带的 og:title/title；同一链接不重复收藏），POST /api/library/pdf 上传 PDF（请求体直接是文件字节，文件名在查询参数，pypdf 提取文字，4MB 以内，扫描版会报错），GET /api/notes/{id} 取单条全文。资料库跟笔记共用 notes/note_chunks 和同一套检索（category="library"，notes.url 存原文链接），所以 search_notes 工具会连资料库一起搜；工具只把命中的分块（snippet）给模型，不给全文。
+
+对话记忆：每轮对话结束后把"用户问的 + 知行答的"存进 memory_chunks（一轮一条、一个向量），search_memory 工具按语义检索以前的对话（排除当前会话），删会话时一起删；历史对话用 scripts/backfill_memory.py 补录。工具调用时 agent 循环会把当前会话 id 以 _session_id 放进参数。前端聊天里，检索知识库和回忆对话的工具结果显示成引用标签，点开看全文或打开那个会话（历史会话只存了文字，不显示引用）。
+
 今日安排：POST /api/schedule/today/suggest 让 DeepSeek 把待办按优先级、预计时长、截止时间排进今天剩下的时间（凌晨 6 点前从早上 8 点排起），只返回草稿不写库，结果在 services/schedule.py 里再校验（不早于现在、不重叠、不超过 23 点），模型失败时退回贪心排法；POST /api/schedule/today/apply 在用户确认后把开始时间写进任务的 planned_start。
 
 时间：所有"现在几点"都走 services/clock.py，按环境变量 APP_TIMEZONE（默认 Australia/Sydney）算，不依赖服务器本地时区；库里存的是不带时区的本地时间，外部传进来带时区的时间（比如 agent 给的 ISO 字符串）会先换算。前端 datetime-local 控件给的是浏览器本地时间，所以 APP_TIMEZONE 要跟使用者所在时区一致。

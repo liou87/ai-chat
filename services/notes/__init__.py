@@ -17,6 +17,7 @@ from .notes import (
     delete_missing_external,
     delete_note,
     search_notes,
+    get_note,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "delete_missing_external",
     "delete_note",
     "search_notes",
+    "get_note",
 ]

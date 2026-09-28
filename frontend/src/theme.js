@@ -77,6 +77,7 @@ export const moduleAccents = {
   journal: "#f59e0b",
   reminders: "#0d9488",
   hotTopics: "#f97316",
+  library: "#0ea5e9",
 }
 
 // 图标栏本身固定深色（不跟随明暗主题切换），未激活图标用这个中性灰

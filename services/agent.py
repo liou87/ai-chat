@@ -81,7 +81,8 @@ async def run_agent_stream(db: AsyncSession, session_id: int, turn_index: int, m
                 result = {"error": f"未知工具：{name}"}
             else:
                 try:
-                    result = await handler(db, args)
+                    # 当前会话 id 以 _session_id 带给工具（比如检索对话记忆时要排除当前会话），其它工具忽略它
+                    result = await handler(db, {**args, "_session_id": session_id})
                 except Exception:
                     logger.error(f"工具执行失败：{name}", exc_info=True)
                     result = {"error": "工具执行失败"}

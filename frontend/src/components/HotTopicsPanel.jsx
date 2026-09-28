@@ -16,6 +16,25 @@ function HotTopicsPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [attempt, setAttempt] = useState(0)  // 点"重试"时 +1，重新触发请求
+  // 收藏状态：url -> "saving" | "saved" | 出错信息。已经在资料库里的链接一进来就标成已收藏
+  const [saveState, setSaveState] = useState({})
+
+  useEffect(() => {
+    apiFetch("/library")
+      .then(list => setSaveState(Object.fromEntries(list.filter(i => i.url).map(i => [i.url, "saved"]))))
+      .catch(() => {})
+  }, [])
+
+  // 收藏进资料库：抓原文（仓库取 README）、分块建索引，知行以后能检索到；热点里的一句话理由也一起存
+  const collect = async (it) => {
+    setSaveState(s => ({ ...s, [it.url]: "saving" }))
+    try {
+      await apiFetch("/library/url", { method: "POST", body: { url: it.url, title: it.title, source: "hot_topic", summary: it.summary } })
+      setSaveState(s => ({ ...s, [it.url]: "saved" }))
+    } catch (e) {
+      setSaveState(s => ({ ...s, [it.url]: e.message }))
+    }
+  }
   const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
@@ -87,8 +106,8 @@ function HotTopicsPanel() {
 
       {!loading && !regenerating && !error && items.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <TopicGroup eyebrow="模型、产品、框架动态" title="最新消息" items={items.filter(it => kindOf(it) === "news")} />
-          <TopicGroup eyebrow="最近一个月新建的 agent / RAG 项目" title="GitHub 新项目" items={items.filter(it => kindOf(it) === "github")} />
+          <TopicGroup eyebrow="模型、产品、框架动态" title="最新消息" items={items.filter(it => kindOf(it) === "news")} saveState={saveState} onCollect={collect} />
+          <TopicGroup eyebrow="最近一个月新建的 agent / RAG 项目" title="GitHub 新项目" items={items.filter(it => kindOf(it) === "github")} saveState={saveState} onCollect={collect} />
         </div>
       )}
     </div>
@@ -98,8 +117,8 @@ function HotTopicsPanel() {
 // 以前存的热点没有 kind 字段，按链接判断
 const kindOf = (it) => it.kind ?? (it.url?.includes("github.com") ? "github" : "news")
 
-function TopicGroup({ eyebrow, title, items }) {
-  const { colors, panelCardStyle } = useTheme()
+function TopicGroup({ eyebrow, title, items, saveState, onCollect }) {
+  const { colors, panelCardStyle, buttonStyle } = useTheme()
   if (items.length === 0) return null
   return (
     <div style={{ ...panelCardStyle, padding: "18px 22px 6px" }}>
@@ -110,20 +129,31 @@ function TopicGroup({ eyebrow, title, items }) {
         const meta = kindOf(it) === "github"
           ? (it.stars != null ? `★ ${it.stars}` : "GitHub")
           : [it.source, it.published_date ? formatShort(it.published_date, { withTime: false }) : null].filter(Boolean).join(" · ")
+        const state = saveState[it.url]
+        const failed = state && state !== "saving" && state !== "saved"
         return (
-          <a
-            key={it.url || i}
-            href={it.url}
-            target="_blank"
-            rel="noreferrer"
-            style={{ display: "block", padding: "14px 0", borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none", textDecoration: "none" }}
-          >
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{it.title}</span>
-              {meta && <span style={{ fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{meta}</span>}
-            </div>
-            {it.summary && <div style={{ fontSize: 13.5, color: colors.textSecondary, marginTop: 5, lineHeight: 1.55 }}>{it.summary}</div>}
-          </a>
+          <div key={it.url || i} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 0", borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
+            <a href={it.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, textDecoration: "none" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{it.title}</span>
+                {meta && <span style={{ fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{meta}</span>}
+              </div>
+              {it.summary && <div style={{ fontSize: 13.5, color: colors.textSecondary, marginTop: 5, lineHeight: 1.55 }}>{it.summary}</div>}
+              {failed && <div style={{ fontSize: 12, color: colors.danger, marginTop: 4 }}>收藏失败：{state}</div>}
+            </a>
+            <button
+              onClick={() => onCollect(it)}
+              disabled={state === "saving" || state === "saved"}
+              title={state === "saved" ? "已在资料库里" : "收藏进资料库，知行以后能检索到"}
+              style={{
+                ...buttonStyle, padding: "4px 10px", fontSize: 12.5, flexShrink: 0,
+                color: state === "saved" ? colors.ink : colors.textSecondary,
+                cursor: state === "saving" ? "wait" : state === "saved" ? "default" : "pointer",
+              }}
+            >
+              {state === "saving" ? "收藏中…" : state === "saved" ? "已收藏" : "收藏"}
+            </button>
+          </div>
         )
       })}
     </div>
