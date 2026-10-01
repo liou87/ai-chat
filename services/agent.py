@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import AgentTrace
 from services.llm import ask_deepseek_with_tools_stream
@@ -11,7 +12,8 @@ MAX_STEPS = 5  # 最多允许模型连续调用几轮工具，防止死循环
 
 
 async def _log_trace(db: AsyncSession, session_id: int, turn_index: int, step_index: int,
-                      trace_type: str, name: str, payload: dict):
+                      trace_type: str, name: str, payload: dict, duration_ms: int | None = None,
+                      usage: dict | None = None):
     db.add(AgentTrace(
         session_id=session_id,
         turn_index=turn_index,
@@ -19,8 +21,15 @@ async def _log_trace(db: AsyncSession, session_id: int, turn_index: int, step_in
         type=trace_type,
         name=name,
         payload=json.dumps(payload, ensure_ascii=False, default=str),
+        duration_ms=duration_ms,
+        prompt_tokens=(usage or {}).get("prompt_tokens"),
+        completion_tokens=(usage or {}).get("completion_tokens"),
     ))
     await db.commit()
+
+
+def _ms_since(start: float) -> int:
+    return int((time.monotonic() - start) * 1000)
 
 
 async def run_agent_stream(db: AsyncSession, session_id: int, turn_index: int, messages: list):
@@ -40,6 +49,8 @@ async def run_agent_stream(db: AsyncSession, session_id: int, turn_index: int, m
     for step in range(MAX_STEPS):
         text_parts = []
         tool_calls = None
+        usage = None
+        llm_start = time.monotonic()
 
         async for event in ask_deepseek_with_tools_stream(conversation, TOOL_SCHEMAS):
             if event["type"] == "text_delta":
@@ -47,7 +58,14 @@ async def run_agent_stream(db: AsyncSession, session_id: int, turn_index: int, m
                 yield {"type": "text_delta", "content": event["content"]}
             elif event["type"] == "tool_calls":
                 tool_calls = event["calls"]
-            # "done" 不用单独处理，纯文字的完整内容已经在 text_parts 里攒好了
+                usage = event.get("usage")
+            elif event["type"] == "done":
+                usage = event.get("usage")
+
+        # 每次模型调用记一条 llm 步骤：花了多久、用了多少 token、产出的是工具调用还是最终回复
+        await _log_trace(db, session_id, turn_index, step, "llm", None,
+                         {"tool_calls": [c["name"] for c in tool_calls]} if tool_calls else {"output": "text"},
+                         duration_ms=_ms_since(llm_start), usage=usage)
 
         if tool_calls is None:
             final_text = "".join(text_parts)
@@ -77,6 +95,7 @@ async def run_agent_stream(db: AsyncSession, session_id: int, turn_index: int, m
             yield {"type": "tool_call", "id": call["id"], "name": name, "args": args}
 
             handler = TOOL_HANDLERS.get(name)
+            tool_start = time.monotonic()
             if handler is None:
                 result = {"error": f"未知工具：{name}"}
             else:
@@ -87,7 +106,8 @@ async def run_agent_stream(db: AsyncSession, session_id: int, turn_index: int, m
                     logger.error(f"工具执行失败：{name}", exc_info=True)
                     result = {"error": "工具执行失败"}
 
-            await _log_trace(db, session_id, turn_index, step, "tool_result", name, {"result": result})
+            await _log_trace(db, session_id, turn_index, step, "tool_result", name, {"result": result},
+                             duration_ms=_ms_since(tool_start))
             yield {"type": "tool_result", "id": call["id"], "name": name, "result": result}
 
             conversation.append({

@@ -1,6 +1,8 @@
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import reminders as reminders_service
+from services import confirm
+from database import Reminder
 
 
 async def _set_reminder(db: AsyncSession, args: dict) -> dict:
@@ -17,8 +19,11 @@ async def _list_reminders(db: AsyncSession, args: dict) -> dict:
 
 
 async def _cancel_reminder(db: AsyncSession, args: dict) -> dict:
-    ok = await reminders_service.cancel_reminder(db, reminder_id=int(args["reminder_id"]))
-    return {"deleted": ok}
+    """不直接取消：返回待确认结果，前端弹确认卡片，用户确认后才执行（见 services/confirm.py）"""
+    reminder = await db.get(Reminder, int(args["reminder_id"]))
+    if reminder is None:
+        return {"error": f"未找到 id 为 {args['reminder_id']} 的提醒"}
+    return confirm.pending("cancel_reminder", reminder.id, reminder.message)
 
 
 TOOLS = [
@@ -59,7 +64,7 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "cancel_reminder",
-                "description": "取消某条提醒。如果不知道 id，先调用 list_reminders 查出来",
+                "description": "取消某条提醒（需要用户在聊天里点确认后才会真正执行）。如果不知道 id，先调用 list_reminders 查出来",
                 "parameters": {
                     "type": "object",
                     "properties": {

@@ -1,6 +1,8 @@
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import tasks as tasks_service
+from services import confirm
+from database import Task
 
 
 def _parse_time(value):
@@ -37,8 +39,11 @@ async def _complete_task(db: AsyncSession, args: dict) -> dict:
 
 
 async def _delete_task(db: AsyncSession, args: dict) -> dict:
-    ok = await tasks_service.delete_task(db, task_id=int(args["task_id"]))
-    return {"deleted": ok}
+    """不直接删：返回待确认结果，前端弹确认卡片，用户确认后才执行（见 services/confirm.py）"""
+    task = await db.get(Task, int(args["task_id"]))
+    if task is None:
+        return {"error": f"未找到 id 为 {args['task_id']} 的任务"}
+    return confirm.pending("delete_task", task.id, task.title)
 
 
 TOOLS = [
@@ -123,7 +128,7 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "delete_task",
-                "description": "删除某个任务。如果不知道任务 id，先调用 list_tasks 查出来",
+                "description": "删除某个任务（需要用户在聊天里点确认后才会真正执行）。如果不知道任务 id，先调用 list_tasks 查出来",
                 "parameters": {
                     "type": "object",
                     "properties": {

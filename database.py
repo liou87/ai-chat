@@ -89,12 +89,30 @@ class AgentTrace(Base):
     session_id = Column(Integer, index=True)                  # 关联到哪个会话
     turn_index = Column(Integer)                               # 这是本会话第几轮对话
     step_index = Column(Integer)                               # 本轮内的第几步
-    type = Column(String(20))                                  # tool_call / tool_result / final
-    name = Column(String(100), nullable=True)                  # 工具名（final 步骤为空）
+    type = Column(String(20))                                  # llm / tool_call / tool_result / final
+    name = Column(String(100), nullable=True)                  # 工具名（llm、final 步骤为空）
     payload = Column(Text)                                      # JSON 序列化的详情
+    duration_ms = Column(Integer, nullable=True)               # 这一步花了多久：llm 是一次模型调用，tool_result 是一次工具执行
+    prompt_tokens = Column(Integer, nullable=True)             # 只有 llm 步骤有：这次模型调用的输入/输出 token
+    completion_tokens = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"AgentTrace(session_id={self.session_id}, type={self.type!r}, name={self.name!r})"
+
+
+# profile_facts 表：核心记忆，关于用户的一条条事实（身份、目标、偏好、近况）。
+# 全部常驻在系统提示里，知行每次开口前就知道；知行在对话里发现新信息时自动增改，用户在"关于我"页也能改
+class ProfileFact(Base):
+    __tablename__ = "profile_facts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category = Column(String(20), nullable=False)               # identity / goal / preference / status
+    content = Column(String(300), nullable=False)
+    source = Column(String(10), default="agent", nullable=False)  # agent（知行记的）/ user（自己写的）
+    created_at = Column(DateTime, default=clock_now)
+    updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
+    def __repr__(self):
+        return f"ProfileFact({self.category}: {self.content!r})"
 
 # notes 表：笔记 / 知识库（category='note'）和日记复盘（category='journal'）共用，
 # 也是 Notion 只读导入（source='notion'）落地的表

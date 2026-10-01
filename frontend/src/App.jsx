@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import { remarkPlugins } from "./markdown"
 import { useChat } from "@ai-sdk/react"
@@ -13,6 +13,8 @@ import ReminderPanel from "./components/ReminderPanel"
 import HotTopicsPanel from "./components/HotTopicsPanel"
 import LibraryPanel from "./components/LibraryPanel"
 import NoteViewerModal from "./components/NoteViewerModal"
+import ProfilePanel from "./components/ProfilePanel"
+import TracePanel from "./components/TracePanel"
 import AssistantAvatar from "./components/AssistantAvatar"
 import { PERSONA_NAME } from "./persona"
 import ReminderBanner from "./components/ReminderBanner"
@@ -46,6 +48,9 @@ const TOOL_LABELS = {
   search_notes: "检索知识库",
   search_memory: "回忆以前的对话",
   save_link: "收藏链接",
+  remember_fact: "记住一件事",
+  update_fact: "更新记忆",
+  forget_fact: "删除记忆",
   sync_notion_notes: "同步 Notion",
   add_journal_entry: "写日记",
   get_weekly_review: "生成周复盘",
@@ -126,6 +131,12 @@ function App() {
   const [historyLoadError, setHistoryLoadError] = useState(null)
   const [chatNotice, setChatNotice] = useState(null)  // 聊天区底部的一行状态，比如"周复盘已存入日记"
   const [viewingNote, setViewingNote] = useState(null)  // 聊天里点了引用标签，要看全文的笔记/资料 id
+  // 每条回复对应哪个会话的第几轮（后端每轮结束推 data-trace），"查看轨迹"按它跳转
+  const [traceRefs, setTraceRefs] = useState({})
+  const [traceTarget, setTraceTarget] = useState(null)
+  const clearTraceTarget = useCallback(() => setTraceTarget(null), [])
+  // 聊天里的确认卡片、"已记住"提示的处理结果：toolCallId -> "done" | "cancelled" | "undone" | 错误信息
+  const [actionStates, setActionStates] = useState({})
 
   // ---- 布局：侧栏窄屏收起、聊天面板拖动调宽 ----
   const windowWidth = useWindowWidth()
@@ -213,6 +224,9 @@ function App() {
           setCurrentSession(sid)
           fetchSessions()
         }
+      } else if (part.type === "data-trace") {
+        const { messageId, sessionId, turnIndex } = part.data
+        setTraceRefs(r => ({ ...r, [messageId]: { sessionId, turnIndex } }))
       } else if (part.type === "data-title") {
         // 新会话第一轮结束后后端用 AI 起了标题，直接改列表里那一条
         const { sessionId, title } = part.data
@@ -332,6 +346,56 @@ function App() {
     .map(label => ({ label, items: sessions.filter(s => dayBucket(s.created_at) === label) }))
     .filter(g => g.items.length > 0)
 
+  // 确认卡片里点确认后调哪个接口
+  const CONFIRM_ENDPOINTS = {
+    delete_task: (id) => `/tasks/${id}`,
+    cancel_reminder: (id) => `/reminders/${id}`,
+    forget_fact: (id) => `/profile/${id}`,
+  }
+
+  // 把处理结果追加到那条回复末尾（界面上和数据库里都追加），知行下一轮、重新打开会话时都知道
+  const appendNote = (msgId, text) => {
+    setMessages(list => list.map(m => m.id === msgId ? { ...m, parts: [...m.parts, { type: "text", text }] } : m))
+    if (currentSessionRef.current != null) {
+      apiFetch(`/sessions/${currentSessionRef.current}/append-note`, { method: "POST", body: { text } }).catch(() => {})
+    }
+  }
+
+  // 聊天里工具部件上的操作：确认卡片的确认/取消，"已记住"提示的撤销
+  const handleToolAction = async (kind, part, msgId) => {
+    const out = part.output
+    const id = part.toolCallId
+    try {
+      if (kind === "confirm") {
+        await apiFetch(CONFIRM_ENDPOINTS[out.action](out.target_id), { method: "DELETE" })
+        setActionStates(s => ({ ...s, [id]: "done" }))
+        appendNote(msgId, `（已确认：${out.action_label}「${out.target_title}」）`)
+        setWorkbenchRefreshKey(k => k + 1)
+      } else if (kind === "cancel") {
+        setActionStates(s => ({ ...s, [id]: "cancelled" }))
+        appendNote(msgId, `（已取消：没有${out.action_label}「${out.target_title}」）`)
+      } else if (kind === "undo") {
+        // 撤销新记的就删掉；撤销修改就改回原来的内容
+        if (part.type === "tool-remember_fact") await apiFetch(`/profile/${out.id}`, { method: "DELETE" })
+        else await apiFetch(`/profile/${out.id}`, { method: "PATCH", body: { content: out.previous } })
+        setActionStates(s => ({ ...s, [id]: "undone" }))
+        appendNote(msgId, `（已撤销记忆：${out.content}）`)
+        setWorkbenchRefreshKey(k => k + 1)
+      }
+    } catch (e) {
+      setActionStates(s => ({ ...s, [id]: e.message }))
+    }
+  }
+
+  // 某条回复对应的轨迹：当前对话里的回复用 data-trace 记下的；历史会话里的回复按位置推算
+  // （turn_index 是这轮开始前会话里已有的消息数，也就是这条回复前面那条提问的下标）
+  const traceOf = (msg, index) => {
+    if (traceRefs[msg.id]) return traceRefs[msg.id]
+    const m = /^hist-(\d+)-(\d+)$/.exec(msg.id)
+    if (m && index > 0 && displayMessages[index - 1]?.role === "user") return { sessionId: Number(m[1]), turnIndex: index - 1 }
+    return null
+  }
+
   // 点击会话，加载该会话的消息
   const loadSession = async (sessionId) => {
     stop()
@@ -448,6 +512,18 @@ function App() {
             <ReminderPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
+      case "profile":
+        return (
+          <ModulePage width={960}>
+            <ProfilePanel refreshKey={workbenchRefreshKey} />
+          </ModulePage>
+        )
+      case "traces":
+        return (
+          <ModulePage width={960}>
+            <TracePanel target={traceTarget} onTargetConsumed={clearTraceTarget} />
+          </ModulePage>
+        )
       case "library":
         return (
           <ModulePage width={900}>
@@ -525,6 +601,13 @@ function App() {
           })}
 
           <div style={{ flex: 1 }} />
+          <RailButton
+            label="执行轨迹"
+            icon="trace"
+            active={activeView === "traces"}
+            compact={railCompact}
+            onClick={() => setActiveView("traces")}
+          />
           <button
             onClick={toggleTheme}
             aria-label={railCompact ? (isDark ? "浅色模式" : "深色模式") : undefined}
@@ -541,10 +624,21 @@ function App() {
             )}
             {!railCompact && <span style={{ fontSize: 13.5, color: railIconColor }}>{isDark ? "浅色模式" : "深色模式"}</span>}
           </button>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 10, padding: railCompact ? "8px 0 0" : "8px 10px 0" }} title={railCompact ? "我的工作台" : undefined}>
+          {/* 点头像进"关于我"（核心记忆） */}
+          <button
+            onClick={() => setActiveView("profile")}
+            title="关于我：知行记住的关于你的信息"
+            aria-label="关于我"
+            aria-current={activeView === "profile" ? "page" : undefined}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 10,
+              padding: railCompact ? "6px 0" : "6px 10px", marginTop: 4, width: "100%", border: "none", borderRadius: 8, cursor: "pointer",
+              background: activeView === "profile" ? colors.primary + "33" : "transparent",
+            }}
+          >
             <div style={{ width: 26, height: 26, borderRadius: 13, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>我</div>
-            {!railCompact && <span style={{ fontSize: 13, color: railIconColor }}>我的工作台</span>}
-          </div>
+            {!railCompact && <span style={{ fontSize: 13, color: activeView === "profile" ? "#fff" : railIconColor }}>我的工作台</span>}
+          </button>
         </nav>
 
         {/* 主区域：总览网格，或某个模块的宽松全页视图 */}
@@ -651,7 +745,7 @@ function App() {
                 onScroll={onChatScroll}
                 style={{ height: "100%", overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}
               >
-                {displayMessages.map((msg) => (
+                {displayMessages.map((msg, mi) => (
                   <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: 4, alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
                     {msg.parts.map((part, pi) => {
                       if (part.type === "text") {
@@ -676,10 +770,27 @@ function App() {
                       }
                       // 工具调用/结果这类 part 的 type 是 "tool-<工具名>"，只是一个不抢眼的小提示
                       if (part.type.startsWith("tool-")) {
-                        return <ToolPart key={pi} part={part} onOpenNote={setViewingNote} onOpenSession={loadSession} />
+                        return (
+                          <ToolPart
+                            key={pi}
+                            part={part}
+                            actionState={actionStates[part.toolCallId]}
+                            onAction={(kind) => handleToolAction(kind, part, msg.id)}
+                            onOpenNote={setViewingNote}
+                            onOpenSession={loadSession}
+                          />
+                        )
                       }
                       return null
                     })}
+                    {msg.role === "assistant" && traceOf(msg, mi) && (
+                      <button
+                        onClick={() => { setTraceTarget(traceOf(msg, mi)); setActiveView("traces") }}
+                        style={{ alignSelf: "flex-start", border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 11, color: colors.textMuted }}
+                      >
+                        查看轨迹
+                      </button>
+                    )}
                   </div>
                 ))}
                 {showThinking && <div style={{ color: colors.textMuted, fontSize: 13 }}>{PERSONA_NAME}正在思考…</div>}
@@ -748,10 +859,18 @@ function App() {
 // 聊天里的一次工具调用：一行"正在… / 已…"的小字；检索知识库和回忆对话的结果下面再列出引用标签，
 // 让人看得到知行参考了哪些资料——点资料看全文，点以前的对话直接打开那个会话。
 // 只有当前这次对话里有：历史会话只存了文字，没存工具调用
-function ToolPart({ part, onOpenNote, onOpenSession }) {
+function ToolPart({ part, actionState, onAction, onOpenNote, onOpenSession }) {
   const { colors } = useTheme()
   const name = part.type.slice(5)
   const out = part.state === "output-available" ? part.output : null
+
+  // 需要确认的操作（删任务、取消提醒、删记忆）：画一张确认卡片
+  if (out?.needs_confirmation) return <ConfirmCard out={out} state={actionState} onAction={onAction} />
+  // 知行记住/更新了核心记忆：一行提示 + 撤销
+  if ((name === "remember_fact" && out?.remembered) || (name === "update_fact" && out?.updated)) {
+    return <MemoryNotice out={out} isUpdate={name === "update_fact"} state={actionState} onUndo={() => onAction("undo")} />
+  }
+
   const citations = name === "search_notes" && out?.notes?.length
     ? out.notes.map(n => ({ key: `n${n.id}`, label: n.title, tag: n.source, onClick: () => onOpenNote(n.id) }))
     : name === "search_memory" && out?.memories?.length
@@ -782,6 +901,73 @@ function ToolPart({ part, onOpenNote, onOpenSession }) {
         </div>
       )}
     </div>
+  )
+}
+
+// 知行刚记住/更新的一条核心记忆：不打断对话，一行小字，带"撤销"
+function MemoryNotice({ out, isUpdate, state, onUndo }) {
+  const { colors } = useTheme()
+  const undone = state === "undone"
+  const failed = state && state !== "undone"
+  return (
+    // 整行按普通文字排，长了自然换行，小图标跟着第一行走，不会单独掉成一行
+    <div style={{ fontSize: 11.5, color: colors.textMuted, lineHeight: 1.6 }}>
+      <span style={{ display: "inline-flex", verticalAlign: "-1px", marginRight: 5 }}><ModuleIcon name="profile" color={colors.ink} size={11} /></span>
+      <span style={{ textDecoration: undone ? "line-through" : "none" }}>
+        {isUpdate ? "已更新记忆" : `已记住（${out.category_label}）`}：{out.content}
+      </span>
+      {undone
+        ? <span> · 已撤销</span>
+        : <button onClick={onUndo} style={{ border: "none", background: "none", padding: "0 0 0 6px", cursor: "pointer", fontSize: 11.5, color: colors.ink }}>撤销</button>}
+      {failed && <span style={{ color: colors.danger }}> · {state}</span>}
+    </div>
+  )
+}
+
+// 需要你确认才执行的操作：卡片里写清楚要做什么、对象是哪一条，确认后前端直接调接口执行
+function ConfirmCard({ out, state, onAction }) {
+  const { colors, buttonStyle, panelCardStyle } = useTheme()
+  const [busy, setBusy] = useState(false)
+  const run = async (kind) => { setBusy(true); await onAction(kind); setBusy(false) }
+  const done = state === "done", cancelled = state === "cancelled"
+  const failed = state && !done && !cancelled
+  return (
+    <div style={{ ...panelCardStyle, padding: "10px 12px", maxWidth: 300 }}>
+      <div style={{ fontSize: 12, color: colors.textMuted }}>{out.action_label}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, marginTop: 2, textDecoration: done ? "line-through" : "none" }}>「{out.target_title}」</div>
+      {done && <div style={{ fontSize: 12, color: colors.ink, marginTop: 6 }}>已{out.action_label}</div>}
+      {cancelled && <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 6 }}>已取消，没有执行</div>}
+      {failed && <div style={{ fontSize: 12, color: colors.danger, marginTop: 6 }}>执行失败：{state}</div>}
+      {(!state || failed) && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+          <button onClick={() => run("cancel")} disabled={busy} style={{ ...buttonStyle, padding: "4px 10px", fontSize: 12.5 }}>取消</button>
+          <button onClick={() => run("confirm")} disabled={busy} style={{ ...buttonStyle, padding: "4px 10px", fontSize: 12.5, background: colors.danger, border: `1px solid ${colors.danger}`, color: "#fff" }}>
+            {busy ? "执行中…" : `确认${out.action_label}`}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 侧栏底部的小入口（执行轨迹），样式跟主题切换按钮一致
+function RailButton({ label, icon, active, compact, onClick }) {
+  const { colors } = useTheme()
+  return (
+    <button
+      onClick={onClick}
+      aria-label={compact ? label : undefined}
+      title={compact ? label : undefined}
+      aria-current={active ? "page" : undefined}
+      style={{
+        width: "100%", height: 34, borderRadius: 8, border: "none", cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: compact ? "center" : undefined, gap: 10, padding: compact ? 0 : "0 10px",
+        background: active ? colors.primary + "33" : "transparent",
+      }}
+    >
+      <ModuleIcon name={icon} color={active ? "#fff" : railIconColor} size={15} />
+      {!compact && <span style={{ fontSize: 13.5, color: active ? "#fff" : railIconColor }}>{label}</span>}
+    </button>
   )
 }
 

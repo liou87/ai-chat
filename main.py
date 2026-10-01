@@ -22,6 +22,8 @@ from routers.hot_topics import router as hot_topics_router
 from routers.cron import router as cron_router
 from routers.schedule import router as schedule_router
 from routers.library import router as library_router
+from routers.profile import router as profile_router
+from routers.traces import router as traces_router
 from database import init_db, ON_VERCEL
 from services.scheduler import start_scheduler, stop_scheduler
 
@@ -72,3 +74,5 @@ app.include_router(hot_topics_router, prefix="/api")
 app.include_router(cron_router, prefix="/api")
 app.include_router(schedule_router, prefix="/api")
 app.include_router(library_router, prefix="/api")
+app.include_router(profile_router, prefix="/api")
+app.include_router(traces_router, prefix="/api")

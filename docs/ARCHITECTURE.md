@@ -197,6 +197,12 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 对话记忆：每轮对话结束后把"用户问的 + 知行答的"存进 memory_chunks（一轮一条、一个向量），search_memory 工具按语义检索以前的对话（排除当前会话），删会话时一起删；历史对话用 scripts/backfill_memory.py 补录。工具调用时 agent 循环会把当前会话 id 以 _session_id 放进参数。前端聊天里，检索知识库和回忆对话的工具结果显示成引用标签，点开看全文或打开那个会话（历史会话只存了文字，不显示引用）。
 
+核心记忆：profile_facts 表存关于用户的一条条事实，分身份、目标、偏好、近况四类，最多 40 条，全部带 id 拼进系统提示（services/profile.py 的 render_for_prompt），知行每轮开口前就知道。知行在对话里发现新信息时调用 remember_fact / update_fact 自动增改，前端聊天里显示"已记住 · 撤销"；forget_fact 需要确认。接口 GET/POST/PATCH/DELETE /api/profile，前端"关于我"页（点侧栏底部"我的工作台"）可以直接改。
+
+执行前确认：delete_task、cancel_reminder、forget_fact 三个工具不直接执行，返回 needs_confirmation 加目标（services/confirm.py），前端在聊天里画确认卡片，用户点确认后前端直接调对应的 DELETE 接口，不再多走一轮模型；处理结果用 POST /api/sessions/{id}/append-note 追加到那轮回复末尾，知行下一轮和重新打开会话时都知道。
+
+执行轨迹：agent_traces 每轮记 llm（每次模型调用，带耗时和输入/输出 token，流式请求开了 stream_options.include_usage）、tool_call、tool_result（带工具耗时）、final 四类步骤。GET /api/traces 按会话+轮次聚合（可 errors_only、按 tool 筛），GET /api/traces/{session_id}/{turn_index} 返回单轮时间线；流式对话末尾推 data-trace 事件，聊天里每条回复下的"查看轨迹"据此跳到对应那一轮。
+
 今日安排：POST /api/schedule/today/suggest 让 DeepSeek 把待办按优先级、预计时长、截止时间排进今天剩下的时间（凌晨 6 点前从早上 8 点排起），只返回草稿不写库，结果在 services/schedule.py 里再校验（不早于现在、不重叠、不超过 23 点），模型失败时退回贪心排法；POST /api/schedule/today/apply 在用户确认后把开始时间写进任务的 planned_start。
 
 时间：所有"现在几点"都走 services/clock.py，按环境变量 APP_TIMEZONE（默认 Australia/Sydney）算，不依赖服务器本地时区；库里存的是不带时区的本地时间，外部传进来带时区的时间（比如 agent 给的 ISO 字符串）会先换算。前端 datetime-local 控件给的是浏览器本地时间，所以 APP_TIMEZONE 要跟使用者所在时区一致。

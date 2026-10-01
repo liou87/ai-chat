@@ -12,14 +12,20 @@ from services.agent import run_agent, run_agent_stream
 from services import persona, clock
 from services.session_title import generate_title
 from services import memory as memory_service
+from services import profile as profile_service
 from database import SessionLocal, ChatSession, Message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
-def _build_system_prompt() -> str:
+def _build_system_prompt(profile_text: str = "") -> str:
     now = clock.now()
+    # 核心记忆：关于用户的稳定事实，每轮都带上（方括号里是 id，改/删时用）
+    profile_part = (
+        f"以下是你记住的关于用户的信息（核心记忆）：\n{profile_text}\n"
+        if profile_text else "你还没有记住关于用户的任何信息。"
+    )
     return (
         f"{persona.IDENTITY}"
         f"当前时间是 {now.strftime('%Y-%m-%d %H:%M:%S')}（{'周' + '一二三四五六日'[now.weekday()]}）。"
@@ -36,6 +42,12 @@ def _build_system_prompt() -> str:
         "基于上面给出的当前时间换算成具体的 ISO 8601 时间。"
         "如果问题涉及实时信息（新闻、最新版本、价格等）且笔记里查不到，调用 web_search，"
         "并在回答里说明信息来自网络搜索。"
+        "删除任务、取消提醒、删除记忆这几个工具不会直接执行，会在聊天里弹出确认卡片，用户点确认才生效，"
+        "所以调用后要请用户确认，不要说已经删掉了。\n"
+        f"{profile_part}"
+        "对话中用户透露了关于自己的稳定信息（身份、目标、偏好、近期在忙的事），而上面还没有时，调用 remember_fact 记下来；"
+        "已有的信息变了就用 update_fact 改那一条，不要重复记；信息明显不对了用 forget_fact。"
+        "记忆是为了更懂用户，回答时自然地用上，不要每次都复述你记得什么。"
     )
 
 class MessageSchema(BaseModel):
@@ -62,8 +74,9 @@ async def _get_turn_index(db, session_id: int) -> int:
     return result.scalar_one()
 
 
-def _build_messages(request: ChatRequest) -> list:
-    return [{"role": "system", "content": _build_system_prompt()}] + \
+async def _build_messages(db, request: ChatRequest) -> list:
+    profile_text = await profile_service.render_for_prompt(db)
+    return [{"role": "system", "content": _build_system_prompt(profile_text)}] + \
            [{"role": m.role, "content": m.content} for m in request.messages]
 
 
@@ -87,7 +100,7 @@ async def chat(request: ChatRequest):
         await db.commit()
 
         try:
-            reply, trace = await run_agent(db, session_id, turn_index, _build_messages(request))
+            reply, trace = await run_agent(db, session_id, turn_index, await _build_messages(db, request))
         except Exception:
             logger.error(f"AI 调用失败，session_id: {session_id}", exc_info=True)
             raise HTTPException(status_code=502, detail="AI 服务暂时不可用，请稍后再试")
@@ -120,6 +133,7 @@ async def chat_stream(request: ChatRequest):
         text_started = False
         tool_used = False
         reply = ""
+        session_id = turn_index = None   # 建会话之前就出错时，末尾的 data-trace 据此跳过
         # 新会话：用第一句话并行生成一个标题，回复结束时再取结果，不额外拖慢回复
         is_new_session = request.session_id is None
         title_task = asyncio.create_task(generate_title(request.messages[0].content)) if is_new_session else None
@@ -137,7 +151,7 @@ async def chat_stream(request: ChatRequest):
                 # session id 尽早发出去，前端不用等这一整轮结束就能拿到（新会话场景要靠它去刷新会话列表）
                 yield _sse({"type": "data-session", "data": {"sessionId": session_id}})
 
-                async for event in run_agent_stream(db, session_id, turn_index, _build_messages(request)):
+                async for event in run_agent_stream(db, session_id, turn_index, await _build_messages(db, request)):
                     if event["type"] == "text_delta":
                         if not text_started:
                             yield _sse({"type": "text-start", "id": message_id})
@@ -183,6 +197,9 @@ async def chat_stream(request: ChatRequest):
 
             if title_task is not None:
                 title_task.cancel()  # 出错提前结束的话，标题任务就不要了
+            # 告诉前端这条回复对应哪个会话的第几轮，聊天里的"查看轨迹"按它跳到执行轨迹页
+            if session_id is not None:
+                yield _sse({"type": "data-trace", "data": {"messageId": message_id, "sessionId": session_id, "turnIndex": turn_index}})
             yield _sse({"type": "data-meta", "data": {"toolUsed": tool_used}})
             yield _sse({"type": "finish"})
             yield "data: [DONE]\n\n"
