@@ -7,7 +7,7 @@ import LoadError from "./LoadError"
 
 // 每天收集一次的 AI/agent 领域热点（GitHub 新仓库 + 联网搜到的新闻，DeepSeek 挑过并写了一句话理由），
 // 点条目直接跳转原链接。顶部可以切换日期看历史，今天的可以手动重新收集。
-function HotTopicsPanel() {
+function HotTopicsPanel({ onAnalyze }) {
   const { colors, inputStyle, buttonStyle } = useTheme()
   const confirm = useConfirm()
   const [dates, setDates] = useState([])
@@ -106,8 +106,8 @@ function HotTopicsPanel() {
 
       {!loading && !regenerating && !error && items.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <TopicGroup eyebrow="模型、产品、框架动态" title="最新消息" items={items.filter(it => kindOf(it) === "news")} saveState={saveState} onCollect={collect} />
-          <TopicGroup eyebrow="最近一个月新建的 agent / RAG 项目" title="GitHub 新项目" items={items.filter(it => kindOf(it) === "github")} saveState={saveState} onCollect={collect} />
+          <TopicGroup eyebrow="模型、产品、框架动态" title="最新消息" items={items.filter(it => kindOf(it) === "news")} saveState={saveState} onCollect={collect} onAnalyze={onAnalyze} />
+          <TopicGroup eyebrow="最近一个月新建的 agent / RAG 项目" title="GitHub 新项目" items={items.filter(it => kindOf(it) === "github")} saveState={saveState} onCollect={collect} onAnalyze={onAnalyze} />
         </div>
       )}
     </div>
@@ -117,7 +117,7 @@ function HotTopicsPanel() {
 // 以前存的热点没有 kind 字段，按链接判断
 const kindOf = (it) => it.kind ?? (it.url?.includes("github.com") ? "github" : "news")
 
-function TopicGroup({ eyebrow, title, items, saveState, onCollect }) {
+function TopicGroup({ eyebrow, title, items, saveState, onCollect, onAnalyze }) {
   const { colors, panelCardStyle, buttonStyle } = useTheme()
   if (items.length === 0) return null
   return (
@@ -141,6 +141,14 @@ function TopicGroup({ eyebrow, title, items, saveState, onCollect }) {
               {it.summary && <div style={{ fontSize: 13.5, color: colors.textSecondary, marginTop: 5, lineHeight: 1.55 }}>{it.summary}</div>}
               {failed && <div style={{ fontSize: 12, color: colors.danger, marginTop: 4 }}>收藏失败：{state}</div>}
             </a>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button
+              onClick={() => onAnalyze(it)}
+              title="新开一个对话，让知行读原文并结合你的情况分析"
+              style={{ ...buttonStyle, padding: "4px 10px", fontSize: 12.5, color: colors.ink, cursor: "pointer" }}
+            >
+              问知行
+            </button>
             <button
               onClick={() => onCollect(it)}
               disabled={state === "saving" || state === "saved"}
@@ -153,6 +161,7 @@ function TopicGroup({ eyebrow, title, items, saveState, onCollect }) {
             >
               {state === "saving" ? "收藏中…" : state === "saved" ? "已收藏" : "收藏"}
             </button>
+            </div>
           </div>
         )
       })}

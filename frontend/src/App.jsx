@@ -58,6 +58,8 @@ const TOOL_LABELS = {
   list_reminders: "查看提醒",
   cancel_reminder: "取消提醒",
   web_search: "联网搜索",
+  get_hot_topics: "查看 AI 热点",
+  read_url: "阅读原文",
 }
 
 function toolStatusText(part) {
@@ -322,6 +324,8 @@ function App() {
   const startNewChat = () => {
     stop()
     pendingReviewSaveRef.current = false
+    // ref 平时靠 effect 同步，这里马上清掉：新建会话后紧接着发消息（比如分析热点）时请求里不能还带着旧会话 id
+    currentSessionRef.current = null
     setCurrentSession(null)
     setMessages([])
     setHistoryLoadError(null)
@@ -467,6 +471,23 @@ function App() {
     sendMessage(WEEKLY_REVIEW_PROMPT)
   }
 
+  // 热点页点"问知行"：新开一个会话分析这一条。分析角度（结合用户情况、要不要读原文）写在系统提示里，这里只交代是哪条
+  const onAnalyzeTopic = (item) => {
+    if (loading) {
+      setChatCollapsed(false)
+      setChatNotice({ text: `${PERSONA_NAME}还在回复，等这条结束再点`, isError: true })
+      return
+    }
+    startNewChat()
+    setChatCollapsed(false)
+    const kind = item.kind === "github" ? "GitHub 项目" : "热点"
+    sendMessage([
+      `帮我分析这条${kind}：${item.title}`,
+      `链接：${item.url}`,
+      item.summary ? `摘要：${item.summary}` : null,
+    ].filter(Boolean).join("\n"))
+  }
+
   // "思考中"只在还没有任何回复内容时显示，文字开始流出来就收起，不跟正文同时挂着
   const lastMessage = messages[messages.length - 1]
   const showThinking = loading && !(lastMessage?.role === "assistant" && lastMessage.parts.some(p => (p.type === "text" && p.text) || p.type.startsWith("tool-")))
@@ -533,7 +554,7 @@ function App() {
       case "hotTopics":
         return (
           <ModulePage eyebrow="AI / agent 领域，每天自动收集一次" title="今日热点" width={860}>
-            <HotTopicsPanel />
+            <HotTopicsPanel onAnalyze={onAnalyzeTopic} />
           </ModulePage>
         )
       default:

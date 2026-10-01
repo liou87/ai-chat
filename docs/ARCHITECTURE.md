@@ -193,6 +193,8 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 简报相关：GET /api/digest/today 拿今天的简报，没有就现算一份，POST /api/digest/today/regenerate 按现在的数据重新生成并覆盖；GET /api/hot-topics/today 拿今天的 AI 热点列表，逻辑一样，POST /api/hot-topics/today/regenerate 重新收集，GET /api/hot-topics/dates 列出有记录的日期，GET /api/hot-topics/{YYYY-MM-DD} 查历史某一天。热点分两组各有名额：Tavily 新闻模式搜最近两天的中英文消息挑 5 条，GitHub 最近一个月新建的 agent/RAG 仓库挑 3 个，最近 7 天推过的链接不再重复，每条带 kind（news/github）。
 
+热点也能在聊天里分析：知行有 get_hot_topics（拿今天或某天的热点列表）和 read_url（临时读网页正文或仓库 README，最多 1.2 万字，只用于这次回答、不入资料库，跟收藏共用 services/library.py 的 fetch_url）两个工具；系统提示要求它分析时先读原文，讲清是什么、为什么重要，再对照核心记忆和目标说跟用户有没有关系，最后可以提议收藏或建任务但不擅自去做。热点页每条有"问知行"按钮，点了新开一个会话把标题、链接、摘要发过去。实测一次分析 3~4 次模型调用、约 20~25 秒、2 万多 token。
+
 资料库：GET /api/library 列出收藏的资料（只有预览），POST /api/library/url 收藏一个链接（GitHub 仓库取 README，其它网页用 Tavily Extract 抓正文并去掉开头的导航；标题优先用网页自带的 og:title/title；同一链接不重复收藏），POST /api/library/pdf 上传 PDF（请求体直接是文件字节，文件名在查询参数，pypdf 提取文字，4MB 以内，扫描版会报错），GET /api/notes/{id} 取单条全文。资料库跟笔记共用 notes/note_chunks 和同一套检索（category="library"，notes.url 存原文链接），所以 search_notes 工具会连资料库一起搜；工具只把命中的分块（snippet）给模型，不给全文。
 
 对话记忆：每轮对话结束后把"用户问的 + 知行答的"存进 memory_chunks（一轮一条、一个向量），search_memory 工具按语义检索以前的对话（排除当前会话），删会话时一起删；历史对话用 scripts/backfill_memory.py 补录。工具调用时 agent 循环会把当前会话 id 以 _session_id 放进参数。前端聊天里，检索知识库和回忆对话的工具结果显示成引用标签，点开看全文或打开那个会话（历史会话只存了文字，不显示引用）。

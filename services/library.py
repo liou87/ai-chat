@@ -138,6 +138,30 @@ def _strip_leading_nav(content: str) -> str:
     return content
 
 
+async def fetch_url(url: str, title: Optional[str] = None) -> dict:
+    """
+    抓一个链接的正文，不入库：GitHub 仓库拿 README，其它网页用 Tavily 抓正文并去掉开头的导航。
+    收藏（add_url）和知行临时读原文（read_url 工具）共用这一段。
+    """
+    url = url.strip()
+    if not re.match(r"^https?://", url):
+        raise ImportError_("请输入以 http:// 或 https:// 开头的网址")
+    gh = GITHUB_REPO_RE.match(url)
+    try:
+        if gh:
+            repo_title, content = await _fetch_github_readme(gh.group(2), gh.group(3).removesuffix(".git"))
+            title = title or repo_title
+        else:
+            content = _strip_leading_nav(await _fetch_web(url))
+            title = title or await _page_title(url) or _markdown_heading(content) or url[:200]
+    except ImportError_:
+        raise
+    except Exception as e:
+        logger.warning(f"抓取失败：{url}", exc_info=True)
+        raise ImportError_(f"抓取失败：{e.__class__.__name__}") from e
+    return {"title": title, "content": content, "is_github": bool(gh)}
+
+
 async def add_url(db: AsyncSession, url: str, title: Optional[str] = None, source: str = "web",
                   summary: Optional[str] = None) -> dict:
     """
@@ -152,20 +176,10 @@ async def add_url(db: AsyncSession, url: str, title: Optional[str] = None, sourc
     if existing:
         return {**_serialize(existing), "existed": True}
 
-    gh = GITHUB_REPO_RE.match(url)
-    try:
-        if gh:
-            repo_title, content = await _fetch_github_readme(gh.group(2), gh.group(3).removesuffix(".git"))
-            title = title or repo_title
-            source = "hot_topic" if source == "hot_topic" else "github"
-        else:
-            content = _strip_leading_nav(await _fetch_web(url))
-            title = title or await _page_title(url) or _markdown_heading(content) or url[:200]
-    except ImportError_:
-        raise
-    except Exception as e:
-        logger.warning(f"抓取失败：{url}", exc_info=True)
-        raise ImportError_(f"抓取失败：{e.__class__.__name__}") from e
+    fetched = await fetch_url(url, title)
+    title, content = fetched["title"], fetched["content"]
+    if fetched["is_github"]:
+        source = "hot_topic" if source == "hot_topic" else "github"
 
     if summary:
         content = f"{summary}\n\n{content}"
