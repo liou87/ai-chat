@@ -1,12 +1,12 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from services.auth import verify_api_key
+from services.auth import require_auth
 from services import notes as notes_service
 from services.notes import notion as notion_service
 from database import SessionLocal
 
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 class CreateNoteRequest(BaseModel):

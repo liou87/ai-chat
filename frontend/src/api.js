@@ -1,8 +1,18 @@
-// 后端地址：部署在 Vercel 上时前后端同一个域名，/api 由 Python 函数处理，默认用相对路径就行，不用配变量；
-// 本地开发时 Vite 和 uvicorn 是两个端口，在 frontend/.env 里配 VITE_API_URL=http://127.0.0.1:8000/api
+// 后端地址：线上前后端同一个域名，/api 由 Python 函数处理；本地开发时 Vite 把 /api 代理到 uvicorn（见 vite.config.js），
+// 所以默认相对路径就行。VITE_API_URL 只在特殊情况下覆盖，跨域名的话登录 cookie 带不过去
 export const API = import.meta.env.VITE_API_URL || "/api"
-export const API_KEY = import.meta.env.VITE_API_KEY
-export const authHeaders = { "X-API-Key": API_KEY }
+
+// 鉴权靠登录后后端发的 httpOnly cookie（同域名，浏览器自动带上），前端代码里不放任何密钥。
+// 任何接口返回 401 都广播这个事件，AuthGate 收到就切回登录页
+export const AUTH_REQUIRED_EVENT = "auth:required"
+
+export function checkUnauthorized(res) {
+  if (res.status === 401) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
+  return res
+}
+
+// 给 AI SDK 的 transport 和直接用 fetch 的地方（上传 PDF）用：跟原生 fetch 一样，只是多了 401 检查
+export const authFetch = (...args) => fetch(...args).then(checkUnauthorized)
 
 // 统一的请求函数：自动带鉴权头、JSON 请求体，非 2xx 直接抛错（带上后端的 detail），
 // 调用方不用再各自判断 res.ok，也不会把 {detail: ...} 这种错误对象当成列表数据去 .filter 导致白屏
@@ -14,12 +24,12 @@ export async function apiFetch(path, { method = "GET", body, params } = {}) {
       if (v != null) url.searchParams.set(k, v)
     }
   }
-  const headers = { ...authHeaders }
+  const headers = {}
   if (body !== undefined) headers["Content-Type"] = "application/json"
 
   let res
   try {
-    res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined })
+    res = await authFetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined })
   } catch {
     throw new Error("连不上服务器，请检查网络")
   }
@@ -27,7 +37,7 @@ export async function apiFetch(path, { method = "GET", body, params } = {}) {
   const data = await res.json().catch(() => null)
   if (!res.ok) {
     const detail = typeof data?.detail === "string" ? data.detail : null
-    throw new Error(detail || (res.status === 401 ? "API Key 不正确" : `请求失败（${res.status}）`))
+    throw new Error(detail || (res.status === 401 ? "请先登录" : `请求失败（${res.status}）`))
   }
   return data
 }

@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown"
 import { remarkPlugins } from "./markdown"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { API, authHeaders, apiFetch } from "./api"
+import { API, authFetch, apiFetch } from "./api"
 import WorkbenchPanel from "./components/WorkbenchPanel"
 import ModulePage from "./components/ModulePage"
 import TaskPanel from "./components/TaskPanel"
@@ -205,9 +205,8 @@ function App() {
   // eslint-disable-next-line react-hooks/refs
   const transport = useMemo(() => new DefaultChatTransport({
     api: `${API}/chat/stream`,
-    headers: authHeaders,
+    fetch: authFetch,
     prepareSendMessagesRequest: ({ messages: uiMessages }) => ({
-      headers: authHeaders,
       body: {
         session_id: currentSessionRef.current,
         messages: uiMessages.map(m => ({ role: m.role, content: messageText(m) })),

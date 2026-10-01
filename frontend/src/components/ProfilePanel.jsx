@@ -7,6 +7,7 @@ import { isSubmitEnter } from "../keyboard"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import { PageHeader, Badge } from "./ui"
+import DevicesCard from "./DevicesCard"
 
 const CATEGORIES = [
   ["identity", "身份", "学校、专业、工作"],
@@ -89,6 +90,8 @@ function ProfilePanel({ refreshKey }) {
           ))}
         </div>
       )}
+
+      <DevicesCard />
     </div>
   )
 }

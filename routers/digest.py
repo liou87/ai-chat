@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
-from services.auth import verify_api_key
+from services.auth import require_auth
 from services import digest as digest_service
 from database import SessionLocal
 
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 @router.get("/digest/today")

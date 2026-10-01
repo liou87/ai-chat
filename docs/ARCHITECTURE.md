@@ -76,7 +76,7 @@ flowchart TB
 
 一次带工具调用的对话请求，完整链路是这样的（以 /api/chat/stream 为例）：
 
-前端发送 POST 请求，带 X-API-Key 请求头。后端先由 auth 依赖校验这个 key。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent_stream 进入循环：每一步都是对 DeepSeek 的真流式请求（stream=True，带 tools 参数），边收边判断——收到的是文字就整理组装、收到的是工具调用就等参数片段拼完整。如果是工具调用，就执行对应工具（在 services/tools/ 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具、开始输出最终的自然语言回复为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯；非流式的 run_agent（给 /api/chat 用）是这个生成器的一层薄包装，把事件收集完整再一次性返回。
+前端发送 POST 请求，浏览器自动带上登录 cookie，后端先由 require_auth 依赖校验登录状态。routers/chat.py 把用户消息存库，拼装 system prompt（里面包含当前时间）加上历史消息。接着 services/agent.py 里的 run_agent_stream 进入循环：每一步都是对 DeepSeek 的真流式请求（stream=True，带 tools 参数），边收边判断——收到的是文字就整理组装、收到的是工具调用就等参数片段拼完整。如果是工具调用，就执行对应工具（在 services/tools/ 里查表分发到 tasks、notes、notion、reminders、review、websearch 几个模块），把执行结果塞回对话继续问，直到模型不再要求调用工具、开始输出最终的自然语言回复为止。这中间每一步，无论是工具调用、工具结果还是最终回复，都会写进 agent_traces 表，用于事后追溯；非流式的 run_agent（给 /api/chat 用）是这个生成器的一层薄包装，把事件收集完整再一次性返回。
 
 routers/chat.py 把这些事件实时转成 Vercel AI SDK 的 UI Message Stream 协议（SSE，事件类型有 text-start/delta/end、tool-input-available、tool-output-available 等），工具调用和结果一产生就推给前端，不用等整轮跑完；最终回复也是模型生成一块就推一块，是真正的 token 级流式，不是切块回放。session id 和"这轮有没有用到工具"通过协议自带的自定义 data 事件传递（不再用响应头），前端用 @ai-sdk/react 的 useChat 收流，工具调用会作为消息里一个小的提示片段渲染出来。这次改造是照着 github.com/vercel/ai 的协议文档做的，具体的事件格式和字段以那份文档为准。deepseek-flash 这个模型起手延迟比较长（不带工具调用的短回复常见 2～7 秒），一旦开始生成，短回复几乎是瞬间吐完，所以短回复不一定能看出明显的逐字效果；内容足够长（比如几百字）的时候，能清楚看到分批到达。
 
@@ -112,7 +112,7 @@ AI-Chat/
 │   └── hot_topics.py       每日 AI 热点的 REST 接口
 │
 ├── services/              业务逻辑层，REST 路由和 agent 工具共用同一套函数，不会重复实现
-│   ├── auth.py              X-API-Key 鉴权依赖，自己调用 load_dotenv，不依赖别的模块先加载 .env
+│   ├── auth.py              登录鉴权：scrypt 密码校验、数据库会话、登录限流、require_auth 依赖
 │   ├── llm.py               DeepSeek 客户端封装
 │   ├── agent.py             核心的 tool-calling 循环，写 agent_traces，是整个项目最关键的一个文件
 │   ├── tools/               工具注册表，按模块拆成几个文件，__init__.py 汇总成 TOOL_SCHEMAS/TOOL_HANDLERS
@@ -177,7 +177,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 8. REST API 一览
 
-除了 /api/chat 和 /api/chat/stream 之外，其余接口主要是给前端直接操作数据用的，不经过 agent。所有接口都需要 X-API-Key 请求头。
+除了 /api/chat 和 /api/chat/stream 之外，其余接口主要是给前端直接操作数据用的，不经过 agent。所有接口都要先登录（或者请求头带 X-API-Key，给脚本用），只有 /api/auth/login、/api/auth/me 和带 CRON_SECRET 的 /api/cron/daily 例外。
 
 对话相关：POST /api/chat 是非流式对话，返回内容包含 session_id、reply 和 trace；POST /api/chat/stream 是流式对话，按 Vercel AI SDK 的 UI Message Stream 协议返回 SSE，session id 和是否用过工具通过协议里的自定义 data 事件传递。新会话的第一轮会用第一句话并行让 DeepSeek 起一个简短标题（services/session_title.py），回复结束时写库并通过 data-title 事件推给前端，失败就保留截取的前 20 个字。
 
@@ -211,17 +211,23 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 9. 鉴权与安全
 
-所有 /api 下的路由都挂了鉴权依赖，校验请求头里的 X-API-Key 是否等于环境变量 API_KEY。需要注意的是，如果没设置 API_KEY 环境变量，鉴权会直接放行，这是为了方便本地开发，生产环境一定要设置这个变量。
+单用户密码登录（services/auth.py、routers/auth.py）。以前前端打包了一个 VITE_API_KEY，等于把钥匙发给了每个打开网站的人，2026-10-01 换成了现在这套，前端代码里不再有任何密钥。
 
-还有一点很重要：前端拿到的 key 不是真正意义上的密钥，因为 Vite 打包时会把 VITE_ 开头的环境变量直接编译进最终的 JS 文件，浏览器 devtools 能直接看到明文。这层鉴权只能挡住随手滥用和扫描器，挡不住真想扒接口的人。要真正防止 API 被刷，还需要加限流，目前项目里还没做。
+密码只以 scrypt 哈希放在环境变量 APP_PASSWORD_HASH 里（python scripts/hash_password.py 生成，密码用 getpass 输入、不回显）。POST /api/auth/login 校验通过后生成一个随机令牌，放进 httpOnly、SameSite=Strict、线上带 Secure、Path=/api 的 cookie（zx_session），页面上的 JS 读不到，别的网站发起的请求也不会带上它；auth_sessions 表只存令牌的 sha256，库泄露了也拿不到能用的 cookie。会话 30 天有效，前端每次打开会调 GET /api/auth/me，距上次顺延超过一小时就把有效期和 cookie 都续到 30 天后，常用就不用重新登录。
+
+所有业务路由挂 require_auth 依赖：先看请求头 X-API-Key 是否等于环境变量 API_KEY（只给脚本、外部定时器这类不经过浏览器的调用，不进前端），再看 cookie 对应的会话是否有效。为了少一次查库，校验通过的令牌在当前函数实例里缓存 60 秒，所以在一台设备上踢掉另一台，最坏要等 60 秒才在别的实例上失效。两个变量都没配时完全不鉴权，只用于本地开发。
+
+限流记在 login_attempts 表里（Vercel 多个实例不共享内存）：同一 IP 15 分钟内失败 5 次就拒绝登录，全局一小时失败超过 30 次暂停所有登录，防换 IP 爆破。每次登录成功顺手清理过期会话和一天前的记录。"关于我"页底部有登录设备列表：看每台设备最近什么时候用过，单独下线（DELETE /api/auth/sessions/{id}）、其它设备全部下线（POST /api/auth/sessions/revoke-others）、退出当前设备（POST /api/auth/logout）。前端由 AuthGate 包住整个 App，没登录时工作台不挂载；任何请求回 401 都会广播 auth:required 事件，切回登录页。
+
+本地开发时 Vite 把 /api 代理到 uvicorn（vite.config.js），跟线上一样是同一个域名，cookie 才能带上，所以前端不用再配 VITE_API_URL。
 
 跨域方面，main.py 里配置了白名单，默认只允许本地开发地址和线上 Vercel 域名跨域访问，可以用 ALLOWED_ORIGINS 环境变量（逗号分隔）覆盖默认值。
 
 ## 10. 环境变量
 
-后端的 .env 文件（已经加入 gitignore）需要这几个变量：DEEPSEEK_API_KEY 是必须的；DATABASE_URL 是必须的，指向 PostgreSQL 实例（现在用的是 Supabase 的 Session pooler 连接串，格式是 postgresql+asyncpg://...），本地开发和线上环境都需要配；API_KEY 建议设置，是前后端之间简单鉴权用的 key；ALLOWED_ORIGINS 可选，不设的话用代码里写死的默认值；TAVILY_API_KEY 可选，不设置的话联网搜索这个工具会返回未配置的错误提示，不影响其他功能。
+后端的 .env 文件（已经加入 gitignore）需要这几个变量：DEEPSEEK_API_KEY 是必须的；DATABASE_URL 是必须的，指向 PostgreSQL 实例（现在用的是 Supabase 的 Session pooler 连接串，格式是 postgresql+asyncpg://...），本地开发和线上环境都需要配；APP_PASSWORD_HASH 是登录密码的哈希（scripts/hash_password.py 生成）；API_KEY 可选，给脚本用的 key，不要放进前端；ALLOWED_ORIGINS 可选，不设的话用代码里写死的默认值；TAVILY_API_KEY 可选，不设置的话联网搜索这个工具会返回未配置的错误提示，不影响其他功能。
 
-前端对应有自己的 .env 文件，只需要一个 VITE_API_KEY，必须和后端的 API_KEY 保持一致。
+前端不需要任何环境变量：本地走 Vite 代理，线上同域名。
 
 ## 11. 前端结构
 
@@ -243,7 +249,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 因为 Vercel 上没有常驻进程，和本地常驻 uvicorn 有几处不同，代码里用 VERCEL 环境变量区分：数据库用 NullPool，每个请求用完连接就关，避免多个函数实例把 Supabase 会话模式 pooler 的连接占满；lifespan 里不启动 APScheduler，提醒到期改在 /reminders 和 /reminders/due 接口里顺手检查（前端每 20 秒轮询一次），每日简报和热点由 vercel.json 里的 cron 每天调一次 /api/cron/daily 预生成（Hobby 版 cron 一天最多一次、有 ±59 分钟误差，当天第一次打开页面时也会现生成）。函数部署在新加坡（sin1），跟 Supabase 同一地区。
 
-Vercel 项目需要配的环境变量：DEEPSEEK_API_KEY、DATABASE_URL、API_KEY、TAVILY_API_KEY、VOYAGE_API_KEY、CRON_SECRET（随便一段随机字符串，Vercel 调 cron 时会带上），前端构建用的 VITE_API_KEY（和 API_KEY 相同）；用到 Notion 同步的话再加 NOTION_API_KEY、NOTION_DATABASE_ID。VITE_API_URL 在线上不要配，留空就走同域的 /api。
+Vercel 项目需要配的环境变量：DEEPSEEK_API_KEY、DATABASE_URL、APP_PASSWORD_HASH、API_KEY、TAVILY_API_KEY、VOYAGE_API_KEY、CRON_SECRET（随便一段随机字符串，Vercel 调 cron 时会带上）；不要再配 VITE_API_KEY，VITE_ 开头的变量会被打包进前端 JS；用到 Notion 同步的话再加 NOTION_API_KEY、NOTION_DATABASE_ID。VITE_API_URL 在线上不要配，留空就走同域的 /api。
 
 ## 14. 已知限制和技术债
 
@@ -253,7 +259,7 @@ Vercel 项目需要配的环境变量：DEEPSEEK_API_KEY、DATABASE_URL、API_KE
 
 项目里没有自动化测试，所有验证都是手动用 curl 或者浏览器测过的。
 
-这是个单用户设计，没有多用户或者多租户的概念，API_KEY 是所有人共用的一把钥匙。
+这是个单用户设计，没有多用户或者多租户的概念，只有一个登录密码。
 
 总览页现在挂载的卡片（简报、目标、任务、笔记、日记、提醒、AI 热点）加起来会在页面刚加载时并发发出十几个请求，每个都要打一次远端的 Supabase，浏览器对同一个源默认最多 6 个并发连接，请求会排队；实测过如果在页面刚加载的头几秒内马上点进某个模块，那个模块的请求可能要排到 5 秒以后才轮到，表现为界面卡在"加载中"很久，不是卡死。根源是每个卡片都各自独立请求数据，没有合并；真要解决得做一个总览专用的聚合接口，一次请求把这几张卡片的数据都带回来，目前还没做。总览页整体现在是可以滚动的，不再要求一屏放下所有内容，但并发请求排队这个问题本身跟页面能不能滚动没关系，卡片一多还是会撞上。
 

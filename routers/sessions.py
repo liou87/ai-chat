@@ -3,9 +3,9 @@ from pydantic import BaseModel
 from sqlalchemy import select, delete
 from database import SessionLocal, ChatSession, Message, AgentTrace
 from services import memory as memory_service
-from services.auth import verify_api_key
+from services.auth import require_auth
 
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 # 获取所有会话列表
 @router.get("/sessions")

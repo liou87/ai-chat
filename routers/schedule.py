@@ -2,11 +2,11 @@ from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from services.auth import verify_api_key
+from services.auth import require_auth
 from services import schedule as schedule_service
 from database import SessionLocal
 
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 class PlanItem(BaseModel):

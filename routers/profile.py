@@ -1,11 +1,11 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from services.auth import verify_api_key
+from services.auth import require_auth
 from services import profile as profile_service
 from database import SessionLocal
 
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 class FactRequest(BaseModel):

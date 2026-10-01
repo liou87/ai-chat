@@ -2,10 +2,10 @@ import json
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from services.auth import verify_api_key
+from services.auth import require_auth
 from database import SessionLocal, AgentTrace, ChatSession, Message
 
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 # 执行轨迹页：agent 每轮对话的每一步（模型调用、工具调用、工具结果、最终回复）都记在 agent_traces 里，
 # 这里按"会话 + 轮次"聚合成列表，点开一轮看详细步骤。类似 LangSmith / Langfuse 的单轮 trace 视图。

@@ -7,7 +7,7 @@ from typing import List, Optional
 import logging
 from sqlalchemy import select, func
 from fastapi.responses import StreamingResponse
-from services.auth import verify_api_key
+from services.auth import require_auth
 from services.agent import run_agent, run_agent_stream
 from services import persona, clock
 from services.session_title import generate_title
@@ -16,7 +16,7 @@ from services import profile as profile_service
 from database import SessionLocal, ChatSession, Message
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 def _build_system_prompt(profile_text: str = "") -> str:

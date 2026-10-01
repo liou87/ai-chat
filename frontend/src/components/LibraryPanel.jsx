@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { API, authHeaders, apiFetch } from "../api"
+import { API, authFetch, apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
 import { disabledStyle } from "../theme"
@@ -98,7 +98,7 @@ function LibraryPanel({ refreshKey }) {
     try {
       const url = new URL(`${API}/library/pdf`, window.location.origin)
       url.searchParams.set("filename", file.name)
-      const res = await fetch(url, { method: "POST", headers: { ...authHeaders, "Content-Type": "application/pdf" }, body: file })
+      const res = await authFetch(url, { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.detail || `上传失败（${res.status}）`)
       setNotice({ text: `已导入：${data.title}（${data.pages} 页）`, isError: false })

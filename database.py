@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -6,6 +7,8 @@ from sqlalchemy.pool import NullPool
 from pgvector.sqlalchemy import Vector
 from services.clock import now as clock_now
 
+# 自己加载一次 .env：谁先 import 这个模块都不影响（本地开发时变量在 .env 里，线上是真环境变量，load_dotenv 不会覆盖）
+load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://aichat:aichat@localhost:5432/aichat")
 
 # 部署在 Vercel 上时（Vercel 运行时会设置 VERCEL=1），函数实例随请求起停、可能同时有好几个，
@@ -210,6 +213,33 @@ class HotTopics(Base):
     created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"HotTopics(topic_date={self.topic_date})"
+
+# auth_sessions 表：登录会话。cookie 里是随机令牌，这里只存它的 sha256，库泄露了也拿不到能用的 cookie。
+# 每台设备登录一次一条，单独删一条就是让那台设备下线
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token_hash = Column(String(64), unique=True, nullable=False)
+    user_agent = Column(String(300))
+    ip = Column(String(64))
+    created_at = Column(DateTime, default=clock_now)
+    last_seen_at = Column(DateTime, default=clock_now)
+    expires_at = Column(DateTime, nullable=False)
+    def __repr__(self):
+        return f"AuthSession(id={self.id}, expires_at={self.expires_at})"
+
+# login_attempts 表：登录尝试记录，用来限流（同一 IP 连错 5 次锁 15 分钟，全局每小时失败过多暂停登录）。
+# 放数据库而不是内存，因为 Vercel 上每个请求可能落在不同的函数实例
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ip = Column(String(64), index=True)
+    success = Column(Boolean, nullable=False)
+    created_at = Column(DateTime, default=clock_now, index=True)
+    def __repr__(self):
+        return f"LoginAttempt({self.ip}, success={self.success})"
 
 # 只负责确保 pgvector 扩展存在，每次启动跑一遍也没问题（幂等）。
 # 表结构本身不在这里建，改由 Alembic 管理（首次用 alembic upgrade head 建表，
