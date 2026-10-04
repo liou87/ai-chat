@@ -13,3 +13,4 @@ frontend/*.local
 evals/results/
 evals/rag/corpus/
 evals/candidates.yaml
+evals/quality/answers*.json
