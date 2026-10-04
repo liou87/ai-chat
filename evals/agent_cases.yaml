@@ -16,7 +16,7 @@
 #   no_tools: true          这一轮一个工具都不能调
 #   reply_has: 正则          最终回复要匹配
 #   reply_not: 正则          最终回复不能匹配
-#   db: {table, where, exists}   这一轮结束后数据库里某条记录还在 / 不在
+#   db: {table, where, exists | count}   这一轮结束后数据库里某条记录还在 / 不在，或者正好有几条
 #   no_call: {tool, args}   不能出现参数满足条件的这种调用（比如提醒设在已经过去的时间）
 #   only_tools: [a, b]      只能调用这些工具，多调别的算失败（效率）
 #   max_tool_calls / max_llm_calls: N   这一轮工具调用次数 / 模型调用次数上限（效率）
@@ -415,8 +415,9 @@ cases:
     why: 已经有同名任务了，应该提醒而不是再建一条重复的
     say: 加个任务：简历修改
     expect:
-      - no_tool: create_task
-      - reply_has: "已经有|已有|已存在|已经在|已经建"
+      # 检查结果（库里没有多出一条）而不是"没调用 create_task"：重复也可以由工具自己拦下来
+      - db: {table: tasks, where: {title: 简历修改}, count: 1}
+      - reply_has: "已经有|已有|已存在|已经在|已经建|同名"
 
   # ---------- 异常恢复 ----------
   - id: web_search_error

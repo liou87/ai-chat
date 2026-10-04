@@ -14,7 +14,20 @@ def _parse_time(value):
         return None
 
 
+def _same_title(a: str, b: str) -> bool:
+    return "".join((a or "").split()).lower() == "".join((b or "").split()).lower()
+
+
 async def _create_task(db: AsyncSession, args: dict) -> dict:
+    # 重复检查放在工具里而不是提示词里：模型不用每次建任务前先查一遍列表（多一轮调用），规则也不会被它忽略。
+    # 有同名的未完成任务就不建，告诉模型已有哪条；用户坚持要另建时，模型带 allow_duplicate=true 再调一次
+    if not args.get("allow_duplicate"):
+        pending = await tasks_service.list_tasks(db, status="pending")
+        existing = next((t for t in pending if _same_title(t["title"], args["title"])), None)
+        if existing:
+            return {"created": False, "duplicate_of": existing,
+                    "note": "已经有一条同名的未完成任务，这次没有新建。告诉用户已有这条（可以说一下截止时间），"
+                            "问是否还要另建一条；用户确认后带 allow_duplicate=true 再调用。不要说已经建好了。"}
     due_at = None
     if args.get("due_at"):
         try:
@@ -52,7 +65,7 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "create_task",
-                "description": "创建一条新的任务/待办事项",
+                "description": "创建一条新的任务/待办事项。已有同名的未完成任务时不会重复建，会返回已有的那条",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -63,8 +76,8 @@ TOOLS = [
                         },
                         "goal_id": {
                             "type": "integer",
-                            "description": "要挂靠的目标 id（可选）。不知道 id 就先调用 list_goals 查出来，"
-                                            "用户没提目标就留空，不要凭空猜一个",
+                            "description": "要挂靠的目标 id（可选）。只有用户明确说要挂到某个目标下时，才调用 list_goals 查 id 填上；"
+                                            "用户没提目标就留空，不要为了挂目标专门去查，也不要凭空猜一个",
                         },
                         "priority": {
                             "type": "string", "enum": ["high", "medium", "low"],
@@ -73,6 +86,10 @@ TOOLS = [
                         "estimate_minutes": {
                             "type": "integer",
                             "description": "预计要花多少分钟（可选），用户提到大概要多久时换算成分钟，没提就留空",
+                        },
+                        "allow_duplicate": {
+                            "type": "boolean",
+                            "description": "已有同名未完成任务、用户确认仍要再建一条时才填 true，平时不填",
                         },
                         "planned_start": {
                             "type": "string",

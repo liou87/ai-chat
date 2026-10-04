@@ -71,6 +71,10 @@ async def _check_db(spec: dict) -> tuple[bool, str]:
     stmt = select(table)
     for col, value in spec.get("where", {}).items():
         stmt = stmt.where(table.c[col] == value)
+    if "count" in spec:
+        async with SessionLocal() as db:
+            n = len((await db.execute(stmt)).all())
+        return n == spec["count"], f"{spec['table']} {spec.get('where')} 应正好 {spec['count']} 条，实际 {n} 条"
     async with SessionLocal() as db:
         found = (await db.execute(stmt.limit(1))).first() is not None
     want = spec.get("exists", True)

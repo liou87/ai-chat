@@ -247,12 +247,16 @@ async def main():
     parser.add_argument("--only", help="逗号分隔的用例 id")
     parser.add_argument("--category")
     parser.add_argument("--save-baseline", action="store_true")
+    parser.add_argument("--cases", default=str(CASES_FILE), help="用例文件，留出用例是 evals/agent_cases_holdout.yaml")
     args = parser.parse_args()
+    cases_file = Path(args.cases)
+    # 每个用例文件有自己的基线：agent_cases.yaml -> baselines/agent.json，agent_cases_holdout.yaml -> baselines/agent_holdout.json
+    baseline_file = BASELINE_FILE if cases_file.resolve() == CASES_FILE.resolve() else BASELINE_FILE.with_name(cases_file.stem.replace("agent_cases", "agent") + ".json")
 
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.WARNING)
 
-    cases = yaml.safe_load(CASES_FILE.read_text(encoding="utf-8"))["cases"]
+    cases = yaml.safe_load(cases_file.read_text(encoding="utf-8"))["cases"]
     ids = [c["id"] for c in cases]
     if len(ids) != len(set(ids)):
         raise SystemExit("用例 id 有重复")
@@ -271,7 +275,7 @@ async def main():
 
     meta = {
         "started_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "model": MODEL_NAME, "commit": _git_commit(),
+        "model": MODEL_NAME, "commit": _git_commit(), "cases_file": cases_file.name,
         "frozen_now": fixtures.FROZEN_NOW.strftime("%Y-%m-%d %H:%M"), "mocked_tools": list(mocks.MOCKED_TOOLS),
     }
     results = {}
@@ -294,7 +298,7 @@ async def main():
         }
 
     summary = _summarize(results, args.trials)
-    baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8")) if BASELINE_FILE.exists() else None
+    baseline = json.loads(baseline_file.read_text(encoding="utf-8")) if baseline_file.exists() else None
     out_dir = RESULTS_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True)
     payload = {"meta": meta, "summary": summary, "cases": results}
@@ -305,11 +309,11 @@ async def main():
         if (args.only or args.category) and baseline:
             # 只跑了部分用例（比如改了这几条的断言）：把它们替换进现有基线，其余用例保持原样，总览重新算
             merged = {**baseline["cases"], **results}
-            merged = {cid: merged[cid] for cid in [c["id"] for c in yaml.safe_load(CASES_FILE.read_text(encoding="utf-8"))["cases"]] if cid in merged}
+            merged = {cid: merged[cid] for cid in [c["id"] for c in yaml.safe_load(cases_file.read_text(encoding="utf-8"))["cases"]] if cid in merged}
             payload = {"meta": {**meta, "merged_cases": sorted(results)}, "summary": _summarize(merged, args.trials), "cases": merged}
-        BASELINE_FILE.parent.mkdir(exist_ok=True)
-        BASELINE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"已保存基线：{BASELINE_FILE}" + (f"（替换了 {len(results)} 条用例）" if args.only or args.category else ""))
+        baseline_file.parent.mkdir(exist_ok=True)
+        baseline_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"已保存基线：{baseline_file}" + (f"（替换了 {len(results)} 条用例）" if args.only or args.category else ""))
 
     print(f"\npass@1 {_pct(summary['pass_at_1'])}　pass^{args.trials} {_pct(summary['pass_all_k'])}　"
           f"每轮输入 {summary['avg_prompt_tokens_per_turn']:,.0f} token　报告：{report}")

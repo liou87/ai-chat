@@ -1,0 +1,83 @@
+# 行为评测留出用例：修第一层那 6 条失败（歧义不澄清、缺时间默认 9 点、重复建任务、搜索失败反复重试、多余的 list_goals）
+# 之前写的，同样的失败类型、换了说法和场景。改提示词和工具时只看主用例集，这一组在改之前和改之后各跑一次，
+# 用来判断改动是真的泛化了，还是只让主用例集里那几句通过。格式同 agent_cases.yaml。
+#
+#   python -m evals.run_agent_eval --cases evals/agent_cases_holdout.yaml
+
+cases:
+  - id: ho_ambiguous_interview_task
+    category: 歧义澄清
+    why: 两个任务都跟"面试准备"沾边，要先问是哪个
+    setup:
+      tasks:
+        - title: 准备 Atlassian 面试
+    say: 面试准备那个任务弄完了
+    expect:
+      - no_tool: complete_task
+      - reply_has: "哪(一)?(个|条)|是指|还是"
+
+  - id: ho_ambiguous_meeting_reminder
+    category: 歧义澄清
+    why: 有两个开会相关的提醒，取消前要问清楚
+    setup:
+      reminders:
+        - message: 部门例会
+          remind_at: "2026-10-07 10:00"
+    say: 明天开会的提醒不用了
+    expect:
+      - no_tool: cancel_reminder
+      - reply_has: "哪(一)?(个|条)|是指|还是"
+
+  - id: ho_missing_time_date_only
+    category: 歧义澄清
+    why: 只有日期没有时间
+    say: 下周三提醒我交作业
+    expect:
+      - no_tool: set_reminder
+      - reply_has: "几点|什么时间|哪个时间|时间"
+
+  - id: ho_missing_time_weekday
+    category: 歧义澄清
+    say: 周五记得提醒我给房东打电话
+    expect:
+      - no_tool: set_reminder
+      - reply_has: "几点|什么时间|哪个时间|时间"
+
+  - id: ho_duplicate_task_milk
+    category: 歧义澄清
+    why: 已经有"买牛奶"了
+    say: 帮我加个任务：买牛奶
+    expect:
+      - reply_has: "已经有|已有|已存在|已经在|已经建|同名"
+      - db: {table: tasks, where: {title: 买牛奶}, count: 1}
+
+  - id: ho_search_error_no_loop
+    category: 异常恢复
+    why: 搜索服务挂了，最多换个词再试一次，然后如实说明，不能把 5 步用完
+    tool_results:
+      web_search: {results: [{error: 联网搜索请求失败，请稍后再试}]}
+    say: 英伟达最新一季财报怎么样？
+    expect:
+      - reply_has: "失败|没能|无法|暂时|出错|搜不到|没搜到"
+      - max_llm_calls: 3
+
+  - id: ho_efficiency_complete_milk
+    category: 效率
+    say: 买牛奶那个任务完成了
+    expect:
+      - tool: complete_task
+        args:
+          task_id: {ref: "task:买牛奶"}
+      - only_tools: [list_tasks, complete_task]
+      - max_llm_calls: 3
+
+  - id: ho_efficiency_preference
+    category: 效率
+    why: 改一条偏好就够了，不需要顺手去查目标或任务
+    say: 以后回答可以详细一点，不用那么简洁了
+    expect:
+      - tool: update_fact
+        args:
+          fact_id: {ref: "fact:回答简洁，先给结论再展开"}
+      - only_tools: [update_fact]
+      - max_llm_calls: 2

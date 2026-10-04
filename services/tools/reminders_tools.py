@@ -39,7 +39,8 @@ TOOLS = [
                         "message": {"type": "string", "description": "提醒内容"},
                         "remind_at": {
                             "type": "string",
-                            "description": "提醒时间，ISO 8601 格式，例如 2026-09-20T18:00:00",
+                            "description": "提醒时间，ISO 8601 格式，例如 2026-09-20T18:00:00。必须是用户给出的具体时刻："
+                                            "只说了日期（明天、周五）没说几点时不要自己定一个，先问用户几点",
                         },
                     },
                     "required": ["message", "remind_at"],
