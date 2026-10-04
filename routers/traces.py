@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from services.auth import require_auth
-from database import SessionLocal, AgentTrace, ChatSession, Message
+from database import SessionLocal, AgentTrace, ChatSession, EvalCandidate, Message, MessageFeedback
 
 router = APIRouter(dependencies=[Depends(require_auth)])
 
@@ -49,6 +49,26 @@ def _summarize(rows: list, title: str, question: Optional[str]) -> dict:
     }
 
 
+async def _annotations(db, keys: set) -> tuple[dict, set]:
+    """每轮的用户反馈（点赞/点踩）和是否已标成用例候选。"""
+    session_ids = {k[0] for k in keys}
+    fb = {(f.session_id, f.turn_index): f for f in (await db.execute(
+        select(MessageFeedback).where(MessageFeedback.session_id.in_(session_ids)))).scalars().all()}
+    cands = {(c.session_id, c.turn_index) for c in (await db.execute(
+        select(EvalCandidate).where(EvalCandidate.session_id.in_(session_ids)))).scalars().all()}
+    return fb, cands
+
+
+def _annotate(turn: dict, fb: dict, cands: set) -> dict:
+    key = (turn["session_id"], turn["turn_index"])
+    f = fb.get(key)
+    from routers.feedback import REASONS
+    turn["feedback"] = ({"rating": f.rating, "reason": f.reason, "reason_label": REASONS.get(f.reason), "comment": f.comment}
+                        if f else None)
+    turn["is_candidate"] = key in cands
+    return turn
+
+
 async def _questions(db, keys: set) -> dict:
     """每轮对应的用户问题：turn_index 是这轮开始前会话里已有的消息数，所以第 turn_index 条消息就是这轮的提问。"""
     session_ids = {k[0] for k in keys}
@@ -67,7 +87,8 @@ async def _questions(db, keys: set) -> dict:
 
 
 @router.get("/traces")
-async def list_traces(errors_only: bool = False, tool: Optional[str] = None, limit: int = LIST_LIMIT):
+async def list_traces(errors_only: bool = False, tool: Optional[str] = None, feedback: Optional[str] = None,
+                      limit: int = LIST_LIMIT):
     async with SessionLocal() as db:
         # 先取最近一批轨迹行，再按 (会话, 轮次) 分组；行数给足余量，保证能凑够 limit 轮
         rows = (await db.execute(
@@ -81,8 +102,11 @@ async def list_traces(errors_only: bool = False, tool: Optional[str] = None, lim
         )).scalars().all()}
         questions = await _questions(db, set(groups))
 
-        turns = [_summarize(sorted(g, key=lambda r: r.id), titles.get(k[0], "（已删除的会话）"), questions.get(k))
+        fb, cands = await _annotations(db, set(groups))
+        turns = [_annotate(_summarize(sorted(g, key=lambda r: r.id), titles.get(k[0], "（已删除的会话）"), questions.get(k)), fb, cands)
                  for k, g in groups.items()]
+        if feedback in ("up", "down"):
+            turns = [t for t in turns if t["feedback"] and t["feedback"]["rating"] == feedback]
         if errors_only:
             turns = [t for t in turns if t["has_error"]]
         if tool:
@@ -102,8 +126,9 @@ async def get_trace(session_id: int, turn_index: int):
             raise HTTPException(status_code=404, detail="没有这一轮的轨迹")
         session = await db.get(ChatSession, session_id)
         questions = await _questions(db, {(session_id, turn_index)})
+        fb, cands = await _annotations(db, {(session_id, turn_index)})
         return {
-            **_summarize(rows, session.title if session else "（已删除的会话）", questions.get((session_id, turn_index))),
+            **_annotate(_summarize(rows, session.title if session else "（已删除的会话）", questions.get((session_id, turn_index))), fb, cands),
             "steps": [{
                 "step_index": r.step_index,
                 "type": r.type,

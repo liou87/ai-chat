@@ -12,13 +12,15 @@ const fmtMs = (ms) => ms == null ? "" : ms < 1000 ? `${ms}ms` : `${(ms / 1000).t
 const fmtTokens = (n) => !n ? "" : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 
 // 执行轨迹（类似 LangSmith / Langfuse 的单轮 trace 视图）：每一轮对话里知行调用了哪些工具、参数和结果、
-// 每一步花了多久、用了多少 token。可以只看出错的、按工具筛；从聊天里点"查看轨迹"会直接展开对应那一轮
+// 每一步花了多久、用了多少 token。可以只看出错的、只看点踩的、按工具筛；从聊天里点"查看轨迹"会直接展开对应那一轮。
+// 有问题的轮次可以标成评测用例候选（第四层：线上问题回流进评测集）
 function TracePanel({ target, onTargetConsumed }) {
   const { colors, inputStyle, buttonStyle, panelCardStyle } = useTheme()
   const [turns, setTurns] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [errorsOnly, setErrorsOnly] = useState(false)
+  const [downOnly, setDownOnly] = useState(false)
   const [tool, setTool] = useState("")
   const [knownTools, setKnownTools] = useState([])
   const [openKey, setOpenKey] = useState(null)     // "会话id-轮次"
@@ -26,7 +28,7 @@ function TracePanel({ target, onTargetConsumed }) {
   const fetchTurns = async () => {
     setLoading(true)
     try {
-      const list = await apiFetch("/traces", { params: { errors_only: errorsOnly || null, tool: tool || null } })
+      const list = await apiFetch("/traces", { params: { errors_only: errorsOnly || null, tool: tool || null, feedback: downOnly ? "down" : null } })
       setTurns(list)
       // 工具下拉的选项：见过的工具都留着，筛选之后列表变短也不会丢选项
       setKnownTools(prev => [...new Set([...prev, ...list.flatMap(t => t.tools)])].sort())
@@ -41,7 +43,7 @@ function TracePanel({ target, onTargetConsumed }) {
   useEffect(() => {
     fetchTurns()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [errorsOnly, tool])
+  }, [errorsOnly, tool, downOnly])
 
   // 从聊天里跳过来：展开那一轮（不在当前列表里也能单独展开）
   useEffect(() => {
@@ -67,6 +69,10 @@ function TracePanel({ target, onTargetConsumed }) {
           <input type="checkbox" checked={errorsOnly} onChange={e => setErrorsOnly(e.target.checked)} style={{ accentColor: colors.ink }} />
           只看出错的
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: colors.textSecondary, cursor: "pointer" }}>
+          <input type="checkbox" checked={downOnly} onChange={e => setDownOnly(e.target.checked)} style={{ accentColor: colors.ink }} />
+          只看点踩的
+        </label>
         <select value={tool} onChange={e => setTool(e.target.value)} aria-label="按工具筛选" style={{ ...inputStyle, width: "auto", fontSize: 13 }}>
           <option value="">全部工具</option>
           {knownTools.map(t => <option key={t} value={t}>{t}</option>)}
@@ -78,7 +84,7 @@ function TracePanel({ target, onTargetConsumed }) {
       {loading && turns.length === 0 && <div style={{ color: colors.textMuted }}>加载中...</div>}
       {!loading && !error && turns.length === 0 && (
         <div style={{ ...panelCardStyle, padding: "24px", color: colors.textMuted, fontSize: 14 }}>
-          {errorsOnly || tool ? "没有符合条件的轮次" : "还没有对话记录"}
+          {errorsOnly || tool || downOnly ? "没有符合条件的轮次" : "还没有对话记录"}
         </div>
       )}
 
@@ -108,6 +114,7 @@ function TurnCard({ turn, turnKey, open, onToggle }) {
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState(null)
   const ref = useRef(null)
+  const [candidate, setCandidate] = useState(null)   // 本页刚改过的候选状态，没改过就用接口给的
   const [sessionId, turnIndex] = turnKey.split("-").map(Number)
 
   useEffect(() => {
@@ -130,6 +137,9 @@ function TurnCard({ turn, turnKey, open, onToggle }) {
                 {t.question || "（没有找到提问）"}
               </span>
               {t.has_error && <Badge tone="danger">出错</Badge>}
+              {t.feedback?.rating === "down" && <Badge tone="danger">点踩{t.feedback.reason_label ? `：${t.feedback.reason_label}` : ""}</Badge>}
+              {t.feedback?.rating === "up" && <Badge tone="ink">点赞</Badge>}
+              {(candidate ?? t.is_candidate) && <Badge tone="warn">用例候选</Badge>}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 12, color: colors.textMuted, marginTop: 6 }}>
               <span>{t.session_title} · 第 {Math.floor(t.turn_index / 2) + 1} 轮 · {formatShort(t.started_at)}</span>
@@ -146,10 +156,70 @@ function TurnCard({ turn, turnKey, open, onToggle }) {
 
       {open && detail && (
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${colors.borderLight}` }}>
+          {detail.feedback?.comment && (
+            <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}>用户反馈：{detail.feedback.comment}</div>
+          )}
           {detail.steps.map((s, i) => <StepRow key={i} step={s} last={i === detail.steps.length - 1} />)}
+          <CandidateRow
+            sessionId={sessionId} turnIndex={turnIndex}
+            isCandidate={candidate ?? detail.is_candidate}
+            onChange={setCandidate}
+          />
         </div>
       )}
       {open && error && turn && <div style={{ marginTop: 8 }}><LoadError message={error} /></div>}
+    </div>
+  )
+}
+
+// 把这一轮标成"用例候选"：本地跑 evals/pull_candidates.py 导出成 YAML 草稿，补上期望后并进评测用例集
+function CandidateRow({ sessionId, turnIndex, isCandidate, onChange }) {
+  const { colors, inputStyle, buttonStyle } = useTheme()
+  const [note, setNote] = useState("")
+  const [editing, setEditing] = useState(false)
+  const [error, setError] = useState(null)
+
+  const add = async () => {
+    try {
+      await apiFetch("/eval-candidates", { method: "POST", body: { session_id: sessionId, turn_index: turnIndex, note } })
+      onChange(true)
+      setEditing(false)
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+  const remove = async () => {
+    try {
+      await apiFetch(`/eval-candidates/${sessionId}/${turnIndex}`, { method: "DELETE" })
+      onChange(false)
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${colors.borderLight}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {isCandidate ? (
+        <>
+          <span style={{ fontSize: 12.5, color: colors.textSecondary }}>已标成评测用例候选，下次导出时会带上</span>
+          <button onClick={remove} style={{ ...buttonStyle, fontSize: 12, padding: "3px 10px" }}>取消标记</button>
+        </>
+      ) : editing ? (
+        <>
+          <input
+            value={note} onChange={e => setNote(e.target.value)} autoFocus maxLength={500}
+            placeholder="期望应该怎样（可选），比如：应该先问是哪个任务"
+            style={{ ...inputStyle, flex: 1, minWidth: 220, fontSize: 12.5 }}
+          />
+          <button onClick={add} style={{ ...buttonStyle, fontSize: 12, padding: "3px 10px" }}>保存</button>
+          <button onClick={() => setEditing(false)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 12, color: colors.textMuted }}>取消</button>
+        </>
+      ) : (
+        <button onClick={() => setEditing(true)} style={{ ...buttonStyle, fontSize: 12, padding: "3px 10px" }}>转成评测用例候选</button>
+      )}
+      {error && <span style={{ fontSize: 12, color: colors.danger }}>{error}</span>}
     </div>
   )
 }

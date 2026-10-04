@@ -15,6 +15,7 @@ import LibraryPanel from "./components/LibraryPanel"
 import NoteViewerModal from "./components/NoteViewerModal"
 import ProfilePanel from "./components/ProfilePanel"
 import TracePanel from "./components/TracePanel"
+import FeedbackBar from "./components/FeedbackBar"
 import AssistantAvatar from "./components/AssistantAvatar"
 import { PERSONA_NAME } from "./persona"
 import ReminderBanner from "./components/ReminderBanner"
@@ -392,6 +393,10 @@ function App() {
 
   // 某条回复对应的轨迹：当前对话里的回复用 data-trace 记下的；历史会话里的回复按位置推算
   // （turn_index 是这轮开始前会话里已有的消息数，也就是这条回复前面那条提问的下标）
+  // 每轮回复的点赞/点踩，key 是 "会话id-轮次"；打开历史会话时一次取回这个会话的全部反馈
+  const [feedbackMap, setFeedbackMap] = useState({})
+  const setFeedbackFor = (trace, fb) => setFeedbackMap(m => ({ ...m, [`${trace.sessionId}-${trace.turnIndex}`]: fb }))
+
   const traceOf = (msg, index) => {
     if (traceRefs[msg.id]) return traceRefs[msg.id]
     const m = /^hist-(\d+)-(\d+)$/.exec(msg.id)
@@ -415,6 +420,10 @@ function App() {
         parts: [{ type: "text", text: m.content }],
       })))
       stickToBottomRef.current = true
+      // 反馈取不到不影响看会话，失败就当没有
+      apiFetch("/feedback", { params: { session_id: sessionId } })
+        .then(list => setFeedbackMap(prev => ({ ...prev, ...Object.fromEntries(list.map(f => [`${f.session_id}-${f.turn_index}`, f])) })))
+        .catch(() => {})
     } catch (e) {
       setMessages([])
       setHistoryLoadError(e.message)
@@ -803,14 +812,18 @@ function App() {
                       }
                       return null
                     })}
-                    {msg.role === "assistant" && traceOf(msg, mi) && (
-                      <button
-                        onClick={() => { setTraceTarget(traceOf(msg, mi)); setActiveView("traces") }}
-                        style={{ alignSelf: "flex-start", border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 11, color: colors.textMuted }}
-                      >
-                        查看轨迹
-                      </button>
-                    )}
+                    {msg.role === "assistant" && traceOf(msg, mi) && !(loading && mi === displayMessages.length - 1) && (() => {
+                      const t = traceOf(msg, mi)
+                      return (
+                        <FeedbackBar
+                          key={`${t.sessionId}-${t.turnIndex}`}
+                          trace={t}
+                          feedback={feedbackMap[`${t.sessionId}-${t.turnIndex}`]}
+                          onChange={fb => setFeedbackFor(t, fb)}
+                          onOpenTrace={() => { setTraceTarget(t); setActiveView("traces") }}
+                        />
+                      )
+                    })()}
                   </div>
                 ))}
                 {showThinking && <div style={{ color: colors.textMuted, fontSize: 13 }}>{PERSONA_NAME}正在思考…</div>}

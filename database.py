@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import event, Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, text
+from sqlalchemy import event, Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, UniqueConstraint, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
@@ -238,6 +238,38 @@ class HotTopics(Base):
     created_at = Column(DateTime, default=clock_now)
     def __repr__(self):
         return f"HotTopics(topic_date={self.topic_date})"
+
+# message_feedback 表：用户对某一轮回复的点赞/点踩（第四层评测：线上反馈回流）。
+# 用 (会话, 轮次) 定位，跟 agent_traces 一致，执行轨迹页能直接把反馈和那一轮的步骤对上；同一轮再点一次就覆盖
+class MessageFeedback(Base):
+    __tablename__ = "message_feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, nullable=False, index=True)
+    turn_index = Column(Integer, nullable=False)
+    rating = Column(String(10), nullable=False)               # up / down
+    reason = Column(String(20), nullable=True)                # 点踩原因：wrong / fabricated / missed_tool / verbose / other
+    comment = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=clock_now)
+    updated_at = Column(DateTime, default=clock_now, onupdate=clock_now)
+    __table_args__ = (UniqueConstraint("session_id", "turn_index", name="uq_feedback_turn"),)
+    def __repr__(self):
+        return f"MessageFeedback({self.session_id}/{self.turn_index}: {self.rating})"
+
+# eval_candidates 表：标记成"要变成评测用例"的轮次。导出脚本（evals/pull_candidates.py）把它们连同
+# 提问、实际调用和回复写成 YAML 草稿，人补上期望之后再并进用例集
+class EvalCandidate(Base):
+    __tablename__ = "eval_candidates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, nullable=False)
+    turn_index = Column(Integer, nullable=False)
+    note = Column(String(500), nullable=True)                 # 为什么要做成用例、期望应该是什么
+    exported = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=clock_now)
+    __table_args__ = (UniqueConstraint("session_id", "turn_index", name="uq_candidate_turn"),)
+    def __repr__(self):
+        return f"EvalCandidate({self.session_id}/{self.turn_index})"
 
 # auth_sessions 表：登录会话。cookie 里是随机令牌，这里只存它的 sha256，库泄露了也拿不到能用的 cookie。
 # 每台设备登录一次一条，单独删一条就是让那台设备下线

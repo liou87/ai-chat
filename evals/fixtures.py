@@ -109,7 +109,7 @@ async def reset_state() -> None:
     async with SessionLocal() as db:
         await db.execute(text(
             f"TRUNCATE {s}.tasks, {s}.goals, {s}.reminders, {s}.profile_facts, {s}.sessions, {s}.messages, "
-            f"{s}.agent_traces RESTART IDENTITY CASCADE"))
+            f"{s}.agent_traces, {s}.message_feedback, {s}.eval_candidates RESTART IDENTITY CASCADE"))
         # 删除一律写 schema 全名，不依赖任何连接状态
         await db.execute(text(f"DELETE FROM {s}.notes WHERE NOT (title = ANY(:titles))"),
                          {"titles": [n[0] for n in NOTES]})

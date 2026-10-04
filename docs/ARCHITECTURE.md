@@ -186,6 +186,14 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 - 防过拟合："只用英文术语"那个变体是看过主题集结果后设计的，所以在跑它之前另写了 12 道留出题（queries_holdout.yaml，6 道带术语、3 道中文改写、3 道中文问英文资料），最后只跑一次。留出题的绝对分数比主题集低很多，因为主题集的标注看过结果后修订过、偏乐观，留出题没改过；两组题上各方案的相对排序一致。
 - 剩下没命中的（efConstruction 的作用、DeepEval 和 Pytest 的关系、MoE 的问题、LoRA 的秩取多少等）是答案所在的分块排不进文档内前 2，下一步值得试的是分块级重排（交叉编码器或让模型挑），而不是换召回方式。
 
+### 线上反馈回流（第四层）
+
+评测集不能只靠自己想，线上真实出问题的轮次要能回流进来：
+- 聊天里每条回复下面有点赞/点踩（components/FeedbackBar.jsx），点踩时选原因（答错了、编造了内容、该用工具没用、啰嗦、其它）并可以写一句。存在 message_feedback 表，用 (会话, 轮次) 定位，跟 agent_traces 一致；同一轮再点一次覆盖，点同一个图标撤销。接口 GET /api/feedback?session_id=、PUT/DELETE /api/feedback/{session_id}/{turn_index}。
+- 执行轨迹页每轮显示反馈标记，可以只看点踩的；展开一轮可以"转成评测用例候选"并写一句期望，存在 eval_candidates 表（POST /api/eval-candidates，DELETE /api/eval-candidates/{session_id}/{turn_index}）。
+- 本地跑 python -m evals.pull_candidates，把还没导出的候选和所有点踩的轮次导出成 evals/candidates.yaml：这一轮之前的对话（多轮按原样重放）、实际调用的工具和参数、回复开头、反馈原因和备注，expect 留空——什么算对只有人能定。草稿含真实对话，不进 git，收进用例集时把隐私内容改写掉；--mark 把导出过的候选标记掉。
+- 删会话时反馈和候选一起删。线上对话自动抽样评分暂时不做（对话还少），以后对话多了可以接在每日定时任务里。
+
 ## 6. 数据模型
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
