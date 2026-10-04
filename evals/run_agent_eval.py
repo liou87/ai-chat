@@ -67,10 +67,33 @@ async def _turn_metrics(session_id: int, turn_index: int) -> dict:
     }
 
 
+def _override_tools(results: dict | None) -> dict:
+    """用例里的 tool_results：这一条用例期间，指定工具直接返回给定结果（比如模拟报错）。返回原来的处理函数，跑完还原。"""
+    from services.tools import TOOL_HANDLERS
+    saved = {}
+    for name, result in (results or {}).items():
+        saved[name] = TOOL_HANDLERS[name]
+
+        async def fixed(db, args, _result=result):
+            return _result
+        TOOL_HANDLERS[name] = fixed
+    return saved
+
+
 async def run_trial(case: dict) -> dict:
     """跑一次：恢复初始数据，按顺序发每一轮，检查有 expect 的轮次。"""
+    from services.tools import TOOL_HANDLERS
     await fixtures.reset_state()
+    await fixtures.apply_setup(case.get("setup"))
     refs = await fixtures.resolve_refs()
+    saved = _override_tools(case.get("tool_results"))
+    try:
+        return await _run_turns(case, refs)
+    finally:
+        TOOL_HANDLERS.update(saved)
+
+
+async def _run_turns(case: dict, refs: dict) -> dict:
     async with SessionLocal() as db:
         session = ChatSession(title=f"[eval] {case['id']}")
         db.add(session)
@@ -95,14 +118,15 @@ async def run_trial(case: dict) -> dict:
             history.append({"role": "assistant", "content": reply})
 
             calls = [{"name": t["name"], "args": t["args"]} for t in trace if t["type"] == "tool_call"]
-            checks = await check_turn(turn.get("expect"), calls, reply, refs)
+            metrics = await _turn_metrics(session_id, turn_index)
+            checks = await check_turn(turn.get("expect"), calls, reply, refs, metrics)
             turn_ok = all(ok for ok, _ in checks)
             passed = passed and turn_ok
             turns_out.append({
                 "say": turn["say"], "reply": reply, "tools": calls, "latency_ms": latency_ms,
                 "checks": [{"ok": ok, "detail": why} for ok, why in checks],
                 "truncated": any(t.get("truncated") for t in trace if t["type"] == "final"),
-                **await _turn_metrics(session_id, turn_index),
+                **metrics,
             })
     return {"passed": passed, "turns": turns_out}
 
@@ -278,12 +302,14 @@ async def main():
     report = _write_report(out_dir, meta, summary, results, baseline)
 
     if args.save_baseline:
-        if args.only or args.category:
-            print("只跑了部分用例，不保存基线")
-        else:
-            BASELINE_FILE.parent.mkdir(exist_ok=True)
-            BASELINE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"已保存基线：{BASELINE_FILE}")
+        if (args.only or args.category) and baseline:
+            # 只跑了部分用例（比如改了这几条的断言）：把它们替换进现有基线，其余用例保持原样，总览重新算
+            merged = {**baseline["cases"], **results}
+            merged = {cid: merged[cid] for cid in [c["id"] for c in yaml.safe_load(CASES_FILE.read_text(encoding="utf-8"))["cases"]] if cid in merged}
+            payload = {"meta": {**meta, "merged_cases": sorted(results)}, "summary": _summarize(merged, args.trials), "cases": merged}
+        BASELINE_FILE.parent.mkdir(exist_ok=True)
+        BASELINE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"已保存基线：{BASELINE_FILE}" + (f"（替换了 {len(results)} 条用例）" if args.only or args.category else ""))
 
     print(f"\npass@1 {_pct(summary['pass_at_1'])}　pass^{args.trials} {_pct(summary['pass_all_k'])}　"
           f"每轮输入 {summary['avg_prompt_tokens_per_turn']:,.0f} token　报告：{report}")

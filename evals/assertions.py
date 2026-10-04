@@ -24,6 +24,9 @@ def _match_arg(actual, spec, refs: dict) -> tuple[bool, str]:
         if "contains" in spec:
             ok = isinstance(actual, str) and spec["contains"].lower() in actual.lower()
             return ok, f"应包含「{spec['contains']}」，实际 {actual!r}"
+        if "contains_any" in spec:
+            ok = isinstance(actual, str) and any(w.lower() in actual.lower() for w in spec["contains_any"])
+            return ok, f"应包含 {spec['contains_any']} 之一，实际 {actual!r}"
         if "in" in spec:
             return actual in spec["in"], f"应为 {spec['in']} 之一，实际 {actual!r}"
         if "ref" in spec:
@@ -74,10 +77,24 @@ async def _check_db(spec: dict) -> tuple[bool, str]:
     return found == want, f"{spec['table']} {spec.get('where')} 应{'存在' if want else '不存在'}，实际{'存在' if found else '不存在'}"
 
 
-async def check_turn(expect: list, calls: list, reply: str, refs: dict) -> list[tuple[bool, str]]:
+async def check_turn(expect: list, calls: list, reply: str, refs: dict, metrics: dict) -> list[tuple[bool, str]]:
     results = []
     for item in expect or []:
-        if "tool" in item:
+        if "no_call" in item:
+            # 某种参数组合的调用不能出现（比如把提醒设在已经过去的时间）
+            spec = item["no_call"]
+            ok, _ = _check_tool(calls, spec["tool"], spec.get("args"), refs)
+            results.append((not ok, f"不应出现这样的 {spec['tool']} 调用：{spec.get('args')}"))
+        elif "only_tools" in item:
+            extra = sorted({c["name"] for c in calls} - set(item["only_tools"]))
+            results.append((not extra, f"只应调用 {item['only_tools']}，多调用了 {extra}"))
+        elif "max_tool_calls" in item:
+            n = len(calls)
+            results.append((n <= item["max_tool_calls"], f"工具调用不超过 {item['max_tool_calls']} 次，实际 {n} 次"))
+        elif "max_llm_calls" in item:
+            n = metrics.get("llm_calls", 0)
+            results.append((n <= item["max_llm_calls"], f"模型调用不超过 {item['max_llm_calls']} 次，实际 {n} 次"))
+        elif "tool" in item:
             results.append(_check_tool(calls, item["tool"], item.get("args"), refs))
         elif "tool_any" in item:
             names = {c["name"] for c in calls}

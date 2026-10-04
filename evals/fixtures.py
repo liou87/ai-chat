@@ -144,6 +144,21 @@ async def reset_state() -> None:
         await db.commit()
 
 
+async def apply_setup(setup: dict | None) -> None:
+    """用例自己的补充数据（在公共初始数据之外），比如再加一个名字相近的任务来制造歧义。"""
+    if not setup:
+        return
+    async with SessionLocal() as db:
+        for i, t in enumerate(setup.get("tasks", [])):
+            db.add(Task(title=t["title"], priority=t.get("priority", "medium"), done=t.get("done", False),
+                        due_at=datetime.strptime(t["due_at"], "%Y-%m-%d %H:%M") if t.get("due_at") else None,
+                        created_at=FROZEN_NOW - timedelta(hours=10 - i), updated_at=FROZEN_NOW - timedelta(hours=10 - i)))
+        for r in setup.get("reminders", []):
+            db.add(Reminder(message=r["message"], remind_at=datetime.strptime(r["remind_at"], "%Y-%m-%d %H:%M"),
+                            created_at=FROZEN_NOW - timedelta(hours=1)))
+        await db.commit()
+
+
 async def resolve_refs() -> dict:
     """用例里写 {ref: "task:买牛奶"} 这种引用，按标题/内容换成实际 id。"""
     refs = {}
