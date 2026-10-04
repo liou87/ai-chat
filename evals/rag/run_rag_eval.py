@@ -3,6 +3,7 @@
 
     python -m evals.rag.run_rag_eval                  跑一遍，和基线对比
     python -m evals.rag.run_rag_eval --save-baseline  存成基线（evals/baselines/rag.json）
+    python -m evals.rag.run_rag_eval --variants all   对比实验：几种检索方案在同一套题上并排比较（见 retrievers.py）
 
 语料（evals/rag/corpus/，先跑 build_corpus）导入单独的 eval_rag schema，跟真实资料库、行为评测的数据都隔开；
 内容或分块参数变了才重新算向量。每个标注的答案关键句先校验确实出现在对应文档的某个分块里，标注坏了直接报错。
@@ -32,6 +33,7 @@ from sqlalchemy import select, text
 
 from database import Note, NoteChunk, SessionLocal
 from evals.fixtures import assert_isolated
+from evals.rag import retrievers
 from services.notes import chunking
 from services.notes import embeddings
 from services.notes import notes as notes_service
@@ -117,8 +119,9 @@ async def validate_labels(queries: list, ids: dict) -> None:
 
 
 def _score_query(q: dict, results: list, doc_of: dict) -> dict:
-    ranked = [{"doc": doc_of.get(r["id"]), "score": r["score"], "snippet": r["snippet"]} for r in results]
+    ranked = [{"doc": doc_of.get(r["note_id"]), "score": r["score"], "snippets": r["snippets"]} for r in results]
     out = {"group": q["group"], "q": q["q"], "top1_score": ranked[0]["score"] if ranked else 0.0,
+           "snippet_chars": sum(len(x) for r in ranked for x in r["snippets"]),
            "results": [{"doc": r["doc"], "score": r["score"]} for r in ranked]}
     gold = q.get("gold")
     if not gold:
@@ -130,7 +133,7 @@ def _score_query(q: dict, results: list, doc_of: dict) -> dict:
         if not _keys(g):
             continue
         hit = next((r for r in ranked if r["doc"] == g["doc"]), None)
-        answer_hits.append(bool(hit) and any(_norm(k) in _norm(hit["snippet"]) for k in _keys(g)))
+        answer_hits.append(bool(hit) and any(_norm(k) in _norm(sn) for k in _keys(g) for sn in hit["snippets"]))
     first = min((r for r in ranks if r), default=None)
     out.update({
         "gold_ranks": ranks,
@@ -179,6 +182,7 @@ def _summarize(per_query: dict) -> dict:
         return {"min": round(xs[0], 4), "median": round(xs[len(xs) // 2], 4), "max": round(xs[-1], 4)} if xs else None
 
     return {
+        "avg_snippet_chars": round(sum(r["snippet_chars"] for r in per_query.values()) / (len(per_query) or 1)),
         "overall": agg(pos),
         "by_group": {g: agg(rows) for g, rows in groups.items()},
         "negatives": {"n": len(neg), "pos_top1": dist(pos_scores), "neg_top1": dist(neg_scores),
@@ -235,35 +239,97 @@ def _write_report(out_dir: Path, meta: dict, summary: dict, per_query: dict, bas
     return path
 
 
+def _write_comparison(out_dir: Path, meta: dict, runs: dict) -> Path:
+    """多个方案的对比表：分组的答案命中、文档命中、MRR，加上给模型的字数代价。"""
+    groups = list(next(iter(runs.values()))["summary"]["by_group"])
+    lines = ["# 检索方案对比实验", "",
+             f"- 时间：{meta['started_at']}　代码版本：{meta['commit']}　索引：{meta['index']}　top_k={TOP_K}　题目：{meta['queries']}",
+             f"- 语料 {meta['docs']} 篇（{meta['chunks']} 个分块），正例 {next(iter(runs.values()))['summary']['overall']['n']} 条", "",
+             "## 总体", "", "| 方案 | 文档@1 | 文档@5 | 答案@5 | MRR | 每次给模型的字数 |", "|---|---|---|---|---|---|"]
+    for name, run in runs.items():
+        o, sm = run["summary"]["overall"], run["summary"]
+        lines.append(f"| {name} | {_pct(o['doc_recall@1'])} | {_pct(o['doc_recall@5'])} | {_pct(o['answer_recall@5'])} | "
+                     f"{o['mrr']:.3f} | {sm['avg_snippet_chars']:,} |")
+    lines += ["", "## 分组答案命中@5（跨文档辨析题只看文档，列的是文档@5）", "",
+              "| 方案 | " + " | ".join(groups) + " |", "|---|" + "---|" * len(groups)]
+    for name, run in runs.items():
+        bg = run["summary"]["by_group"]
+        cells = [_pct(bg[g]["answer_recall@5"]) if bg[g]["answer_recall@5"] is not None else _pct(bg[g]["doc_recall@5"])
+                 for g in groups]
+        lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    lines += ["", "## 各方案没命中的题", ""]
+    for name, run in runs.items():
+        miss = [qid for qid, r in run["queries"].items()
+                if r.get("answer_hit") is False or ("doc_hit" in r and not r["doc_hit"][TOP_K])]
+        lines.append(f"- {name}：{'、'.join(miss) or '无'}")
+    path = out_dir / "comparison.md"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-baseline", action="store_true")
+    parser.add_argument("--queries", default=str(QUERIES), help="题目文件，留出题是 evals/rag/queries_holdout.yaml")
+    parser.add_argument("--variants", default="baseline",
+                        help="逗号分隔，可选 " + ",".join(retrievers.VARIANTS) + "；all 表示全部")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
+    variants = retrievers.VARIANTS if args.variants == "all" else args.variants.split(",")
+    if args.save_baseline and variants != ["baseline"]:
+        raise SystemExit("基线只能用线上方案（baseline）保存")
 
     await assert_isolated("eval_rag")
-    queries = yaml.safe_load(QUERIES.read_text(encoding="utf-8"))["queries"]
+    queries_file = Path(args.queries)
+    queries = yaml.safe_load(queries_file.read_text(encoding="utf-8"))["queries"]
+    if args.save_baseline and queries_file.resolve() != QUERIES.resolve():
+        raise SystemExit("基线只用主题集保存")
     if len({q["id"] for q in queries}) != len(queries):
         raise SystemExit("题目 id 有重复")
     ids = await load_corpus()
     await validate_labels(queries, ids)
     doc_of = {nid: did for did, nid in ids.items()}
 
-    per_query = {}
-    async with SessionLocal() as db:
-        for q in queries:
-            results = await notes_service.search_notes(db, q["q"], top_k=TOP_K)
-            per_query[q["id"]] = _score_query(q, results, doc_of)
-        chunks = (await db.execute(text("select count(*) from eval_rag.note_chunks"))).scalar()
+    # 查询向量每道题只算一次、所有方案共用：Voyage 对同一句话两次返回的向量有细微差别，
+    # 不缓存的话一道题的排序可能在方案之间翻转，把接口噪声误当成方案差异
+    _cache = {}
+    original_embed = embeddings.embed_text
 
-    summary = _summarize(per_query)
+    async def cached_embed(text_):
+        if text_ not in _cache:
+            _cache[text_] = await original_embed(text_)
+        return _cache[text_]
+    retrievers.embed_text = cached_embed
+    notes_service.embed_text = cached_embed
+
+    runs = {}
+    async with SessionLocal() as db:
+        index = await retrievers.Index.build(db)
+        chunks = len(index.chunks)
+        for variant in variants:
+            per_query = {}
+            for q in queries:
+                results = await retrievers.retrieve(variant, index, db, q["q"], top_k=TOP_K)
+                per_query[q["id"]] = _score_query(q, results, doc_of)
+            runs[variant] = {"summary": _summarize(per_query), "queries": per_query}
+            o = runs[variant]["summary"]["overall"]
+            print(f"{variant}: 文档@5 {_pct(o['doc_recall@5'])}　答案@5 {_pct(o['answer_recall@5'])}　MRR {o['mrr']:.3f}", flush=True)
+
     from evals.run_agent_eval import _git_commit
     meta = {"started_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "commit": _git_commit(),
-            "index": _chunker_tag(), "docs": len(ids), "chunks": chunks, "top_k": TOP_K}
-    baseline = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else None
+            "index": _chunker_tag(), "docs": len(ids), "chunks": chunks, "top_k": TOP_K, "queries": queries_file.name}
     out_dir = RESULTS / f"rag-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     out_dir.mkdir(parents=True)
-    payload = {"meta": meta, "summary": summary, "queries": per_query}
+
+    if len(variants) > 1:
+        (out_dir / "results.json").write_text(json.dumps({"meta": meta, "runs": runs}, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"\n对比报告：{_write_comparison(out_dir, meta, runs)}")
+        return
+
+    run = runs[variants[0]]
+    summary, per_query = run["summary"], run["queries"]
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else None
+    payload = {"meta": {**meta, "variant": variants[0]}, "summary": summary, "queries": per_query}
     (out_dir / "results.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     report = _write_report(out_dir, meta, summary, per_query, baseline)
     if args.save_baseline:

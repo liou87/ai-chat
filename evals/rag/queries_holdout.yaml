@@ -1,0 +1,53 @@
+# 留出题：检索方案对比实验中途（看过主题集结果、设计"只用英文术语做 BM25"这个变体之后）写的，
+# 写完之前没有在任何方案上跑过。主题集用来选方案，这一组只在最后跑一次，检验结论能不能推广到没见过的问题，
+# 避免对着同一套题反复调参。格式同 queries.yaml。
+
+queries:
+  - id: ho_hamming_ops
+    group: 关键词
+    q: pgvector 里给二进制向量建 Hamming 距离的 HNSW 索引，用哪个 ops
+    gold: [{doc: pgvector, key: "bit_hamming_ops"}]
+  - id: ho_maintenance_work_mem
+    group: 关键词
+    q: pgvector 建 HNSW 索引很慢，maintenance_work_mem 有关系吗
+    gold: [{doc: pgvector, key: "Indexes build significantly faster when the graph fits into"}]
+  - id: ho_litellm_fallback
+    group: 关键词
+    q: LiteLLM 的 Router 支持重试和 fallback 吗
+    gold: [{doc: litellm, key: "Router with retry/fallback logic"}]
+  - id: ho_browser_use_key
+    group: 关键词
+    q: 用 browser-use 的时候 BROWSER_USE_API_KEY 是必须配的吗
+    gold: [{doc: browser_use, key: "Optional: BU2 model or cloud browser"}]
+  - id: ho_num_speculative_tokens
+    group: 关键词
+    q: vLLM 投机解码配置里的 num_speculative_tokens 是什么意思
+    gold: [{doc: zh_speculative, key: "每步草稿生成 5 个 token"}]
+  - id: ho_lora_rank
+    group: 关键词
+    q: LoRA 的秩 r 一般取多大
+    gold: [{doc: zh_lora, key: "通常取8-64"}]
+  - id: ho_skiplist_origin
+    group: 同义改写
+    q: 跳表这种数据结构最早是谁提出来的
+    gold: [{doc: zh_hnsw, key: "由William Pugh在1990年引入"}]
+  - id: ho_moe_topk
+    group: 同义改写
+    q: 那种由很多专家组成的模型，每次会让几个专家同时干活
+    gold: [{doc: zh_moe, key: "K通常很小，如1或2"}]
+  - id: ho_rlhf_problems
+    group: 同义改写
+    q: 用人类反馈做强化学习来对齐模型，主要有什么毛病
+    gold: [{doc: zh_dpo, key: "训练复杂，奖励黑客问题"}]
+  - id: ho_rust_vector_db
+    group: 同义改写
+    q: 有没有哪个向量数据库是用 Rust 写的
+    gold: [{doc: qdrant, key: "Qdrant is written in Rust"}]
+  - id: ho_agents_sdk_history
+    group: 同义改写
+    q: OpenAI 的智能体 SDK 能不能自动帮我管理多轮对话历史
+    gold: [{doc: openai_agents, key: "Automatic conversation history management"}]
+  - id: ho_dspy_gepa
+    group: 同义改写
+    q: DSPy 团队最近有什么关于提示词自动优化的研究
+    gold: [{doc: dspy, key: "GEPA: Reflective Prompt Evolution"}]

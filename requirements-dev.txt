@@ -1,0 +1,6 @@
+# 只在本地跑评测用，线上（Vercel）不需要：pip install -r requirements-dev.txt
+-r requirements.txt
+pyyaml
+jieba
+rank-bm25
+numpy
