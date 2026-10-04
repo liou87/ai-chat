@@ -1,8 +1,8 @@
 """
 检索方案对比实验：线上方案（baseline）之外的几种做法，只在评测里跑，不改线上代码和数据库。
 
-- baseline：线上 search_notes 原样调用（HNSW 近似检索）。
-- exact：跟线上逻辑完全一样，只是用精确余弦代替 HNSW。下面几个方案都基于精确计算，跟它比才是只差一个因素的对照。
+- baseline：线上 search_notes 原样调用（HNSW 近似检索；2026-10-05 起线上每篇给 2 个分块）。
+- exact：线上原来的逻辑（每篇 1 个分块），只是用精确余弦代替 HNSW。下面几个方案都基于精确计算，跟它比才是只差一个因素的对照。
 - more_candidates：候选分块从 top_k×4 提高到 top_k×10，看长文档挤占结果的问题能缓解多少。
 - two_chunks（方案 A）：候选池不变，每篇文档给模型前 2 个分块而不是 1 个。
 - hybrid（方案 B）：向量检索和 BM25 关键词检索各取前 50 个分块，用 RRF（k=60）融合排序，再按文档去重取 1 个分块。
@@ -90,7 +90,7 @@ async def retrieve(variant: str, index: Index, db, query: str, top_k: int = 5) -
     if variant == "baseline":
         from services.notes import notes as notes_service
         results = await notes_service.search_notes(db, query, top_k=top_k)
-        return [{"note_id": r["id"], "score": r["score"], "snippets": [r["snippet"]]} for r in results]
+        return [{"note_id": r["id"], "score": r["score"], "snippets": r["snippets"]} for r in results]
 
     qvec = await embed_text(query)
     cos = _cosine_ranked(index, qvec)

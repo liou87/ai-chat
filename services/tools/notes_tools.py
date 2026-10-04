@@ -17,7 +17,7 @@ SOURCE_LABEL = {"local": "笔记", "notion": "Notion", "hot_topic": "热点收�
 
 async def _search_notes(db: AsyncSession, args: dict) -> dict:
     """
-    搜笔记、日记和资料库。只把命中的那一段（snippet）给模型，不给全文：资料库里一篇文章可能几万字，
+    搜笔记、日记和资料库。每篇只把最相关的两段（snippets）给模型，不给全文：资料库里一篇文章可能几万字，
     全文塞进上下文会撑爆。前端的"参考了哪些资料"标签也用这里返回的 id/title/url/来源。
     """
     results = await notes_service.search_notes(db, query=args["query"], top_k=args.get("top_k", 5))
@@ -27,7 +27,7 @@ async def _search_notes(db: AsyncSession, args: dict) -> dict:
         "category": n["category"],
         "source": SOURCE_LABEL.get(n["source"], n["source"]) if n["category"] != "journal" else "日记",
         "url": n.get("url"),
-        "snippet": n["snippet"],
+        "snippets": n["snippets"],
         "score": n.get("score"),
     } for n in results]}
 

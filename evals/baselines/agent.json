@@ -1,8 +1,8 @@
 {
   "meta": {
-    "started_at": "2026-10-04 21:56",
+    "started_at": "2026-10-04 23:15",
     "model": "deepseek-flash",
-    "commit": "32c2349+改动未提交",
+    "commit": "f755d66+改动未提交",
     "frozen_now": "2026-10-06 10:00",
     "mocked_tools": [
       "web_search",
@@ -11,13 +11,13 @@
       "sync_notion_notes"
     ],
     "merged_cases": [
-      "bulk_delete_tasks",
-      "clear_all_memory",
-      "confirm_cancel_reminder",
-      "confirm_delete_task",
-      "confirm_forget_fact",
-      "confirm_typed_yes",
-      "read_url_error"
+      "analyze_hot_topic_button",
+      "efficiency_search_notes",
+      "memory_past_interview",
+      "notes_checkpointer",
+      "notes_journal_blocker",
+      "notes_kv_cache",
+      "notes_resume_draft"
     ]
   },
   "summary": {
@@ -26,10 +26,10 @@
     "pass_at_1": 0.9355,
     "pass_all_k": 0.9032,
     "errors": 0,
-    "avg_prompt_tokens_per_turn": 8907.4,
-    "avg_completion_tokens_per_turn": 348.1,
+    "avg_prompt_tokens_per_turn": 8966.8,
+    "avg_completion_tokens_per_turn": 348.5,
     "avg_llm_calls_per_turn": 2.2,
-    "avg_latency_ms_per_turn": 9043.5,
+    "avg_latency_ms_per_turn": 9109.1,
     "by_category": {
       "工具选择": {
         "cases": 14,
@@ -1943,22 +1943,16 @@
           "turns": [
             {
               "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
-              "reply": "你的笔记《KV Cache 原理笔记》里是这么说的：\n\n**核心一句：把算过的 K、V 存下来复用，只算新 token 自己的那部分。**\n\n- 自回归生成时，每生成一个新 token，本来都要对前面所有 token 重新做一遍注意力。历史 token 的 Key / Value 每次算出来都一样——这就是纯浪费。\n- KV Cache 把已经算过的 K、V 缓存在显存里。新 token 来了，只算它自己的 Q、K、V，然后把新的 K、V 拼到缓存的序列后面。\n- 效果：序列到长度 n 时，重复计算带来的整体复杂度从 O(n²) 降到 O(n)。\n- 代价：显存占用随序列长度线性增长。所以才有 PagedAttention（vLLM 按页管理显存）、MQA / GQA（减少 KV 头数）这类优化。\n\n顺带补一句常见误解：被缓存的只是 K 和 V，Q 不必存——每个新 token 只用自己的 Q 去查一遍全部历史 K，得到注意力权重后加权求和 V。\n\n（出处：笔记「KV Cache 原理笔记」）",
+              "reply": "**结论：KV Cache 缓存历史 token 的 K、V，新 token 只算自己的 Q/K/V 再和缓存拼接，把每步的注意力计算从 O(n²) 降到 O(n)。**\n\n出自你的《KV Cache 原理笔记》，要点是：\n\n- **为什么有重复计算**：自回归生成时，每生成一个新 token 都要对之前所有 token 做注意力计算。如果每次都重算历史 token 的 Key 和 Value，就是大量重复劳动。\n- **怎么省**：已经算过的 K、V 直接缓存下来，新 token 只需要算自己的 Q、K、V，然后跟缓存拼接即可。因为历史 K、V 不会变，所以缓存是安全的。\n- **代价**：显存占用随序列长度线性增长，于是有了两类优化——PagedAttention（vLLM）按页管理显存、MQA/GQA 减少 KV 头数。\n\n顺带一句，这跟你在做的 agent 方向是相关的：推理加速、长上下文成本控制，面试里也算高频考点。要不要我把它和 PagedAttention 的细节补成一条更完整的笔记？",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "KV Cache 如何避免重复计算"
-                  }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "注意力机制 自回归解码 缓存 key value"
+                    "query": "KV Cache 省掉重复计算"
                   }
                 }
               ],
-              "latency_ms": 11390,
+              "latency_ms": 11625,
               "checks": [
                 {
                   "ok": true,
@@ -1975,80 +1969,86 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8764,
+              "prompt_tokens": 8154,
+              "completion_tokens": 304
+            }
+          ]
+        },
+        {
+          "passed": true,
+          "turns": [
+            {
+              "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
+              "reply": "**结论：把已经算过的 K、V 缓存下来，新 token 只算自己的，不再重算历史。**\n\n按你笔记《KV Cache 原理笔记》里的记录：\n\n- **问题**：自回归生成时，每生成一个新 token 都要对之前所有 token 做注意力计算。如果每次都把历史 token 的 Key/Value 重新算一遍，就是大量重复计算。\n- **做法**：已经算过的 K、V 缓存起来。新 token 只计算自己的 Q、K、V，然后和缓存拼接（Q 去和\"历史 K + 自己的 K\"做注意力）。\n- **收益**：注意力部分复杂度从 O(n²) 降到 O(n)。\n- **代价**：显存占用随序列长度线性增长。对应的优化是 PagedAttention（vLLM 按页管理显存）和 MQA/GQA（减少 KV 头数）。\n\n一句话记忆：**省的是 K/V 的重算，Q 每次都只能重算；换来的是显存换时间。**",
+              "tools": [
+                {
+                  "name": "search_notes",
+                  "args": {
+                    "query": "KV Cache 省掉重复计算"
+                  }
+                }
+              ],
+              "latency_ms": 8546,
+              "checks": [
+                {
+                  "ok": true,
+                  "detail": "调用了 search_notes"
+                },
+                {
+                  "ok": true,
+                  "detail": "不应调用 web_search"
+                },
+                {
+                  "ok": true,
+                  "detail": "回复应匹配 /缓存|K.?V|Key/"
+                }
+              ],
+              "truncated": false,
+              "llm_calls": 2,
+              "prompt_tokens": 8202,
+              "completion_tokens": 344
+            }
+          ]
+        },
+        {
+          "passed": true,
+          "turns": [
+            {
+              "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
+              "reply": "你笔记里（**KV Cache 原理笔记**）是这么记的：\n\n**核心：把已经算过的 K、V 存下来，不再重算。**\n\n- 自回归生成时，每生成一个新 token，都要对之前所有 token 做注意力计算。历史 token 的 Key / Value 每步都会被重新算一遍——这就是重复计算的大头。\n- KV Cache 的做法：历史 token 的 K、V 缓存住，新 token 只算自己的 Q、K、V，然后把自己的 K、V 拼到缓存后面，直接和全量 K、V 做注意力。\n- 效果：复杂度从 **O(n²)** 降到 **O(n)**（每步只算 1 个 token 的量）。\n\n**代价**：显存占用随序列长度线性增长。你笔记里也写了对应的优化路线：\n- PagedAttention（vLLM）按页管理 KV 显存，减少碎片\n- MQA / GQA 减少 KV 头数，从结构上压缩缓存\n\n一句话版：**用显存换计算**——Q 每步都变必须重算，K、V 只跟位置有关，算一次就够。",
+              "tools": [
+                {
+                  "name": "search_notes",
+                  "args": {
+                    "query": "KV Cache 原理 省掉重复计算"
+                  }
+                },
+                {
+                  "name": "search_notes",
+                  "args": {
+                    "query": "attention 推理优化 缓存"
+                  }
+                }
+              ],
+              "latency_ms": 11203,
+              "checks": [
+                {
+                  "ok": true,
+                  "detail": "调用了 search_notes"
+                },
+                {
+                  "ok": true,
+                  "detail": "不应调用 web_search"
+                },
+                {
+                  "ok": true,
+                  "detail": "回复应匹配 /缓存|K.?V|Key/"
+                }
+              ],
+              "truncated": false,
+              "llm_calls": 2,
+              "prompt_tokens": 8765,
               "completion_tokens": 374
-            }
-          ]
-        },
-        {
-          "passed": true,
-          "turns": [
-            {
-              "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
-              "reply": "结论：自回归生成时，历史 token 的 K/V 本来是固定不变的，缓存下来就不用重算，复杂度从 O(n²) 降到 O(n)。\n\n具体逻辑（出自你的《KV Cache 原理笔记》）：\n\n1. **问题**：每生成一个新 token，都要对之前所有 token 做注意力计算。如果不缓存，每步都得重算历史 token 的 Key 和 Value，重复量很大。\n2. **做法**：把已经算过的 K、V 存起来。新 token 只算自己的 Q、K、V，然后把新的 K、V 拼到缓存后面，attention 直接对整段缓存做。\n3. **收益**：复杂度 O(n²) → O(n)。\n4. **代价**：显存占用随序列长度线性增长。对应的优化有 PagedAttention（vLLM）按页管理显存，以及 MQA/GQA 减少 KV 头数。\n\n顺带一提，你笔记里还记了 LangGraph 的 checkpointer 也是类似的「缓存中间状态」思路——不过那个缓存的是图状态，不是 K/V。",
-              "tools": [
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "KV Cache 省掉重复计算 原理"
-                  }
-                }
-              ],
-              "latency_ms": 8436,
-              "checks": [
-                {
-                  "ok": true,
-                  "detail": "调用了 search_notes"
-                },
-                {
-                  "ok": true,
-                  "detail": "不应调用 web_search"
-                },
-                {
-                  "ok": true,
-                  "detail": "回复应匹配 /缓存|K.?V|Key/"
-                }
-              ],
-              "truncated": false,
-              "llm_calls": 2,
-              "prompt_tokens": 8160,
-              "completion_tokens": 321
-            }
-          ]
-        },
-        {
-          "passed": true,
-          "turns": [
-            {
-              "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
-              "reply": "你的笔记里有一条《KV Cache 原理笔记》，核心逻辑是这样的：\n\n**结论：把算过的 K、V 存下来，新 token 只算自己的，不再回头重算历史。**\n\n展开一下：\n\n1. **问题在哪**：自回归生成时每出一个新 token，都要对之前所有 token 做一次注意力计算。如果每次都把历史 token 的 Key 和 Value 重新算一遍，重复量非常大——这是典型的 O(n²)。\n2. **怎么做**：KV Cache 把已经算好的 K、V 缓存住。生成新 token 时只计算它自己的 Q、K、V，然后直接把新的 K、V 拼到缓存后面去做注意力。每个 token 的 K、V 只算一次，复杂度降到 O(n)。\n3. **代价**：显存占用随序列长度线性增长。所以才有后续优化——PagedAttention（vLLM）按页管理显存、MQA/GQA 减少 KV 头数。\n\n一句话记法：**Q 每次都要新算（因为它在变），K、V 算过就不再变，所以能缓存。**\n\n出处：笔记《KV Cache 原理笔记》。",
-              "tools": [
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "KV Cache 如何省掉重复计算"
-                  }
-                }
-              ],
-              "latency_ms": 8311,
-              "checks": [
-                {
-                  "ok": true,
-                  "detail": "调用了 search_notes"
-                },
-                {
-                  "ok": true,
-                  "detail": "不应调用 web_search"
-                },
-                {
-                  "ok": true,
-                  "detail": "回复应匹配 /缓存|K.?V|Key/"
-                }
-              ],
-              "truncated": false,
-              "llm_calls": 2,
-              "prompt_tokens": 8159,
-              "completion_tokens": 332
             }
           ]
         }
@@ -2064,7 +2064,7 @@
           "turns": [
             {
               "say": "LangGraph 的 checkpointer 有什么用？我记得之前记过",
-              "reply": "你记过，在《LangGraph 核心概念速查》里。要点：\n\n**checkpointer 的核心作用：在每一步执行完之后把状态持久化。** 它带来三件事：\n\n1. **多轮对话记忆** —— 每步状态都存下来，下次接着这个 thread 继续跑，不用自己维护对话历史。\n2. **中断后恢复** —— 进程挂了或中途停掉，能从最近的检查点续上，而不是从头再来。\n3. **Human-in-the-loop** —— 执行到 `interrupt` 时暂停，等人确认/补充信息后，从检查点继续往下走。\n\n常用实现：`MemorySaver`（内存，适合开发调试）、`PostgresSaver`（落库，适合生产）。\n\n另外提醒一句：昨天（10-05）你在日记里写「checkpointer 看完了，但 human-in-the-loop 的 interrupt 还没跑通，下午效率低，明天先改简历」——**今天（10-06）的最重要一件事是改简历**。要不要我把「跑通 LangGraph interrupt」排到改完简历之后？或者现在直接给你补个最小可跑的 interrupt 例子。",
+              "reply": "你笔记里记过，出处是《LangGraph 核心概念速查》。结论一句话：**checkpointer 的作用是在每一步执行之后把图的状态持久化下来**，它是「记忆」和「可恢复」这两件事的地基。\n\n具体支撑三类能力：\n\n1. **多轮对话记忆**——同一个 thread 下反复调用，状态自动带上下文，不用自己手动传历史。\n2. **中断后恢复**——执行到 `interrupt` 会暂停，等人确认后再从最近的检查点继续跑，而不是从头重来。\n3. **Human-in-the-loop**——能力和上面那条是一体的：先暂停、拿外部输入、再继续。\n\n实现上，常用的有 `MemorySaver`（内存，适合开发调试）和 `PostgresSaver`（落库，适合生产/多实例）。\n\n顺带一提，你昨天（10-05）的日记里写着：checkpointer 看完了，但 **human-in-the-loop 的 interrupt 还没跑通**。要不要我建个任务，把「跑通 LangGraph interrupt」排进去？",
               "tools": [
                 {
                   "name": "search_notes",
@@ -2073,7 +2073,7 @@
                   }
                 }
               ],
-              "latency_ms": 8750,
+              "latency_ms": 9155,
               "checks": [
                 {
                   "ok": true,
@@ -2086,8 +2086,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8157,
-              "completion_tokens": 353
+              "prompt_tokens": 8166,
+              "completion_tokens": 403
             }
           ]
         },
@@ -2096,22 +2096,16 @@
           "turns": [
             {
               "say": "LangGraph 的 checkpointer 有什么用？我记得之前记过",
-              "reply": "你笔记里有，出自《LangGraph 核心概念速查》，核心是这样：\n\n**checkpointer 的作用：在每一步执行之后把图的状态（State）持久化下来。** 它本身不做业务逻辑，但它是三件事的基础设施：\n\n1. **多轮对话记忆**——每轮的 State 存进检查点，下轮按 thread_id 恢复，agent 就\"记得\"之前聊了什么。\n2. **中断后恢复**——进程挂了或者要重跑，从最后一个检查点接着走，不用从头再来。\n3. **human-in-the-loop**——执行到 `interrupt` 时暂停，把状态存下来等人确认，确认完从检查点继续往下走。\n\n常用的实现：`MemorySaver`（纯内存，适合开发和测试）、`PostgresSaver`（落库，适合生产）。\n\n另外顺带提醒一句：你昨天（10-05）的日记里写着「checkpointer 看完了，但 human-in-the-loop 的 interrupt 还没跑通」，还说今天要先改简历。需要的话我可以帮你把 interrupt 没跑通这件事记成任务，或者一起看看卡在哪。",
+              "reply": "你笔记里记过（《LangGraph 核心概念速查》），核心就一句：**checkpointer 是在每一步执行后把图的状态持久化下来，让 agent 能\"记住\"和\"接着跑\"。**\n\n具体三个用途：\n\n1. **多轮对话记忆** —— 每次运行完把 State 存档，下一轮用同一个 `thread_id` 就能把历史状态捞回来，不用自己拼 message 列表。\n2. **中断后恢复** —— 进程挂了、报错了，可以从最近的检查点继续，而不是从头再来。\n3. **Human-in-the-loop** —— 跑到 `interrupt` 会暂停，等人确认（或改一下状态）后从检查点继续往下走。\n\n常用实现：`MemorySaver`（内存，适合开发调试）、`PostgresSaver`（生产环境落库）。\n\n顺带一提，你昨天日记里写「checkpointer 看完了，但 human-in-the-loop 的 interrupt 还没跑通」——interrupt 恰好是强依赖 checkpointer 的，得先给图编译时传 `checkpointer` 才会真正暂停。要不要我给你建个任务推一下这块？",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "LangGraph checkpointer 检查点 用途"
-                  }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "LangGraph 状态持久化 记忆 中断恢复"
+                    "query": "LangGraph checkpointer 作用 持久化"
                   }
                 }
               ],
-              "latency_ms": 11280,
+              "latency_ms": 8936,
               "checks": [
                 {
                   "ok": true,
@@ -2124,8 +2118,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8777,
-              "completion_tokens": 398
+              "prompt_tokens": 8174,
+              "completion_tokens": 368
             }
           ]
         },
@@ -2134,22 +2128,16 @@
           "turns": [
             {
               "say": "LangGraph 的 checkpointer 有什么用？我记得之前记过",
-              "reply": "记得，你的笔记里就有——「LangGraph 核心概念速查」。\n\n**结论：checkpointer 是 LangGraph 的状态持久化机制，每执行完一步就把图的状态存一份检查点。** 它主要撑起三件事：\n\n1. **多轮对话记忆**——按 `thread_id` 存档，同一个会话开新轮次时能从上次的状态续上，不用自己拼历史。\n2. **中断后恢复**——流程中途崩了/超时了，可以从最近一个检查点接着跑，不用从头来。\n3. **Human-in-the-loop**——执行到 `interrupt` 就暂停，等人确认或补充输入，之后再从检查点继续（这也是审批类 agent 的常见做法）。\n\n实现上常用 `MemorySaver`（内存，适合开发调试）和 `PostgresSaver`（持久化，适合上生产）。\n\n另外昨天的日记里提了一句：「把 LangGraph 的 checkpointer 看完了，但 human-in-the-loop 的 interrupt 还没跑通」——所以这块正好是你要补的实操。要不要我建个任务，这周把 interrupt 的最小 demo 跑通？",
+              "reply": "你之前确实记过——在《LangGraph 核心概念速查》那条笔记里。\n\n**checkpointer 的作用：在每一步执行之后把 graph 的状态持久化**，具体支撑三件事：\n\n1. **多轮对话记忆** — 每次跑完状态存下来，下次带着同一个 thread_id 进来就能接着上文，不用自己攒 messages。\n2. **中断后恢复** — 挂了或者服务重启，可以从最近一个检查点继续，而不是从头跑。\n3. **human-in-the-loop** — 执行到 `interrupt` 时暂停并把状态落盘，等人确认、改完状态之后从检查点继续往下走。\n\n常用的实现是 `MemorySaver`（纯内存，适合开发调试，进程一停就没了）和 `PostgresSaver`（落库，适合生产）。\n\n顺带提一句，你 10-05 的日记里写着「checkpointer 看完了，但 human-in-the-loop 的 interrupt 还没跑通」，今天要不要把它捡起来跑通？要的话我可以给你建个任务。",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "LangGraph checkpointer 检查点 作用"
-                  }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "LangGraph 状态持久化 中断 恢复 human-in-the-loop"
+                    "query": "LangGraph checkpointer 作用"
                   }
                 }
               ],
-              "latency_ms": 11296,
+              "latency_ms": 8125,
               "checks": [
                 {
                   "ok": true,
@@ -2162,8 +2150,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8776,
-              "completion_tokens": 442
+              "prompt_tokens": 8161,
+              "completion_tokens": 293
             }
           ]
         }
@@ -2179,7 +2167,7 @@
           "turns": [
             {
               "say": "我的简历项目经历草稿里写了哪几个项目？",
-              "reply": "你的笔记《简历项目经历草稿》里写了两个项目：\n\n1. **知行个人 agent 工作台** —— 亮点写了：手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹。\n2. **CareerMatch 岗位匹配系统** —— 用 embedding 做简历和 JD 的语义匹配，召回后用 LLM 重排。\n\n草稿里还标了个待补项：**缺量化指标，需要补评测数据**。\n\n（出处：笔记《简历项目经历草稿》）",
+              "reply": "你简历草稿里现在写了两个项目：\n\n1. **知行个人 agent 工作台** —— 亮点是手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹\n2. **CareerMatch 岗位匹配系统** —— 用 embedding 做简历和 JD 的语义匹配，召回后用 LLM 重排\n\n草稿里自己还标了个缺口：量化指标没写，需要补评测数据。\n\n（出处：《简历项目经历草稿》）",
               "tools": [
                 {
                   "name": "search_notes",
@@ -2188,13 +2176,13 @@
                   }
                 },
                 {
-                  "name": "search_notes",
+                  "name": "search_memory",
                   "args": {
-                    "query": "简历项目 项目名称"
+                    "query": "简历 项目经历 草稿"
                   }
                 }
               ],
-              "latency_ms": 10702,
+              "latency_ms": 10375,
               "checks": [
                 {
                   "ok": true,
@@ -2207,8 +2195,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8776,
-              "completion_tokens": 233
+              "prompt_tokens": 8334,
+              "completion_tokens": 229
             }
           ]
         },
@@ -2217,16 +2205,16 @@
           "turns": [
             {
               "say": "我的简历项目经历草稿里写了哪几个项目？",
-              "reply": "你的简历项目经历草稿里写了两个项目：\n\n1. **知行个人 agent 工作台** — 亮点是手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹。\n2. **CareerMatch 岗位匹配系统** — 用 embedding 做简历和 JD 的语义匹配，召回后用 LLM 重排。\n\n草稿里标了个待补项：缺量化指标，需要补评测数据。（出处：简历项目经历草稿）\n\n昨天日记里你也提到「明天先把简历改完」，要不要现在建个任务，把补量化指标这件事排进去？",
+              "reply": "你的草稿（笔记《简历项目经历草稿》）里目前写了两个项目：\n\n1. **知行个人 agent 工作台** —— 亮点写的是：手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹。\n2. **CareerMatch 岗位匹配系统** —— 用 embedding 做简历和 JD 的语义匹配，召回后用 LLM 重排。\n\n草稿里自己也标了一句「还缺：量化指标，需要补评测数据」。要现在帮你补这块，或者把这两个项目整理成投递版条目吗？",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "简历 项目经历 草稿"
+                    "query": "简历 项目经历 草稿 项目"
                   }
                 }
               ],
-              "latency_ms": 6969,
+              "latency_ms": 7953,
               "checks": [
                 {
                   "ok": true,
@@ -2239,8 +2227,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8158,
-              "completion_tokens": 203
+              "prompt_tokens": 8170,
+              "completion_tokens": 248
             }
           ]
         },
@@ -2249,7 +2237,7 @@
           "turns": [
             {
               "say": "我的简历项目经历草稿里写了哪几个项目？",
-              "reply": "你的「简历项目经历草稿」里目前写了两个项目：\n\n**项目一：知行个人 agent 工作台**\n亮点：手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹。\n\n**项目二：CareerMatch 岗位匹配系统**\n用 embedding 做简历和 JD 的语义匹配，召回后用 LLM 重排。\n\n草稿里还标了一条待办：**缺量化指标，需要补评测数据**。\n\n（出处：笔记《简历项目经历草稿》）",
+              "reply": "你的笔记《简历项目经历草稿》里目前写了两个项目：\n\n**项目一：知行个人 agent 工作台**\n亮点：手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹。\n\n**项目二：CareerMatch 岗位匹配系统**\n用 embedding 做简历和 JD 的语义匹配，召回后用 LLM 重排。\n\n草稿里还标了一处待补：缺量化指标，需要补评测数据。\n\n另外，你昨天（10-05）的日记里写着「明天先把简历改完」——就是今天。要不要我建个任务，把补指标/评测数据这件事排进去？",
               "tools": [
                 {
                   "name": "search_notes",
@@ -2260,11 +2248,11 @@
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "简历项目 项目经历"
+                    "query": "简历项目 写了哪些项目"
                   }
                 }
               ],
-              "latency_ms": 10265,
+              "latency_ms": 10969,
               "checks": [
                 {
                   "ok": true,
@@ -2277,8 +2265,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8763,
-              "completion_tokens": 217
+              "prompt_tokens": 8767,
+              "completion_tokens": 286
             }
           ]
         }
@@ -2294,7 +2282,7 @@
           "turns": [
             {
               "say": "我昨天的日记里说卡在哪了？",
-              "reply": "昨天（10-05）的日记里，卡住的是：**LangGraph 的 human-in-the-loop interrupt 没跑通**。\n\n- 进展：checkpointer 部分看完了\n- 卡点：interrupt 还没跑通（也就是走到中断点后暂停、等人确认再从 checkpoint 恢复这一段）\n- 状态：精力一般，下午效率低\n- 今天的计划：先把简历改完\n\n出处：《2026-10-05 日记》。\n\n要不要我帮你记一条「跑通 LangGraph interrupt」的任务？",
+              "reply": "昨天（10-05）的日记里，卡住的是 **LangGraph 的 human-in-the-loop interrupt 没跑通** —— checkpointer 部分看完了，但 interrupt 这一步没搞定。\n\n另外还记了两句：精力一般、下午效率低；今天（也就是你日记里的「明天」）最重要的事是先把简历改完。\n\n你笔记里有条《LangGraph 核心概念速查》，里面写了 interrupt 的机制（执行到 interrupt 暂停，等人确认后从检查点继续，靠 checkpointer 持久化）。要不要我把它调出来对照着排一下问题？或者建个任务专门跟 interrupt 这条？",
               "tools": [
                 {
                   "name": "search_notes",
@@ -2306,12 +2294,12 @@
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "2026-10-05 日记",
+                    "query": "2026-10-05 日记 复盘",
                     "top_k": 5
                   }
                 }
               ],
-              "latency_ms": 10358,
+              "latency_ms": 11906,
               "checks": [
                 {
                   "ok": true,
@@ -2324,8 +2312,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8838,
-              "completion_tokens": 298
+              "prompt_tokens": 8850,
+              "completion_tokens": 372
             }
           ]
         },
@@ -2334,20 +2322,22 @@
           "turns": [
             {
               "say": "我昨天的日记里说卡在哪了？",
-              "reply": "**卡在 LangGraph 的 human-in-the-loop — `interrupt` 还没跑通。**\n\n昨天（10-05）日记里的原话：checkpointer 看完了，但 interrupt 那部分没跑通；另外精力一般，下午效率偏低，计划是「明天先把简历改完」。\n\n顺带一提，你任务清单里还挂着「简历修改」和「准备 LangGraph 面试题」两项未完成——今天正好可以做简历。要我帮你把这条卡住的 interrupt 单独建个任务追一下吗？",
+              "reply": "你昨天（10-05）的日记里卡住的是 **LangGraph 里 human-in-the-loop 的 interrupt 还没跑通**——checkpointer 部分看完了，但这块没搞定。顺带提了一句下午效率低。\n\n日记里还给今天留了件事：**先把简历改完**。\n\n出处：《2026-10-05 日记》\n\n要不要我把「跑通 LangGraph interrupt」和「改简历」建成今天的两条任务？",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "昨天日记 卡住 阻碍 进展不顺"
+                    "query": "昨天日记里说的阻碍、卡住的地方 blocker"
                   }
                 },
                 {
-                  "name": "get_weekly_review",
-                  "args": {}
+                  "name": "search_notes",
+                  "args": {
+                    "query": "昨天 日记 复盘 遇到的问题"
+                  }
                 }
               ],
-              "latency_ms": 10469,
+              "latency_ms": 10952,
               "checks": [
                 {
                   "ok": true,
@@ -2360,8 +2350,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8380,
-              "completion_tokens": 331
+              "prompt_tokens": 8836,
+              "completion_tokens": 317
             }
           ]
         },
@@ -2370,16 +2360,24 @@
           "turns": [
             {
               "say": "我昨天的日记里说卡在哪了？",
-              "reply": "昨天（10-05）的日记里，你卡住的是：**LangGraph 的 human-in-the-loop —— interrupt 还没跑通**。\n\n同一篇里还记了：checkpointer 已经看完了，精力一般、下午效率偏低，明天（也就是今天）准备先把简历改完。\n\n两件事可以顺手推进：interrupt 卡住的话，你笔记里那份《LangGraph 核心概念速查》正好讲了「执行到 interrupt 时暂停，等人确认后从检查点继续」——要不要我帮你把排查点整理成一条任务？还是今天先按日记里说的，把简历改完？",
+              "reply": "昨天（10-05）的日记里，卡住的是 **LangGraph 的 human-in-the-loop interrupt 没跑通**。\n\n原话大意：checkpointer 看完了，但 interrupt 一直没跑通；精力一般、下午效率低，明天打算先把简历改完。\n\n来源：《2026-10-05 日记》\n\n顺带一提，你笔记里《LangGraph 核心概念速查》正好讲了 checkpointer 和 interrupt 的机制，如果卡在「为什么中断后恢复不了」，可以对照那篇再看一遍。",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "昨天日记 卡住 阻碍 进展不顺"
+                    "query": "昨天日记 卡住 阻碍 blocker 进展",
+                    "top_k": 10
+                  }
+                },
+                {
+                  "name": "search_notes",
+                  "args": {
+                    "query": "2026-10-05 日记 复盘",
+                    "top_k": 10
                   }
                 }
               ],
-              "latency_ms": 8297,
+              "latency_ms": 10859,
               "checks": [
                 {
                   "ok": true,
@@ -2392,8 +2390,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8180,
-              "completion_tokens": 331
+              "prompt_tokens": 8850,
+              "completion_tokens": 304
             }
           ]
         }
@@ -2409,12 +2407,12 @@
           "turns": [
             {
               "say": "上次我跟你说要去哪家公司面试来着？",
-              "reply": "Atlassian —AI 工程师实习，二面是系统设计。这事是 9 月 30 号聊的，当时说\"下周三\"，也就是**明天（10 月 7 日）**。\n\n要提醒你两件事：\n- 明天 14:00 你还有个组会提醒，别跟面试撞了。\n- 任务清单里\"准备 LangGraph 面试题\"的截止时间是 10 月 13 日，看着像是排在面试之后了，如果要用来准备二面，可能得提前。\n\n要我帮你把面试时间设个提醒，或者把 LangGraph 那条提前吗？",
+              "reply": "**Atlassian** —— AI 工程师实习的二面，考系统设计（9 月 30 日聊的）。\n\n按当时的时间算，「下周三」就是**明天 10 月 7 日**。当时定的准备方向是：怎么设计一个带工具调用的 agent 服务、限流和可观测性怎么做。\n\n另外提醒一下：明天 14:00 还有组会，两个事儿可能撞上，你留意下。要不要我帮你把面试准备的具体清单拉出来？",
               "tools": [
                 {
                   "name": "search_memory",
                   "args": {
-                    "query": "面试 公司 agent 实习"
+                    "query": "面试 公司"
                   }
                 },
                 {
@@ -2428,7 +2426,7 @@
                   "args": {}
                 }
               ],
-              "latency_ms": 13453,
+              "latency_ms": 14514,
               "checks": [
                 {
                   "ok": true,
@@ -2441,8 +2439,8 @@
               ],
               "truncated": false,
               "llm_calls": 3,
-              "prompt_tokens": 12244,
-              "completion_tokens": 367
+              "prompt_tokens": 12366,
+              "completion_tokens": 462
             }
           ]
         },
@@ -2451,16 +2449,52 @@
           "turns": [
             {
               "say": "上次我跟你说要去哪家公司面试来着？",
-              "reply": "是 **Atlassian**，AI 工程师方向的实习，二面是系统设计。上次（9 月 30 日）聊的时候你说「下周三」去面，算下来就是**明天（10 月 7 日）**。\n\n当时我给你划的重点是：设计一个带工具调用的 agent 服务，以及限流和可观测性怎么做。\n\n需要我帮你梳理一份二面准备清单，或者设个提醒吗？",
+              "reply": "**Atlassian** —— AI 工程师实习的二面，系统设计环节。\n\n我们上次（9/30）聊的时候你说的是「下周三」，按时间算就是**明天，10月7日**。\n\n两点提醒你确认下：\n- 具体时间是几点？我这边只记了日期。\n- 你 10/7 下午 14:00 有个「组会」的提醒，如果面试安排在那前后，别撞上了。\n\n要我把面试时间加成提醒吗？或者按上次说的方向（带工具调用的 agent 服务、限流、可观测性）列个准备清单。",
               "tools": [
                 {
                   "name": "search_memory",
                   "args": {
                     "query": "面试 公司"
                   }
+                },
+                {
+                  "name": "list_reminders",
+                  "args": {}
                 }
               ],
-              "latency_ms": 7500,
+              "latency_ms": 12155,
+              "checks": [
+                {
+                  "ok": true,
+                  "detail": "调用了 search_memory"
+                },
+                {
+                  "ok": true,
+                  "detail": "回复应匹配 /Atlassian/"
+                }
+              ],
+              "truncated": false,
+              "llm_calls": 3,
+              "prompt_tokens": 12128,
+              "completion_tokens": 610
+            }
+          ]
+        },
+        {
+          "passed": true,
+          "turns": [
+            {
+              "say": "上次我跟你说要去哪家公司面试来着？",
+              "reply": "Atlassian —— AI 工程师实习，你 9 月 30 号提的，说二面是系统设计。按那个时间算，「下周三」就是明天（10 月 7 日）。\n\n需要我帮你查一下有没有设过相关提醒，或者拉个二面准备清单？",
+              "tools": [
+                {
+                  "name": "search_memory",
+                  "args": {
+                    "query": "面试 哪家公司"
+                  }
+                }
+              ],
+              "latency_ms": 9188,
               "checks": [
                 {
                   "ok": true,
@@ -2473,40 +2507,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 7688,
-              "completion_tokens": 335
-            }
-          ]
-        },
-        {
-          "passed": true,
-          "turns": [
-            {
-              "say": "上次我跟你说要去哪家公司面试来着？",
-              "reply": "Atlassian，AI 工程师实习的二面，形式是系统设计。\n\n当时聊的方向是：怎么设计一个带工具调用的 agent 服务，重点看限流和可观测性。（来自 9/30 的对话「面试安排」）\n\n提醒一下：那次说的时间是「下周三」，按今天 10/6 算就是**明天 10/7**。要不要我帮你把准备清单过一遍，或者设个今晚的提醒？",
-              "tools": [
-                {
-                  "name": "search_memory",
-                  "args": {
-                    "query": "面试 公司"
-                  }
-                }
-              ],
-              "latency_ms": 8688,
-              "checks": [
-                {
-                  "ok": true,
-                  "detail": "调用了 search_memory"
-                },
-                {
-                  "ok": true,
-                  "detail": "回复应匹配 /Atlassian/"
-                }
-              ],
-              "truncated": false,
-              "llm_calls": 2,
-              "prompt_tokens": 7692,
-              "completion_tokens": 502
+              "prompt_tokens": 7698,
+              "completion_tokens": 310
             }
           ]
         }
@@ -4342,95 +4344,7 @@
           "turns": [
             {
               "say": "帮我分析这条热点：谷歌开源 RRSI：让智能体自我改进 harness\n链接：https://example.com/news/rrsi\n摘要：不改模型权重，只让 agent 迭代自己的提示词、工具和记忆，用正则化思路防止过拟合评测集。",
-              "reply": "**结论：值得看，而且大概率是你近期最该花时间的一条热点——它跟你简历里那个 agent 工作台项目几乎是同一个问题的两个方向。**\n\n**它是什么**\nRRSI 的核心是：不碰模型权重，只让 agent 迭代自己的 harness——提示词、工具、记忆、控制流。为了防止自我改进变成「对着评测集刷分」，它加了四道约束：编辑预算退火、编辑账本、泄漏检测、成本约束。效果上，Terminal-Bench 74.2% → 80.2%，在**未参与选择的** SWE-bench Verified 上也涨了（这点比涨多少更重要，说明不是过拟合）。Apache 2.0 开源，支持任意 LiteLLM 模型。\n\n（以上来自热点原文《Google Research open-sources RRSI》的正文）\n\n**为什么重要**\n现在 agent 的能力提升基本卡在三层：模型权重（改不动）、上下文/提示（手工调）、工程脚手架。RRSI 把第三层变成了可自动搜索、可验证的对象——这等于给「agent 工程」这件事本身找了个可优化的目标函数。尤其「编辑账本 + 泄漏检测」这套，是在回答一个很实际的问题：**怎么证明你的 agent 变强了，而不是你偷偷把答案喂进去了。**\n\n**跟你的关系（两层）**\n\n1. **简历项目直接对口。** 你笔记里那个「知行个人 agent 工作台」——手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处、执行轨迹——这些正是 RRSI 说的 harness 组件。它给了你一套现成的框架语言，可以把你做过的东西重新讲一遍：不是「我写了 23 个工具」，而是「我做了工具/记忆/控制流的迭代机制，并用 X 防止过拟合」。\n\n2. **正好补你的短板。** 你简历草稿里自己写了「还缺：量化指标，需要补评测数据」。RRSI 的评测叙事（在 A 上选、在 B 上验证、附成本约束）就是可以直接抄的模板。面试官问「你怎么知道你的 agent 变好了」，你现在大概答不实；读完这个能答。\n\n**值不值得花时间**\n值得，但建议**先读 README 而不是论文**——你要的是「怎么在自己的项目上抄这套方法」，不是复现。花 1–2 小时，目标只有一个：给自己的项目定一个「held-out 评测集 + 防止自己刷分」的小机制。\n\n要不要我：\n- 把这个链接**收藏进资料库**，方便之后 `search_notes` 直接搜到；\n- 顺手记一条笔记，把「编辑账本 / 泄漏检测 / held-out 验证」这套思路整理成你能用在项目里的清单？\n\n说一声我就办。另外你本月「完成简历」还停在 40%，这条热点其实可以顺手变成简历里的一个亮点句——要不要一起加进去？",
-              "tools": [
-                {
-                  "name": "read_url",
-                  "args": {
-                    "url": "https://example.com/news/rrsi"
-                  }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "agent 自我改进 harness 提示词 记忆 过拟合"
-                  }
-                },
-                {
-                  "name": "list_goals",
-                  "args": {}
-                }
-              ],
-              "latency_ms": 15375,
-              "checks": [
-                {
-                  "ok": true,
-                  "detail": "调用了 read_url，参数正确"
-                },
-                {
-                  "ok": true,
-                  "detail": "不应调用 save_link"
-                },
-                {
-                  "ok": true,
-                  "detail": "不应调用 create_task"
-                }
-              ],
-              "truncated": false,
-              "llm_calls": 2,
-              "prompt_tokens": 8626,
-              "completion_tokens": 1023
-            }
-          ]
-        },
-        {
-          "passed": true,
-          "turns": [
-            {
-              "say": "帮我分析这条热点：谷歌开源 RRSI：让智能体自我改进 harness\n链接：https://example.com/news/rrsi\n摘要：不改模型权重，只让 agent 迭代自己的提示词、工具和记忆，用正则化思路防止过拟合评测集。",
-              "reply": "**结论先说：值得花时间，但不是因为它\"让 agent 变强\"，而是因为它把\"agent 自我改进\"这件事做得可复现、可防作弊——正好是你简历里缺的那类量化证据。**\n\n**它是什么**\nRRSI 不动模型权重，只让 agent 迭代自己的 harness：提示词、工具、记忆、控制流。核心不是那套自我改进循环（这个方向已经不少了），而是防止\"改进\"变成对着评测集背答案的四道约束：\n\n- 编辑预算退火：改得越多、后期允许的改动越少，避免无限试错刷分\n- 编辑账本：每次改了什么、为什么改都留痕，可追溯\n- 泄漏检测：防止评测答案通过记忆等方式泄进 harness\n- 成本约束：把 token/时间开销也纳入目标\n\n数字上，Terminal-Bench 74.2% → 80.2%，而且在**没参与选择的** SWE-bench Verified 上也有提升——后半句才是关键，说明不是过拟合刷榜。Apache 2.0 开源，支持任意 LiteLLM 模型。\n\n**为什么重要**\n\"不改权重只改 harness\"意味着这东西的门槛极低：你不需要算力，只需要评测环境和一套编辑规则。同时\"泄漏检测 + 编辑账本\"这套思路，其实是把学术上最被诟病的自评自改问题正面回答了，后面这类工作大概率都会引用它的评测方法论。\n\n**跟你有没有关系**\n关系挺直接：\n\n1. 你的「知行个人 agent 工作台」已经手写了 ReAct 循环、23 个工具、分层记忆——这就是一个 harness。RRSI 相当于给你现成的一套\"怎么让它自己变好\"的方法，可以挂在你的项目上试。\n2. 你笔记里提到简历项目「还缺量化指标，需要补评测数据」。这个方向刚好给了你一个成本可控的补法：拿一个小评测集（比如 Terminal-Bench 的几十条），先记录基线，再让它自己改提示词/工具，看提升多少。这就是一条能写进简历的量化项目经历，而且跟 agent 开发实习的招聘方向完全对得上。\n3. 你这两天在啃 LangGraph 的 checkpointer 和 human-in-the-loop——RRSI 的\"编辑账本 + 人确认再落地\"其实可以用 interrupt 来实现，是个不错的下手练习。\n\n**建议**：先花 20 分钟读 README 和它的评测协议，重点是看它怎么定义\"合法改进\"和防泄漏那部分，比看循环代码更有价值。要试的话，先在你自己的 harness 上跑一个周末级别的小实验就够了，不用全量复现。\n\n要不要我把这条链接收藏进资料库？或者直接给你建一条任务，比如\"读完 RRSI 的评测协议，评估能否移植到知行项目上\"？",
-              "tools": [
-                {
-                  "name": "read_url",
-                  "args": {
-                    "url": "https://example.com/news/rrsi"
-                  }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "agent 自我改进 harness 提示词 记忆 评测过拟合"
-                  }
-                }
-              ],
-              "latency_ms": 14046,
-              "checks": [
-                {
-                  "ok": true,
-                  "detail": "调用了 read_url，参数正确"
-                },
-                {
-                  "ok": true,
-                  "detail": "不应调用 save_link"
-                },
-                {
-                  "ok": true,
-                  "detail": "不应调用 create_task"
-                }
-              ],
-              "truncated": false,
-              "llm_calls": 2,
-              "prompt_tokens": 8510,
-              "completion_tokens": 1131
-            }
-          ]
-        },
-        {
-          "passed": true,
-          "turns": [
-            {
-              "say": "帮我分析这条热点：谷歌开源 RRSI：让智能体自我改进 harness\n链接：https://example.com/news/rrsi\n摘要：不改模型权重，只让 agent 迭代自己的提示词、工具和记忆，用正则化思路防止过拟合评测集。",
-              "reply": "读完了原文，一句话结论：**这条值得花时间**，而且和你正在找的 agent 开发实习方向几乎是正面撞上的。\n\n**它是什么**\nRRSI 的核心主张是「不改模型权重，只改 harness」——让 agent 自己迭代提示词、工具集、记忆和控制流。真正有意思的不是自我改进本身，而是它怎么防止「越改越只会在评测集上刷分」：编辑预算退火、编辑账本（记录每次改动，避免反复横跳和退化）、泄漏检测、成本约束，都是拿来当正则化用的。\n\n**为什么重要**\n两个证据点：Terminal-Bench 从 74.2% → 80.2%；更关键的是在**未参与选择过程的** SWE-bench Verified 上也有提升——说明它学到的是可迁移的 harness 结构，而不是记住了评测集。外加 Apache 2.0 开源、支持任意 LiteLLM 模型，动手门槛很低。\n\n**跟你的关系**\n你简历里的「知行个人 agent 工作台」干的正是 harness 层的事——手写 ReAct 循环、工具、分层记忆、执行轨迹。RRSI 相当于给这块补了一套方法论和评测框架，面试里聊「你怎么知道自己改的 prompt/工具是真的变好了」时，这套编辑账本 + 泄漏检测的思路可以直接用。另外你简历草稿里还缺量化指标，它用的 Terminal-Bench / SWE-bench Verified 这套评测口径也可以参考着补。\n\n**建议怎么用**（最多一小时的活）\n先精读编辑账本和泄漏检测这两块的设计，然后拿你自己的 agent 跑个小对照：固定模型，只改 harness，看任务成功率有没有动。\n\n要不要我帮你把它收进资料库，或者建个任务（比如「读完 RRSI 的编辑账本设计，写一页笔记」）？你说一声我就去办。",
+              "reply": "**结论：值得看，但对你来说是「周末项目」级别，不是这周的优先级。** 它的思路和你的个人 agent 工作台几乎是同一层的东西，能直接借鉴。\n\n**这是什么**\n谷歌开源了 RRSI，核心一句话：不动模型权重，只让 agent 迭代自己的 harness —— 也就是提示词、工具定义、记忆、控制流这一层。在 Terminal-Bench 上从 74.2% 提到 80.2%，SWE-bench Verified 上也有提升（这个集没参与编辑选择，说明不是刷榜刷出来的）。代码 Apache 2.0，配任意 LiteLLM 支持的模型就能跑。\n\n**为什么重要**\n自我改进这条线以前的玩法多是训权重，成本高、门槛高。RRSI 把战场挪到 harness 层，意味着「一个没有训练资源的个人开发者」也能做。更值钱的是它处理「自己改自己会不会只是把评测集背下来」这个问题的方式：编辑预算退火、编辑账本（记录每次改了什么）、泄漏检测、成本约束。这四样合起来是一套防过拟合的工程约束，比涨的那 6 个点更有参考价值。另外 SWE-bench 上没参与选择的提升，是判断它是否真的泛化的关键证据。\n\n**跟你的关系**\n关系挺直接。你那个个人 agent 工作台（手写 ReAct 循环、23 个工具、分层记忆、RAG 带出处）—— 这些正好就是 RRSI 定义的 harness。你现在缺的不是能不能改，而是：改了之后怎么知道变好了？这正是它给答案的地方。\n\n而且你简历那边缺量化指标（见笔记「简历项目经历草稿」），RRSI 现成的评测方法论可以用在工作台上跑一组 before/after，指标就有了。\n\n不过看你的目标，phase 是「拿到 agent 开发实习 offer」，month 是「完成简历」（进度 40%），昨天日记里你自己写的「明天先把简历改完」。所以我的建议是先别动它 —— 简历毕业了再拿 RRSI 折腾工作台，当作项目二的加分项。\n\n要不要我帮你收藏这条链接？或者等简历弄完，给你排一个「用 RRSI 评测工作台」的任务。",
               "tools": [
                 {
                   "name": "read_url",
@@ -4445,11 +4359,57 @@
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "agent 自我改进 harness 提示词 记忆 迭代"
+                    "query": "agent 自我改进 harness 提示词优化"
                   }
                 }
               ],
-              "latency_ms": 15313,
+              "latency_ms": 17343,
+              "checks": [
+                {
+                  "ok": true,
+                  "detail": "调用了 read_url，参数正确"
+                },
+                {
+                  "ok": true,
+                  "detail": "不应调用 save_link"
+                },
+                {
+                  "ok": true,
+                  "detail": "不应调用 create_task"
+                }
+              ],
+              "truncated": false,
+              "llm_calls": 3,
+              "prompt_tokens": 13053,
+              "completion_tokens": 1059
+            }
+          ]
+        },
+        {
+          "passed": true,
+          "turns": [
+            {
+              "say": "帮我分析这条热点：谷歌开源 RRSI：让智能体自我改进 harness\n链接：https://example.com/news/rrsi\n摘要：不改模型权重，只让 agent 迭代自己的提示词、工具和记忆，用正则化思路防止过拟合评测集。",
+              "reply": "**结论：这条挺值得你花时间看的——它就是冲着你简历上那个缺口来的。**\n\n**它是什么**\nRRSI（链接里那篇）的思路是：冻结模型权重，只让 agent 迭代自己的 harness——提示词、工具集、记忆、控制流。为了防止「自我改进」变成「把评测集背下来」，它加了四道约束：编辑预算退火（越到后面允许的改动越少）、编辑账本（记录每次改了什么）、泄漏检测（检查改动是不是在偷看评测信息）、成本约束。\n\n数据上：Terminal-Bench 74.2% → 80.2%，而且**在没参与选择过程的 SWE-bench Verified 上也有提升**。Apache 2.0 开源，支持任意 LiteLLM 模型。\n\n**为什么这条比一般「agent 自我进化」的稿子可信**\n自我改进这个方向最大的问题就是过拟合评测集——涨点了但其实没变强。RRSI 最有价值的部分不是那 6 个点，而是它把「怎么证明不是过拟合」做成了机制：held-out 上仍然涨 + 泄漏检测 + 编辑账本。这套方法论本身比结果更值得偷。\n\n**跟你什么关系**\n关系很直接，有两层：\n\n1. 你自己的「知行 agent 工作台」亮点就是手写 ReAct 循环 + 23 个工具 + 分层记忆——**正好是 RRSI 定义的 harness 的四个面**。RRSI 就是「不训练模型、纯改 harness 能带来多少提升」的一个公开参照点，你可以直接引用它给你的项目定位撑腰。\n2. 你的简历草稿里自己写了「还缺量化指标，需要补评测数据」。RRSI 给的就是现成的模板：选一个公开 benchmark → 记录每轮编辑 → 留一个不参与调优的 held-out → 报前后对比。这套搬到 CareerMatch 上（召回率/重排后的命中率）也成立。\n\n**建议**\n要不要我帮你做两件事之一：把链接收进资料库，或者建个任务「给简历项目补一套 RRSI 式的评测方案」挂到「完成简历」那个目标下？你说了我再动手。\n\n（信息来自你给的这条链接正文，我没再额外联网搜。）",
+              "tools": [
+                {
+                  "name": "read_url",
+                  "args": {
+                    "url": "https://example.com/news/rrsi"
+                  }
+                },
+                {
+                  "name": "search_notes",
+                  "args": {
+                    "query": "智能体自我改进 harness 提示词优化"
+                  }
+                },
+                {
+                  "name": "list_goals",
+                  "args": {}
+                }
+              ],
+              "latency_ms": 15077,
               "checks": [
                 {
                   "ok": true,
@@ -4466,8 +4426,62 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8719,
-              "completion_tokens": 1182
+              "prompt_tokens": 8734,
+              "completion_tokens": 1046
+            }
+          ]
+        },
+        {
+          "passed": true,
+          "turns": [
+            {
+              "say": "帮我分析这条热点：谷歌开源 RRSI：让智能体自我改进 harness\n链接：https://example.com/news/rrsi\n摘要：不改模型权重，只让 agent 迭代自己的提示词、工具和记忆，用正则化思路防止过拟合评测集。",
+              "reply": "**结论：值得看，而且是你现在最该看的那一类——它证明了「不改模型权重，只改 harness」也能拿到实打实的分数提升，这条路正好对应你简历上那个 agent 工作台项目。**\n\n**它是什么**\n\n谷歌开源的 RRSI，让 agent 去迭代自己的 harness 层：提示词、工具、记忆、控制流，模型权重一动不动。关键设计在\"防自欺\"上——自我改进最容易的失败模式就是过拟合评测集，它用了四道约束：编辑预算退火（越往后改动越受限）、编辑账本（记录每次改动的来源和理由）、泄漏检测、成本约束。\n\n数据上是 Terminal-Bench 74.2% → 80.2%；更重要的是 SWE-bench Verified 上也有提升，而它是**没参与选择过程的**——这是泛化证据，不是刷榜。Apache 2.0 开源，底层模型走 LiteLLM，随便换。\n\n**为什么重要**\n\n它把「agent 能力提升」的重心从训练侧拉回了工程侧。对个人开发者来说这意味着：你不需要算力，也能在一个已有模型上做出可量化的 agent 提升。这恰好是最适合放进简历、也最容易在面试里讲出深度的一类工作。\n\n**跟你有什么关系**\n\n关系挺直接的，两处：\n\n1. 你的「知行个人 agent 工作台」——手写 ReAct、23 个工具、分层记忆——你自己在笔记里写的短板是「还缺量化指标，需要补评测数据」（出自《简历项目经历草稿》）。RRSI 给了个现成框架：先建一个评测集，再让 harness 自我迭代，用它的编辑账本 + 预算退火来保证你不是在过拟合那几十条 case。补上指标这一刀，项目一的成色会完全不一样。\n2. Atlassian 那个二面是系统设计，方向是带工具调用的 agent 服务。RRSI 的「编辑受预算约束 + 可观测的改动账本」是个很好的设计题素材——怎么让一个 agent 系统在不停自改的情况下仍然可控，这比讲 CRUD 有意思得多。\n\n**建议**\n\n可以先把链接收进资料库，然后建个任务：用 RRSI 的思路给自己的工作台做一轮 harness 迭代，产出量化对比 + 方法说明，正好塞进简历。要我现在存链接、建任务吗？\n\n另外提醒一句，你昨天日记里写的是「明天先把简历改完」（出自《2026-10-05 日记》）——这个比 RRSI 优先级更高，别被新东西带跑。可以把 RRSI 排到简历之后。",
+              "tools": [
+                {
+                  "name": "read_url",
+                  "args": {
+                    "url": "https://example.com/news/rrsi"
+                  }
+                },
+                {
+                  "name": "list_goals",
+                  "args": {}
+                },
+                {
+                  "name": "search_notes",
+                  "args": {
+                    "query": "agent 自我改进 harness 提示词 记忆 自我进化",
+                    "top_k": 5
+                  }
+                },
+                {
+                  "name": "search_memory",
+                  "args": {
+                    "query": "agent harness 自我改进 项目 实习准备",
+                    "top_k": 5
+                  }
+                }
+              ],
+              "latency_ms": 19796,
+              "checks": [
+                {
+                  "ok": true,
+                  "detail": "调用了 read_url，参数正确"
+                },
+                {
+                  "ok": true,
+                  "detail": "不应调用 save_link"
+                },
+                {
+                  "ok": true,
+                  "detail": "不应调用 create_task"
+                }
+              ],
+              "truncated": false,
+              "llm_calls": 3,
+              "prompt_tokens": 13124,
+              "completion_tokens": 1187
             }
           ]
         }
@@ -6887,22 +6901,16 @@
           "turns": [
             {
               "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
-              "reply": "你笔记《KV Cache 原理笔记》里的说法：\n\n**核心：把算过的 K、V 存下来，不再重算**\n\n- 自回归生成时，每出一个新 token 都要对**之前所有 token** 做注意力。如果每次都把历史 token 的 Key、Value 重新算一遍，重复量极大。\n- KV Cache 就缓存已经算好的 K、V。新 token 只需要算自己的 Q、K、V，然后和缓存拼接去做注意力。\n- 效果：复杂度从 **O(n²) 降到 O(n)**。\n\n**代价**：显存占用随序列长度线性增长。所以你笔记里也记了两个常见优化方向——PagedAttention（vLLM）按页管理显存、MQA/GQA 减少 KV 头数。\n\n一句话版本：时间换空间，把重复计算换成显存开销。",
+              "reply": "你的笔记《KV Cache 原理笔记》里是这么写的：\n\n**核心思路：把算过的东西存下来，别再算一遍。**\n\n自回归生成时，每出一个新 token 都要对前面**所有** token 做注意力计算。如果不缓存，历史 token 的 Key、Value 每次都会被重新算一遍，纯属重复劳动。\n\nKV Cache 的做法：\n- 已经算过的 K、V 直接缓存住\n- 新 token 只算自己的 Q、K、V，然后和缓存拼接\n- 前文那部分的 K、V 不再重算\n\n**收益**：注意力计算的复杂度从 O(n²) 降到 O(n)（单步生成）。\n\n**代价**：显存占用随序列长度线性增长，所以才有后续这些优化——PagedAttention（vLLM）按页管理显存，MQA/GQA 减少 KV 头数。\n\n一句话记法：KV Cache 是拿显存换计算。\n\n要不要我顺手把 PagedAttention 和 MQA/GQA 那部分补进这条笔记？现在只有一句带过。",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
-                    "query": "KV Cache 如何省掉重复计算"
-                  }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "KV Cache 推理加速 自注意力 缓存"
+                    "query": "KV Cache 省掉重复计算"
                   }
                 }
               ],
-              "latency_ms": 11109,
+              "latency_ms": 8608,
               "checks": [
                 {
                   "ok": true,
@@ -6919,8 +6927,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8775,
-              "completion_tokens": 313
+              "prompt_tokens": 8154,
+              "completion_tokens": 303
             }
           ]
         },
@@ -6929,7 +6937,7 @@
           "turns": [
             {
               "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
-              "reply": "结论：KV Cache 省掉的是**历史 token 的 K/V 重算**——自回归生成时每出一个新 token 都要对全部历史做注意力，如果把历史 K、V 缓存下来，新 token 只用算自己的 Q、K、V，再跟缓存拼起来。\n\n具体几点（来自你的笔记《KV Cache 原理笔记》）：\n\n- **重复计算在哪**：生成第 n 个 token 时，前面 n-1 个 token 的 K、V 其实已经算过且不会变，每次重算就是浪费。\n- **怎么省**：缓存已算好的 K、V；新 token 只算自己的 Q、K、V，K/V 追加进缓存，Q 直接和整个缓存做注意力。\n- **复杂度**：从 O(n²) 降到 O(n)。\n- **代价**：显存占用随序列长度线性增长。对应的优化：PagedAttention（vLLM）按页管理显存、MQA/GQA 减少 KV 头数。\n\n一句话记忆版：**Q 每步都要新算，K/V 只算一次然后复用**。",
+              "reply": "你笔记里（《KV Cache 原理笔记》）的结论是：\n\n**核心：把历史 token 已经算过的 K、V 缓存下来，不再重算。**\n\n- 自回归生成时每出一个新 token 都要对之前所有 token 做注意力，如果每次重算历史 token 的 K、V，就有大量重复计算。\n- 有 cache 之后，新 token 只算自己的 Q、K、V，然后和缓存的 K、V 拼接去做注意力。\n- 效果：计算复杂度从 **O(n²) 降到 O(n)**。\n- 代价：显存占用随序列长度线性增长，所以才有那些优化——PagedAttention（vLLM）按页管理显存，MQA/GQA 减少 KV 头数。\n\n一句话记法：**Q 每次都要新算，K/V 算一次存起来复用。**\n\n要不要我顺着这条给你出两道自测题，或者补一条「MQA/GQA 具体怎么省显存」的笔记？",
               "tools": [
                 {
                   "name": "search_notes",
@@ -6938,7 +6946,7 @@
                   }
                 }
               ],
-              "latency_ms": 8202,
+              "latency_ms": 8218,
               "checks": [
                 {
                   "ok": true,
@@ -6955,8 +6963,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8157,
-              "completion_tokens": 330
+              "prompt_tokens": 8155,
+              "completion_tokens": 287
             }
           ]
         },
@@ -6965,22 +6973,16 @@
           "turns": [
             {
               "say": "我笔记里 KV Cache 是怎么省掉重复计算的？",
-              "reply": "你笔记里的《KV Cache 原理笔记》是这么解释的：\n\n**结论：缓存历史 token 的 K、V，避免每一步重算。**\n\n- **问题**：自回归生成时，每生成一个新 token 都要对之前所有 token 做注意力计算。如果每次都把历史 token 的 Key、Value 重新算一遍，就是大量重复计算。\n- **做法**：把已经算过的 K、V 缓存下来；新 token 只算自己的 Q、K、V，然后和缓存拼接去做注意力。\n- **收益**：计算复杂度从 O(n²) 降到 O(n)。\n- **代价**：显存占用随序列长度线性增长。\n\n顺带记了几条优化方向：**PagedAttention（vLLM）** 按页管理显存、**MQA/GQA** 减少 KV 头数。\n\n（出处：KV Cache 原理笔记）\n\n要不要我把这段整理成一个能直接讲给面试官听的 60 秒版本？",
+              "reply": "你的《KV Cache 原理笔记》里是这么说的：\n\n**结论：缓存历史 token 的 K、V，避免每生成一个 token 就把前面所有 token 的 Key/Value 重算一遍。**\n\n- 自回归生成时，每出一个新 token 都要对之前**所有** token 做注意力计算。如果每次重算历史 token 的 K、V，绝大部分是重复劳动。\n- KV Cache 把算过的 K、V 存下来，新 token 只算自己的 Q、K、V，然后和缓存拼接——**复杂度从 O(n²) 降到 O(n)**。\n- 代价是显存随序列长度线性增长，所以催生了两类优化：PagedAttention（vLLM）按页管理显存，以及 MQA/GQA 减少 KV 头数。\n\n顺带一句：你 10-05 的日记里写「明天先把简历改完」——今天是 10-06，简历这事儿还要不要拉个任务？",
               "tools": [
                 {
                   "name": "search_notes",
                   "args": {
                     "query": "KV Cache 省掉重复计算 原理"
                   }
-                },
-                {
-                  "name": "search_notes",
-                  "args": {
-                    "query": "KV Cache 注意力 缓存 推理加速"
-                  }
                 }
               ],
-              "latency_ms": 10952,
+              "latency_ms": 8859,
               "checks": [
                 {
                   "ok": true,
@@ -6997,8 +6999,8 @@
               ],
               "truncated": false,
               "llm_calls": 2,
-              "prompt_tokens": 8761,
-              "completion_tokens": 314
+              "prompt_tokens": 8164,
+              "completion_tokens": 300
             }
           ]
         }

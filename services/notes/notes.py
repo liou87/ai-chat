@@ -12,6 +12,11 @@ from .embeddings import embed_text, embed_texts
 # 直接取 top_k 个分块的话，结果会被同一条笔记占满
 OVERSAMPLE = 4
 
+# 每条笔记带给模型几个分块。检索评测（evals/rag/）发现文档几乎总能找对，但最相关的那一块常常不含答案，
+# 答案在同一篇的第二块里；每篇给 2 块，留出题的答案命中从 50% 升到 66.7%，代价是每次检索多约 400 token。
+# 对比过混合检索（BM25+向量），在中英混合的资料上反而变差，见 docs/ARCHITECTURE.md 的检索方案对比实验
+CHUNKS_PER_NOTE = 2
+
 # 日记复盘的评分维度，key 是存进 structured_data 里的字段名，value 是显示用的中文标签
 RATING_LABELS = {"energy": "精力", "stress": "压力", "satisfaction": "满意度", "focus": "专注度"}
 
@@ -239,8 +244,9 @@ async def search_notes(db: AsyncSession, query: str, top_k: int = 5, category: O
     语义检索在分块上做：用 HNSW 索引按余弦距离取最近的 top_k * OVERSAMPLE 个分块，
     再按笔记去重，每条笔记只保留得分最高的那个分块，最后取前 top_k 条笔记。
     按分类过滤发生在近似最近邻查找之后，所以过滤后结果可能少于 top_k，多取几倍分块能缓解。
-    每条结果带上命中的那个分块（snippet）：agent 工具只把 snippet 给模型，不给全文——
-    资料库里一篇文章可能几万字，全文塞进上下文会撑爆。
+    每条结果带上命中的分块：snippets 是这篇里最相关的前 CHUNKS_PER_NOTE 块（agent 工具给模型的是这个），
+    snippet 是其中最相关的一块（资料库页面的搜索结果当预览用）。不给全文——资料库里一篇文章可能几万字，
+    全文塞进上下文会撑爆。
     """
     query_embedding = await embed_text(query)
     distance = NoteChunk.embedding.cosine_distance(query_embedding).label("distance")
@@ -256,13 +262,16 @@ async def search_notes(db: AsyncSession, query: str, top_k: int = 5, category: O
     for note_id, dist, chunk_text in rows:
         if note_id not in best:
             best[note_id] = dist
-            snippets[note_id] = chunk_text
+            snippets[note_id] = []
+        if len(snippets[note_id]) < CHUNKS_PER_NOTE:
+            snippets[note_id].append(chunk_text)
     note_ids = list(best)[:top_k]
     if not note_ids:
         return []
 
     notes = {n.id: n for n in (await db.execute(select(Note).where(Note.id.in_(note_ids)))).scalars().all()}
-    return [{**_serialize(notes[i], with_score=1 - best[i]), "snippet": snippets[i]} for i in note_ids if i in notes]
+    return [{**_serialize(notes[i], with_score=1 - best[i]), "snippet": snippets[i][0], "snippets": snippets[i]}
+            for i in note_ids if i in notes]
 
 
 async def get_note(db: AsyncSession, note_id: int) -> Optional[dict]:
