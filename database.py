@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, text
+from sqlalchemy import event, Column, Integer, String, Text, DateTime, Date, Boolean, Index, ForeignKey, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
@@ -16,8 +16,33 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://aichat:aichat@loc
 # 本地开发是常驻进程，继续用默认连接池，省掉每次建连接的开销。
 ON_VERCEL = bool(os.getenv("VERCEL"))
 
+# DB_SCHEMA：把所有表放到指定 schema 里，只给评测用（evals/ 设成 eval），评测跑出来的任务、记忆、轨迹不会混进真实数据；
+# 线上和本地开发都不设。两层机制：
+# 1. schema_translate_map：所有 ORM 语句在编译时就把表名写成 "eval.tasks" 这种全名，不依赖连接状态，这是主要保证；
+# 2. search_path：给 Alembic 迁移和少数手写 SQL 用。必须用 run_async 直接在 asyncpg 连接上执行——
+#    走 DBAPI cursor 的话 SET 会落在 SQLAlchemy 隐式开启的事务里，连接归还连接池时一回滚就失效了，
+#    之后的语句会悄悄落回 public（2026-10-04 评测第一次跑时就因为这个误删过真实笔记）。
+DB_SCHEMA = os.getenv("DB_SCHEMA")
+if DB_SCHEMA and not DB_SCHEMA.isidentifier():
+    raise ValueError(f"DB_SCHEMA 不合法：{DB_SCHEMA}")
+
+
+def use_schema(async_engine) -> None:
+    """给引擎的每个新连接设置 search_path（持久生效，不受事务回滚影响）。Alembic 自己建的引擎也要调一次。"""
+    if not DB_SCHEMA:
+        return
+
+    @event.listens_for(async_engine.sync_engine, "connect")
+    def _set_search_path(dbapi_connection, _record):
+        dbapi_connection.run_async(lambda conn: conn.execute(f"SET search_path TO {DB_SCHEMA}, public"))
+
+
 # 异步 Postgres 引擎
-engine = create_async_engine(DATABASE_URL, echo=False, poolclass=NullPool if ON_VERCEL else None)
+engine = create_async_engine(
+    DATABASE_URL, echo=False, poolclass=NullPool if ON_VERCEL else None,
+    execution_options={"schema_translate_map": {None: DB_SCHEMA}} if DB_SCHEMA else {},
+)
+use_schema(engine)
 
 # 所有数据库模型的基类
 Base = declarative_base()

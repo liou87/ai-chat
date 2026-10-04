@@ -145,6 +145,18 @@ run_agent 函数（在 services/agent.py 里）的逻辑大致是这样：
 
 设计上有几个值得记住的点。工具是服务层的薄包装，tools.py 里的处理函数只是调用 tasks.py 这些模块里的普通函数，REST 路由也调用同一套函数，所以聊天里能做的事和界面上能做的事逻辑不会分叉。工具本身是"哑"的，不会自己调用 LLM，比如 get_weekly_review 只返回结构化数据，总结文字是外层循环里模型自己生成的，这样工具保持确定性，也方便单独测试。system prompt 里会注入当前时间，否则模型没法把"明天""5 分钟后"这种相对时间换算准确。
 
+### Agent 行为评测（evals/）
+
+改提示词、加工具都可能悄悄破坏别的行为，所以有一套可以反复跑的回归评测，第一层只看 Agent 的行为，全部用代码断言，不靠模型打分。
+
+用例在 evals/agent_cases.yaml，分工具选择、时间理解、检索路由、执行前确认、核心记忆、不该调工具、多轮、热点分析八类。每条写用户说什么和检查什么：必须调用某个工具且参数满足条件（相等、包含、在某个集合里、等于某个时刻或日期、等于初始数据里某条记录的 id），不能调用某个工具，回复必须或不能匹配某个正则，结束后数据库里某条记录还在。比如"把买牛奶那个任务删了"要求调用 delete_task、参数是买牛奶那条的 id、回复里不能出现"已删除"、任务还在库里。
+
+运行器 evals/run_agent_eval.py 直接调 run_agent，跟线上走同一套系统提示、核心记忆注入和工具，不经过 HTTP：
+- 隔离：设 DB_SCHEMA=eval，所有表建在 eval schema（DB_SCHEMA=eval alembic upgrade head）。database.py 用 schema_translate_map 让每条 ORM 语句编译成 eval.xxx 全名，search_path 用 run_async 设置，夹具里的删除也写全名；启动前检查引擎映射和表都在。第一次跑的时候 search_path 设在隐式事务里被回滚，写进了 public、误删过真实笔记，之后改成现在这样，并且跑前跑后核对 public 各表行数。
+- 确定性：services/clock.py 支持 freeze，评测里"现在"固定为 2026-10-06 周二 10:00；每条用例前 evals/fixtures.py 把任务、目标、提醒、核心记忆、会话恢复成同一组初始数据（笔记和以前的对话要算向量，只写一次后保留）；联网类工具（web_search、read_url、save_link、sync_notion_notes）换成固定返回（evals/mocks.py），其余工具真实执行。
+- 随机性：模型输出不固定，每条默认跑 3 次，报告 pass@1（所有次数的平均通过率）和 pass^3（3 次都过的用例比例，衡量稳定性），同时从 agent_traces 统计每轮平均输入/输出 token、模型调用次数和耗时。
+- 对比：结果写到 evals/results/<时间>/（不进 git），--save-baseline 存成 evals/baselines/agent.json（进 git），之后每次运行自动和基线逐条对比，列出变好和变差的用例。
+
 ## 6. 数据模型
 
 数据库定义都在 database.py 里，用的是 PostgreSQL（托管在 Supabase）。
@@ -241,7 +253,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 12. 本地开发
 
-后端需要 Python 3.10 以上，还需要一个能连上的 PostgreSQL（推荐直接用 Supabase 免费实例，注册后把连接串填进 DATABASE_URL 就行，不需要本地装数据库）。建虚拟环境、装依赖、配好 .env 里的几个变量、跑一次 alembic upgrade head 建表，之后用 uvicorn 启动。前端进 frontend 目录，npm install，配好 .env 里的 VITE_API_KEY，然后 npm run dev。具体命令可以直接看仓库根目录的 README。
+后端需要 Python 3.10 以上，还需要一个能连上的 PostgreSQL（推荐直接用 Supabase 免费实例，注册后把连接串填进 DATABASE_URL 就行，不需要本地装数据库）。建虚拟环境、装依赖、配好 .env 里的几个变量、跑一次 alembic upgrade head 建表，之后用 uvicorn 启动。前端进 frontend 目录，npm install，然后 npm run dev（开发服务器把 /api 代理到本地 8000 端口，不用配环境变量）。评测：python -m evals.run_agent_eval，见第 5 节。具体命令可以直接看仓库根目录的 README。
 
 ## 13. 部署
 

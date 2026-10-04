@@ -16,8 +16,19 @@ from zoneinfo import ZoneInfo
 TZ = ZoneInfo(os.getenv("APP_TIMEZONE", "Australia/Sydney"))
 
 
+# 评测时把"现在"固定在某一刻（见 evals/），"明天下午三点"这类用例才有确定的正确答案。线上永远是 None
+_frozen: datetime | None = None
+
+
+def freeze(at: datetime | None) -> None:
+    global _frozen
+    _frozen = at
+
+
 def now() -> datetime:
     """用户时区的当前时间，不带 tzinfo，跟库里存的 naive datetime 可以直接比较。"""
+    if _frozen is not None:
+        return _frozen
     return datetime.now(TZ).replace(tzinfo=None)
 
 

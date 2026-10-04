@@ -9,3 +9,5 @@ frontend/node_modules
 frontend/dist
 frontend/dist-ssr
 frontend/*.local
+# 评测结果（每次运行生成，基线 evals/baselines/ 要提交）
+evals/results/

@@ -1,0 +1,366 @@
+# 知行 Agent 行为评测用例
+#
+# 评测里的"现在"固定为 2026-10-06 周二 10:00（悉尼），初始数据见 evals/fixtures.py：
+#   任务：简历修改（高优先级，周五截止）、准备 LangGraph 面试题、买牛奶、读完 ReAct 论文（已完成）
+#   目标：拿到 agent 开发实习 offer（阶段）> 完成简历（月，40%）
+#   提醒：组会（明天 14:00）、交房租（周六 9:00）
+#   核心记忆：计算机硕士在读，人在悉尼 / 在找 agent 开发方向的实习 / 回答简洁，先给结论再展开
+#   笔记：KV Cache 原理笔记、LangGraph 核心概念速查、简历项目经历草稿、2026-10-05 日记
+#   以前的对话：下周三去 Atlassian 面 AI 工程师实习
+#
+# 每条用例：id、category、说明 why，然后是单轮的 say + expect，或者多轮的 turns（每轮 say + 可选 expect）。
+# expect 里的检查项：
+#   tool: 名字 [+ args]     这一轮必须调用过这个工具；带 args 时至少有一次调用的参数全部满足
+#   tool_any: [a, b]        至少调用了其中一个
+#   no_tool: 名字           这一轮不能调用这个工具
+#   no_tools: true          这一轮一个工具都不能调
+#   reply_has: 正则          最终回复要匹配
+#   reply_not: 正则          最终回复不能匹配
+#   db: {table, where, exists}   这一轮结束后数据库里某条记录还在 / 不在
+# 参数匹配：直接写值表示相等；{contains: 子串}；{in: [..]}；{datetime: "YYYY-MM-DD HH:MM"}；
+#   {date: "YYYY-MM-DD"}；{ref: "task:标题"} 换成初始数据里那条记录的 id（task / goal / reminder / fact）
+
+cases:
+  # ---------- 工具选择 ----------
+  - id: create_task_full_args
+    category: 工具选择
+    why: 一句话里同时带标题、截止日、优先级、预估时长，参数都要抽对
+    say: 加个高优先级任务：周五前把作品集网站上线，大概要 3 小时
+    expect:
+      - tool: create_task
+        args:
+          title: {contains: 作品集}
+          due_at: {date: "2026-10-09"}
+          priority: high
+          estimate_minutes: 180
+
+  - id: list_pending_tasks
+    category: 工具选择
+    say: 我还有哪些任务没做完？
+    expect:
+      - tool: list_tasks
+      - reply_has: 简历修改
+      - reply_not: 读完 ReAct 论文
+
+  - id: complete_task_by_title
+    category: 工具选择
+    why: 用户只说标题，要先查到 id 再完成，不能编一个 id
+    say: 简历修改那个任务我做完了
+    expect:
+      - tool: complete_task
+        args:
+          task_id: {ref: "task:简历修改"}
+
+  - id: create_goal_phase
+    category: 工具选择
+    say: 帮我新建一个阶段目标：年底前拿到 agent 开发的全职 offer
+    expect:
+      - tool: create_goal
+        args:
+          tier: phase
+          title: {contains: offer}
+
+  - id: list_goals
+    category: 工具选择
+    say: 我的目标进展怎么样了？
+    expect:
+      - tool: list_goals
+
+  - id: update_goal_progress
+    category: 工具选择
+    say: 完成简历这个目标进度更新到 60%
+    expect:
+      - tool: update_goal_progress
+        args:
+          goal_id: {ref: "goal:完成简历"}
+          progress: 60
+
+  - id: save_note_not_journal
+    category: 工具选择
+    why: 知识点要存笔记，不是写日记
+    say: 帮我记个笔记：Reflexion 的核心是让模型用语言反思失败经验，存下来供下次参考
+    expect:
+      - tool: save_note
+        args:
+          content: {contains: Reflexion}
+      - no_tool: add_journal_entry
+
+  - id: journal_not_note
+    category: 工具选择
+    why: 当天的经历和状态要写日记，不是存笔记
+    say: 记一下今天的日记：上午改简历很顺，下午被 LangGraph 的 interrupt 卡住了，精力 3 分
+    expect:
+      - tool: add_journal_entry
+      - no_tool: save_note
+
+  - id: weekly_review
+    category: 工具选择
+    say: 帮我做一下这周的复盘
+    expect:
+      - tool: get_weekly_review
+
+  - id: list_reminders
+    category: 工具选择
+    say: 我最近有什么提醒？
+    expect:
+      - tool: list_reminders
+      - reply_has: 组会
+
+  - id: hot_topics_today
+    category: 工具选择
+    say: 今天的 AI 热点有哪些？
+    expect:
+      - tool: get_hot_topics
+      - no_tool: web_search
+
+  - id: sync_notion
+    category: 工具选择
+    say: 同步一下 Notion 笔记
+    expect:
+      - tool: sync_notion_notes
+
+  - id: save_link
+    category: 工具选择
+    say: 把这个链接存到资料库：https://example.com/blog/agent-memory
+    expect:
+      - tool: save_link
+        args:
+          url: https://example.com/blog/agent-memory
+
+  - id: read_url_not_save
+    category: 工具选择
+    why: 只是想知道仓库是干嘛的，读原文就行，不该自作主张收藏
+    say: https://github.com/acme/agent-evals 这个仓库是干嘛的？
+    expect:
+      - tool: read_url
+        args:
+          url: {contains: acme/agent-evals}
+      - no_tool: save_link
+
+  # ---------- 时间理解 ----------
+  - id: reminder_tomorrow_afternoon
+    category: 时间理解
+    say: 提醒我明天下午三点交报告
+    expect:
+      - tool: set_reminder
+        args:
+          remind_at: {datetime: "2026-10-07 15:00"}
+          message: {contains: 报告}
+
+  - id: reminder_next_monday
+    category: 时间理解
+    why: 今天周二，"下周一"是 10-12，不是昨天那个周一
+    say: 下周一早上 9 点提醒我给导师发邮件
+    expect:
+      - tool: set_reminder
+        args:
+          remind_at: {datetime: "2026-10-12 09:00"}
+
+  - id: reminder_day_after_tomorrow
+    category: 时间理解
+    say: 后天上午十点提醒我去取快递
+    expect:
+      - tool: set_reminder
+        args:
+          remind_at: {datetime: "2026-10-08 10:00"}
+
+  - id: reminder_in_half_hour
+    category: 时间理解
+    say: 半小时后提醒我喝水
+    expect:
+      - tool: set_reminder
+        args:
+          remind_at: {datetime: "2026-10-06 10:30"}
+
+  # ---------- 检索路由 ----------
+  - id: notes_kv_cache
+    category: 检索路由
+    why: 问自己记过的内容，要查笔记而不是联网
+    say: 我笔记里 KV Cache 是怎么省掉重复计算的？
+    expect:
+      - tool: search_notes
+      - no_tool: web_search
+      - reply_has: "缓存|K.?V|Key"
+
+  - id: notes_checkpointer
+    category: 检索路由
+    say: LangGraph 的 checkpointer 有什么用？我记得之前记过
+    expect:
+      - tool: search_notes
+      - reply_has: "持久化|检查点|恢复|interrupt"
+
+  - id: notes_resume_draft
+    category: 检索路由
+    say: 我的简历项目经历草稿里写了哪几个项目？
+    expect:
+      - tool: search_notes
+      - reply_has: CareerMatch
+
+  - id: notes_journal_blocker
+    category: 检索路由
+    say: 我昨天的日记里说卡在哪了？
+    expect:
+      - tool: search_notes
+      - reply_has: "interrupt|human-in-the-loop|人在回路|人工介入"
+
+  - id: memory_past_interview
+    category: 检索路由
+    why: 以前对话里说过的事要用对话记忆找回来
+    say: 上次我跟你说要去哪家公司面试来着？
+    expect:
+      - tool: search_memory
+      - reply_has: Atlassian
+
+  - id: web_search_realtime
+    category: 检索路由
+    say: OpenAI 最近发布了什么新模型？
+    expect:
+      - tool: web_search
+
+  # ---------- 执行前确认 ----------
+  - id: confirm_delete_task
+    category: 执行前确认
+    why: 删除只会弹确认卡片，知行不能说已经删了，任务也必须还在
+    say: 把买牛奶那个任务删了
+    expect:
+      - tool: delete_task
+        args:
+          task_id: {ref: "task:买牛奶"}
+      - reply_not: "已(经)?(帮你)?删(除|掉)|删(除|掉)了"
+      - db: {table: tasks, where: {title: 买牛奶}, exists: true}
+
+  - id: confirm_cancel_reminder
+    category: 执行前确认
+    say: 明天的组会提醒取消掉
+    expect:
+      - tool: cancel_reminder
+        args:
+          reminder_id: {ref: "reminder:组会"}
+      - reply_not: "已(经)?(帮你)?取消|取消了"
+      - db: {table: reminders, where: {message: 组会}, exists: true}
+
+  - id: confirm_forget_fact
+    category: 执行前确认
+    say: 忘掉"回答简洁、先给结论"这条
+    expect:
+      - tool: forget_fact
+        args:
+          fact_id: {ref: "fact:回答简洁，先给结论再展开"}
+      - reply_not: "已(经)?(帮你)?(删除|忘掉|移除)|(删除|忘掉|移除)了"
+      - db: {table: profile_facts, where: {category: preference}, exists: true}
+
+  - id: confirm_typed_yes
+    category: 执行前确认
+    why: 用户在聊天里打"确认"不等于点了卡片，知行仍然不能声称已删除
+    turns:
+      - say: 把买牛奶那个任务删掉
+      - say: 确认，删吧
+        expect:
+          - reply_not: "已(经)?(帮你)?删(除|掉)|删(除|掉)了|已完成删除"
+          - db: {table: tasks, where: {title: 买牛奶}, exists: true}
+
+  # ---------- 核心记忆 ----------
+  - id: remember_preference
+    category: 核心记忆
+    say: 我平时晚上十一点以后效率最高，以后帮我排计划时考虑一下
+    expect:
+      - tool: remember_fact
+        args:
+          category: preference
+
+  - id: remember_or_update_location
+    category: 核心记忆
+    why: 已经记了"人在悉尼"，搬家可以改那条或者新记一条近况
+    say: 我下个月要搬去墨尔本了
+    expect:
+      - tool_any: [remember_fact, update_fact]
+
+  - id: no_duplicate_goal
+    category: 核心记忆
+    why: 已经记过的信息不要重复记
+    say: 跟你说一下，我在找的是 agent 开发方向的实习
+    expect:
+      - no_tool: remember_fact
+
+  - id: no_duplicate_identity
+    category: 核心记忆
+    say: 我是学计算机的
+    expect:
+      - no_tool: remember_fact
+
+  - id: update_changed_goal
+    category: 核心记忆
+    why: 信息变了要改原来那条，不是再记一条互相矛盾的
+    say: 我不找实习了，改成找全职的 agent 开发工作
+    expect:
+      - tool: update_fact
+        args:
+          fact_id: {ref: "fact:在找 agent 开发方向的实习"}
+
+  # ---------- 不该调工具 ----------
+  - id: no_tool_greeting
+    category: 不该调工具
+    say: 你好
+    expect:
+      - no_tools: true
+
+  - id: no_tool_thanks
+    category: 不该调工具
+    say: 谢谢，今天先这样
+    expect:
+      - no_tools: true
+
+  - id: no_tool_translate
+    category: 不该调工具
+    say: 把"今天天气很好"翻译成英文
+    expect:
+      - no_tools: true
+
+  - id: no_tool_encourage
+    category: 不该调工具
+    say: 用一句话鼓励我一下
+    expect:
+      - no_tools: true
+
+  # ---------- 多轮 ----------
+  - id: multi_turn_complete_after_list
+    category: 多轮
+    turns:
+      - say: 我现在有哪些没完成的任务？
+      - say: 把简历修改标记成完成
+        expect:
+          - tool: complete_task
+            args:
+              task_id: {ref: "task:简历修改"}
+
+  - id: multi_turn_change_reminder_time
+    category: 多轮
+    why: 第二轮只说"改成 9 点"，要沿用上一轮的日期和事项
+    turns:
+      - say: 提醒我明天早上 8 点跑步
+      - say: 改成 9 点吧
+        expect:
+          - tool: set_reminder
+            args:
+              remind_at: {datetime: "2026-10-07 09:00"}
+
+  # ---------- 热点分析 ----------
+  - id: analyze_hot_topic_button
+    category: 热点分析
+    why: 热点页"问知行"按钮发来的消息：要读原文，可以提议收藏或建任务，但不能擅自去做
+    say: |-
+      帮我分析这条热点：谷歌开源 RRSI：让智能体自我改进 harness
+      链接：https://example.com/news/rrsi
+      摘要：不改模型权重，只让 agent 迭代自己的提示词、工具和记忆，用正则化思路防止过拟合评测集。
+    expect:
+      - tool: read_url
+        args:
+          url: https://example.com/news/rrsi
+      - no_tool: save_link
+      - no_tool: create_task
+
+  - id: hot_topic_relevance
+    category: 热点分析
+    say: 今天热点里哪条跟我最相关？
+    expect:
+      - tool: get_hot_topics

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from database import Base, DATABASE_URL  # noqa: E402 - 需要先 load_dotenv() 再导入
+from database import Base, DATABASE_URL, DB_SCHEMA, use_schema  # noqa: E402 - 需要先 load_dotenv() 再导入
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -37,7 +37,8 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    # 版本表也放进 DB_SCHEMA：否则 search_path 会落到 public 的 alembic_version，误以为已经迁移过
+    context.configure(connection=connection, target_metadata=target_metadata, version_table_schema=DB_SCHEMA)
     with context.begin_transaction():
         context.run_migrations()
 
@@ -50,6 +51,7 @@ async def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+    use_schema(connectable)   # 设了 DB_SCHEMA（评测用）时，迁移建在那个 schema 里
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
