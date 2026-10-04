@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from sqlalchemy import text
 
 from database import ChatSession, SessionLocal
 from evals import fixtures, mocks
@@ -58,6 +59,12 @@ async def main():
     fixtures.freeze_clock()
     mocks.install()
     await load_corpus()
+    # 每次从干净状态开始：上一轮知行可能顺手记了核心记忆（会进系统提示）、留下对话记忆，都会影响这一轮的回答
+    async with SessionLocal() as db:
+        await db.execute(text("TRUNCATE eval_rag.profile_facts, eval_rag.sessions, eval_rag.messages, "
+                              "eval_rag.agent_traces, eval_rag.memory_chunks, eval_rag.tasks, eval_rag.reminders, "
+                              "eval_rag.goals RESTART IDENTITY CASCADE"))
+        await db.commit()
 
     queries = [{**q, "set": "main"} for q in yaml.safe_load(QUERIES.read_text(encoding="utf-8"))["queries"]]
     queries += [{**q, "set": "holdout"} for q in yaml.safe_load(HOLDOUT.read_text(encoding="utf-8"))["queries"]]
