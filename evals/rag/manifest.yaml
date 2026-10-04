@@ -1,0 +1,42 @@
+# 检索评测语料清单。build_corpus.py 按这里抓取正文存到 evals/rag/corpus/（不进 git），
+# GitHub 仓库固定到 ref 这个提交，重抓内容不变，标注的答案关键句不会失效；网页文章无法固定版本，以本地快照为准。
+docs:
+  - {id: langgraph, kind: github, repo: langchain-ai/langgraph, ref: 9a0394d88b2211f299dcd69df92db3480c69ee61}
+  - {id: llama_index, kind: github, repo: run-llama/llama_index, ref: 962940ddc079cc21701d28d1237c84c82a7c5164}
+  - {id: autogen, kind: github, repo: microsoft/autogen, ref: 027ecf0a379bcc1d09956d46d12d44a3ad9cee14}
+  - {id: crewai, kind: github, repo: crewAIInc/crewAI, ref: 738c8e19e35c2888d8e0663bc5cc45c5acf6ac2d}
+  - {id: letta, kind: github, repo: letta-ai/letta, ref: 5bcdd177d70fa2b31a754cfcd801e77b2e1ab16a}
+  - {id: mem0, kind: github, repo: mem0ai/mem0, ref: abb81c88e1f738a8117d8293530fbc31a5ef8fd9}
+  - {id: vllm, kind: github, repo: vllm-project/vllm, ref: d61081dc3d3f1740a5d8bf82608b62974393c2de}
+  - {id: sglang, kind: github, repo: sgl-project/sglang, ref: 35f3c96ff4794a4de15daf12caad371084a037ee}
+  - {id: smolagents, kind: github, repo: huggingface/smolagents, ref: c30b115286e000e98711fae5e85993547b73d826}
+  - {id: openai_agents, kind: github, repo: openai/openai-agents-python, ref: 81f0ccf20c6e24063b9da36fa37f2bdb6a43d8d3}
+  - {id: haystack, kind: github, repo: deepset-ai/haystack, ref: 87dba65f8c8b1f3906a36625615618ba29505971}
+  - {id: dspy, kind: github, repo: stanfordnlp/dspy, ref: 6f0aacfa5ed68511ac10c66dbbe53eaf02fc66ec}
+  - {id: chroma, kind: github, repo: chroma-core/chroma, ref: e5c22977da46f9410c2e8f2aea54c45d84d29299}
+  - {id: qdrant, kind: github, repo: qdrant/qdrant, ref: 6ab21cac18ebb6f4ae29102c7f8f5cc11affd5de}
+  - {id: pgvector, kind: github, repo: pgvector/pgvector, ref: f37c13f68b57d2c3472b2214fbcff699d6d34876}
+  - {id: ragas, kind: github, repo: explodinggradients/ragas, ref: 298b68274234c060deacab3cf5fb52aa3a20e885}
+  - {id: deepeval, kind: github, repo: confident-ai/deepeval, ref: a200ecede6456f92d7cbbb350b7b3fb4d78d36b3}
+  - {id: promptfoo, kind: github, repo: promptfoo/promptfoo, ref: 5fde786d0c296339be3fd189d1542157e1d4217a}
+  - {id: langfuse, kind: github, repo: langfuse/langfuse, ref: f75c661dbe8c6b85523c81486b39e8403ac2c141}
+  - {id: litellm, kind: github, repo: BerriAI/litellm, ref: a2bf67a03707e474be41e07806ee4fd9791ca7cd}
+  - {id: graphrag, kind: github, repo: microsoft/graphrag, ref: 769542fbf1d8e5b4c6a8677fefc34621c87894c5}
+  - {id: ragflow, kind: github, repo: infiniflow/ragflow, ref: 2400ca8eb51432b1d304266d0de9ca232d9b53fa}
+  - {id: browser_use, kind: github, repo: browser-use/browser-use, ref: 7be96ed8bafa8dfe1eef228b59cf5c884b8b2431}
+  - {id: mcp_python_sdk, kind: github, repo: modelcontextprotocol/python-sdk, ref: 2118f14f8a19bc158d8a1cf90af58d85d187f849}
+  - {id: dify, kind: github, repo: langgenius/dify, ref: 1cbb6dc385878c950e2252f17f1954211fd1e763}
+  - {id: zh_kv_cache, kind: web, url: https://www.cnblogs.com/LexLuc/p/18716439, title: KV Cache：加速LLM推理的关键}
+  - {id: zh_rag_chunking, kind: web, url: https://developer.aliyun.com/article/1709334, title: 文档切分实战：5种方法详解，打造高效RAG系统的第一步}
+  - {id: zh_react, kind: web, url: https://www.53ai.com/news/tishicijiqiao/2025092119482.html, title: 深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理}
+  - {id: zh_mcp, kind: web, url: https://cloud.tencent.com/developer/article/2505540, title: 一文读懂：模型上下文协议（MCP）}
+  - {id: zh_lora, kind: web, url: https://www.cnblogs.com/yangykaifa/p/19307638, title: LoRA技术原理详解：大模型高效微调的低秩智慧}
+  - {id: zh_hnsw, kind: web, url: https://cloud.tencent.com/developer/article/2436455, title: 深入解析HNSW：Faiss中的层次化可导航小世界图}
+  - {id: zh_agent_memory, kind: web, url: https://www.cnblogs.com/alisystemsoftware/p/19417127, title: Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成}
+  - {id: zh_prompt_injection, kind: web, url: https://developer.aliyun.com/article/1667146, title: 提示词注入攻击方法与多模型纵深防御架构}
+  - {id: zh_dpo, kind: web, url: https://developer.aliyun.com/article/1684048, title: DPO直接偏好优化原理实现与RLHF对比分析}
+  - {id: zh_hybrid_search, kind: web, url: https://www.infoq.cn/article/QC1mkdEzZRL1FFpvfukC, title: 打破向量检索的局限：RAG 混合检索实践}
+  - {id: zh_function_calling, kind: web, url: https://www.cnblogs.com/ruipeng/p/18216610, title: 深入探讨Function Calling：实现外部函数调用的工作原理}
+  - {id: zh_speculative, kind: web, url: https://developer.aliyun.com/article/1723404, title: 投机解码原理详解：小模型打草稿，大模型一次验证}
+  - {id: zh_moe, kind: web, url: https://cloud.tencent.com/developer/article/2672593, title: 混合专家模型MOE的概述}
+  - {id: zh_quantization, kind: web, url: https://cloud.tencent.com/developer/article/2539018, title: 大模型 4-bit 量化前沿：AWQ vs. GPTQ vs. QuIP#}

@@ -67,12 +67,12 @@ def _today_at(days: int, hour: int, minute: int = 0) -> datetime:
     return datetime(d.year, d.month, d.day, hour, minute)
 
 
-async def assert_isolated() -> None:
+async def assert_isolated(expected: str = "eval") -> None:
     """确认连的是评测 schema，而且每张表都建在里面（否则 search_path 会落到 public 的真实数据上）。"""
-    if DB_SCHEMA != "eval":
-        raise SystemExit("评测必须在 DB_SCHEMA=eval 下运行")
-    if engine.get_execution_options().get("schema_translate_map") != {None: "eval"}:
-        raise SystemExit("数据库引擎没有把表名映射到 eval schema，拒绝运行")
+    if DB_SCHEMA != expected:
+        raise SystemExit(f"评测必须在 DB_SCHEMA={expected} 下运行")
+    if engine.get_execution_options().get("schema_translate_map") != {None: expected}:
+        raise SystemExit(f"数据库引擎没有把表名映射到 {expected} schema，拒绝运行")
     async with SessionLocal() as db:
         existing = set((await db.execute(text(
             "select table_name from information_schema.tables where table_schema = :s"), {"s": DB_SCHEMA}

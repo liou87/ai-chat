@@ -1,0 +1,1601 @@
+{
+  "meta": {
+    "started_at": "2026-10-04 22:30",
+    "commit": "5559022+改动未提交",
+    "index": "voyage-4-lite/512/chunk400-50",
+    "docs": 39,
+    "chunks": 1652,
+    "top_k": 5
+  },
+  "summary": {
+    "overall": {
+      "n": 39,
+      "doc_recall@1": 0.6667,
+      "doc_recall@3": 0.9744,
+      "doc_recall@5": 1.0,
+      "answer_recall@5": 0.8387,
+      "mrr": 0.9145
+    },
+    "by_group": {
+      "关键词": {
+        "n": 12,
+        "doc_recall@1": 1.0,
+        "doc_recall@3": 1.0,
+        "doc_recall@5": 1.0,
+        "answer_recall@5": 0.6667,
+        "mrr": 1.0
+      },
+      "同义改写": {
+        "n": 12,
+        "doc_recall@1": 0.9167,
+        "doc_recall@3": 1.0,
+        "doc_recall@5": 1.0,
+        "answer_recall@5": 0.9167,
+        "mrr": 0.9444
+      },
+      "跨文档辨析": {
+        "n": 8,
+        "doc_recall@1": 0.0,
+        "doc_recall@3": 0.875,
+        "doc_recall@5": 1.0,
+        "answer_recall@5": null,
+        "mrr": 0.9375
+      },
+      "标题偏差": {
+        "n": 7,
+        "doc_recall@1": 0.4286,
+        "doc_recall@3": 1.0,
+        "doc_recall@5": 1.0,
+        "answer_recall@5": 1.0,
+        "mrr": 0.6905
+      }
+    },
+    "negatives": {
+      "n": 10,
+      "pos_top1": {
+        "min": 0.3916,
+        "median": 0.5799,
+        "max": 0.717
+      },
+      "neg_top1": {
+        "min": 0.2609,
+        "median": 0.3486,
+        "max": 0.4195
+      },
+      "auc": 0.9974,
+      "best_zero_loss_threshold": {
+        "threshold": 0.39,
+        "neg_blocked": 0.9,
+        "pos_lost": 0.0
+      }
+    }
+  },
+  "queries": {
+    "kw_ef_search_default": {
+      "group": "关键词",
+      "q": "pgvector 的 hnsw.ef_search 默认值是多少？加了过滤条件会怎样",
+      "top1_score": 0.6347,
+      "results": [
+        {
+          "doc": "pgvector",
+          "score": 0.6347
+        },
+        {
+          "doc": "zh_hnsw",
+          "score": 0.6308
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.5537
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_halfvec_dims": {
+      "group": "关键词",
+      "q": "pgvector 的 halfvec 类型最多支持多少维",
+      "top1_score": 0.6157,
+      "results": [
+        {
+          "doc": "pgvector",
+          "score": 0.6157
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": false,
+      "answer_hits": [
+        false
+      ],
+      "rr": 1.0
+    },
+    "kw_mem0_locomo": {
+      "group": "关键词",
+      "q": "Mem0 新算法在 LoCoMo 上得了多少分",
+      "top1_score": 0.5799,
+      "results": [
+        {
+          "doc": "mem0",
+          "score": 0.5799
+        },
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.4076
+        },
+        {
+          "doc": "zh_moe",
+          "score": 0.3642
+        },
+        {
+          "doc": "zh_kv_cache",
+          "score": 0.356
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.3375
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_dpo_pi_ref": {
+      "group": "关键词",
+      "q": "DPO 损失函数里的 π_ref 是什么",
+      "top1_score": 0.5452,
+      "results": [
+        {
+          "doc": "zh_dpo",
+          "score": 0.5452
+        },
+        {
+          "doc": "dspy",
+          "score": 0.3513
+        },
+        {
+          "doc": "zh_hnsw",
+          "score": 0.3406
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": false,
+      "answer_hits": [
+        false
+      ],
+      "rr": 1.0
+    },
+    "kw_tool_choice_auto": {
+      "group": "关键词",
+      "q": "tool_choice 设成 auto 是什么意思",
+      "top1_score": 0.5142,
+      "results": [
+        {
+          "doc": "zh_function_calling",
+          "score": 0.5142
+        },
+        {
+          "doc": "autogen",
+          "score": 0.3575
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_ef_construction": {
+      "group": "关键词",
+      "q": "HNSW 建图时 efConstruction 参数起什么作用",
+      "top1_score": 0.596,
+      "results": [
+        {
+          "doc": "zh_hnsw",
+          "score": 0.596
+        },
+        {
+          "doc": "pgvector",
+          "score": 0.5559
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": false,
+      "answer_hits": [
+        false
+      ],
+      "rr": 1.0
+    },
+    "kw_mcp_components": {
+      "group": "关键词",
+      "q": "MCP 协议里 Host、Client、Server 分别是什么",
+      "top1_score": 0.5707,
+      "results": [
+        {
+          "doc": "zh_mcp",
+          "score": 0.5707
+        },
+        {
+          "doc": "mcp_python_sdk",
+          "score": 0.4549
+        },
+        {
+          "doc": "autogen",
+          "score": 0.3377
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_smolagents_sandbox": {
+      "group": "关键词",
+      "q": "smolagents 的 CodeAgent 可以在 E2B 或 Docker 沙箱里执行吗",
+      "top1_score": 0.6089,
+      "results": [
+        {
+          "doc": "smolagents",
+          "score": 0.6089
+        },
+        {
+          "doc": "langfuse",
+          "score": 0.438
+        },
+        {
+          "doc": "litellm",
+          "score": 0.4269
+        },
+        {
+          "doc": "browser_use",
+          "score": 0.4195
+        },
+        {
+          "doc": "autogen",
+          "score": 0.4133
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_autogen_maintenance": {
+      "group": "关键词",
+      "q": "AutoGen 是不是已经进入 maintenance mode 了",
+      "top1_score": 0.4957,
+      "results": [
+        {
+          "doc": "autogen",
+          "score": 0.4957
+        },
+        {
+          "doc": "ragflow",
+          "score": 0.2852
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_rrf_fusion": {
+      "group": "关键词",
+      "q": "混合检索怎么用 RRF 把 BM25 和向量检索的结果合并",
+      "top1_score": 0.6992,
+      "results": [
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.6992
+        },
+        {
+          "doc": "pgvector",
+          "score": 0.6294
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_graphrag": {
+      "group": "关键词",
+      "q": "GraphRAG 用 knowledge graph 来做什么",
+      "top1_score": 0.6427,
+      "results": [
+        {
+          "doc": "graphrag",
+          "score": 0.6427
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.5646
+        },
+        {
+          "doc": "ragflow",
+          "score": 0.5412
+        },
+        {
+          "doc": "langgraph",
+          "score": 0.5246
+        },
+        {
+          "doc": "zh_react",
+          "score": 0.5197
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "kw_deepeval_pytest": {
+      "group": "关键词",
+      "q": "DeepEval 和 Pytest 是什么关系",
+      "top1_score": 0.5753,
+      "results": [
+        {
+          "doc": "deepeval",
+          "score": 0.5753
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": false,
+      "answer_hits": [
+        false
+      ],
+      "rr": 1.0
+    },
+    "para_kv_cache": {
+      "group": "同义改写",
+      "q": "大模型一个字一个字往外蹦的时候，怎么避免每一步都把前面的内容重新算一遍",
+      "top1_score": 0.4779,
+      "results": [
+        {
+          "doc": "zh_kv_cache",
+          "score": 0.4779
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.4697
+        },
+        {
+          "doc": "zh_rag_chunking",
+          "score": 0.3966
+        },
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.3887
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_chunk_overlap": {
+      "group": "同义改写",
+      "q": "把长文档切成小段的时候，怎么防止一句关键的话被拦腰切断",
+      "top1_score": 0.5737,
+      "results": [
+        {
+          "doc": "zh_rag_chunking",
+          "score": 0.5737
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_lora": {
+      "group": "同义改写",
+      "q": "有没有办法只训练很少一部分参数，就让大模型适应一个新任务",
+      "top1_score": 0.5847,
+      "results": [
+        {
+          "doc": "zh_lora",
+          "score": 0.5847
+        },
+        {
+          "doc": "zh_dpo",
+          "score": 0.5638
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.5142
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_speculative": {
+      "group": "同义改写",
+      "q": "先让一个小模型快速猜几个词，再让大模型一次性检查对不对，这是什么加速方法",
+      "top1_score": 0.6476,
+      "results": [
+        {
+          "doc": "zh_speculative",
+          "score": 0.6476
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.5314
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_moe_imbalance": {
+      "group": "同义改写",
+      "q": "模型里有很多个子网络、每次只挑几个干活，这种结构容易出什么问题",
+      "top1_score": 0.4235,
+      "results": [
+        {
+          "doc": "zh_moe",
+          "score": 0.4235
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.3833
+        },
+        {
+          "doc": "zh_dpo",
+          "score": 0.3794
+        },
+        {
+          "doc": "zh_mcp",
+          "score": 0.3719
+        },
+        {
+          "doc": "zh_hnsw",
+          "score": 0.3525
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": false,
+      "answer_hits": [
+        false
+      ],
+      "rr": 1.0
+    },
+    "para_quant_storage": {
+      "group": "同义改写",
+      "q": "把模型权重压到很低的精度之后，存储空间大概能省多少",
+      "top1_score": 0.6274,
+      "results": [
+        {
+          "doc": "zh_quantization",
+          "score": 0.6274
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.5059
+        },
+        {
+          "doc": "zh_lora",
+          "score": 0.4966
+        },
+        {
+          "doc": "zh_dpo",
+          "score": 0.4928
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_injection_defense": {
+      "group": "同义改写",
+      "q": "怎么防止有人通过精心设计的输入骗 AI 说出它的内部设定",
+      "top1_score": 0.5338,
+      "results": [
+        {
+          "doc": "zh_prompt_injection",
+          "score": 0.5338
+        },
+        {
+          "doc": "openai_agents",
+          "score": 0.3959
+        },
+        {
+          "doc": "smolagents",
+          "score": 0.3813
+        },
+        {
+          "doc": "deepeval",
+          "score": 0.3679
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.3629
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_context_overflow": {
+      "group": "同义改写",
+      "q": "聊天记录越来越长，超出模型一次能看的范围了怎么办",
+      "top1_score": 0.4927,
+      "results": [
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.4927
+        },
+        {
+          "doc": "zh_rag_chunking",
+          "score": 0.3987
+        },
+        {
+          "doc": "zh_moe",
+          "score": 0.3908
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.3696
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_resume_after_crash": {
+      "group": "同义改写",
+      "q": "有没有框架能让智能体程序挂掉以后从断掉的地方接着跑",
+      "top1_score": 0.3916,
+      "results": [
+        {
+          "doc": "langgraph",
+          "score": 0.3916
+        },
+        {
+          "doc": "autogen",
+          "score": 0.3867
+        },
+        {
+          "doc": "zh_react",
+          "score": 0.3855
+        },
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.3759
+        },
+        {
+          "doc": "crewai",
+          "score": 0.3751
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_filter_fewer_rows": {
+      "group": "同义改写",
+      "q": "向量近似搜索加了 where 条件以后结果条数变少了，怎么让它多找一些",
+      "top1_score": 0.5916,
+      "results": [
+        {
+          "doc": "pgvector",
+          "score": 0.5916
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.5574
+        },
+        {
+          "doc": "zh_hnsw",
+          "score": 0.5079
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "para_attention_memory": {
+      "group": "同义改写",
+      "q": "推理服务是怎么高效管理注意力计算产生的那些缓存的",
+      "top1_score": 0.6528,
+      "results": [
+        {
+          "doc": "zh_kv_cache",
+          "score": 0.6528
+        },
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.5188
+        },
+        {
+          "doc": "vllm",
+          "score": 0.5181
+        },
+        {
+          "doc": "sglang",
+          "score": 0.4997
+        }
+      ],
+      "gold_ranks": [
+        3
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 0.3333333333333333
+    },
+    "para_react_vs_cot": {
+      "group": "同义改写",
+      "q": "边想边动手、看到结果再接着想，跟只在脑子里一步步推演有什么区别",
+      "top1_score": 0.4788,
+      "results": [
+        {
+          "doc": "zh_react",
+          "score": 0.4788
+        },
+        {
+          "doc": "crewai",
+          "score": 0.3093
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "cross_langgraph_crewai": {
+      "group": "跨文档辨析",
+      "q": "LangGraph 和 CrewAI 在编排多智能体上各自的思路有什么不同",
+      "top1_score": 0.5657,
+      "results": [
+        {
+          "doc": "crewai",
+          "score": 0.5657
+        },
+        {
+          "doc": "langfuse",
+          "score": 0.5511
+        },
+        {
+          "doc": "mem0",
+          "score": 0.5421
+        },
+        {
+          "doc": "langgraph",
+          "score": 0.5192
+        },
+        {
+          "doc": "zh_react",
+          "score": 0.4949
+        }
+      ],
+      "gold_ranks": [
+        4,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": false,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "cross_hnsw_params": {
+      "group": "跨文档辨析",
+      "q": "pgvector 和 Faiss 里 HNSW 的 M 参数含义一样吗",
+      "top1_score": 0.5947,
+      "results": [
+        {
+          "doc": "zh_hnsw",
+          "score": 0.5947
+        },
+        {
+          "doc": "pgvector",
+          "score": 0.5279
+        }
+      ],
+      "gold_ranks": [
+        2,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "cross_ragas_deepeval": {
+      "group": "跨文档辨析",
+      "q": "Ragas 和 DeepEval 这两个 LLM 评测框架定位上有什么区别",
+      "top1_score": 0.6336,
+      "results": [
+        {
+          "doc": "deepeval",
+          "score": 0.6336
+        },
+        {
+          "doc": "ragas",
+          "score": 0.6186
+        }
+      ],
+      "gold_ranks": [
+        2,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "cross_vllm_sglang": {
+      "group": "跨文档辨析",
+      "q": "vLLM 和 SGLang 都是推理框架，各自主打什么",
+      "top1_score": 0.6235,
+      "results": [
+        {
+          "doc": "sglang",
+          "score": 0.6235
+        },
+        {
+          "doc": "vllm",
+          "score": 0.6181
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.5646
+        },
+        {
+          "doc": "langfuse",
+          "score": 0.5262
+        }
+      ],
+      "gold_ranks": [
+        2,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "cross_mem0_letta": {
+      "group": "跨文档辨析",
+      "q": "Mem0 和 Letta 都在做智能体记忆，两者有什么不一样",
+      "top1_score": 0.5236,
+      "results": [
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.5236
+        },
+        {
+          "doc": "mem0",
+          "score": 0.513
+        },
+        {
+          "doc": "letta",
+          "score": 0.5011
+        }
+      ],
+      "gold_ranks": [
+        2,
+        3
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 0.5
+    },
+    "cross_lora_quant": {
+      "group": "跨文档辨析",
+      "q": "LoRA 和 4-bit 量化都能降低大模型的成本，原理上有什么不同",
+      "top1_score": 0.648,
+      "results": [
+        {
+          "doc": "zh_quantization",
+          "score": 0.648
+        },
+        {
+          "doc": "zh_lora",
+          "score": 0.6301
+        }
+      ],
+      "gold_ranks": [
+        2,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "cross_mcp_function_calling": {
+      "group": "跨文档辨析",
+      "q": "MCP 和 Function Calling 是什么关系，能互相替代吗",
+      "top1_score": 0.4679,
+      "results": [
+        {
+          "doc": "zh_function_calling",
+          "score": 0.4679
+        },
+        {
+          "doc": "zh_mcp",
+          "score": 0.377
+        }
+      ],
+      "gold_ranks": [
+        2,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "cross_chroma_qdrant": {
+      "group": "跨文档辨析",
+      "q": "Chroma 和 Qdrant 这两个向量数据库用起来有什么区别",
+      "top1_score": 0.6477,
+      "results": [
+        {
+          "doc": "qdrant",
+          "score": 0.6477
+        },
+        {
+          "doc": "chroma",
+          "score": 0.596
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.5538
+        }
+      ],
+      "gold_ranks": [
+        2,
+        1
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": null,
+      "answer_hits": [],
+      "rr": 1.0
+    },
+    "neg_k8s_hpa": {
+      "group": "负例",
+      "q": "Kubernetes 的 HPA 自动扩缩容要怎么配置指标",
+      "top1_score": 0.4195,
+      "results": [
+        {
+          "doc": "ragflow",
+          "score": 0.4195
+        },
+        {
+          "doc": "dify",
+          "score": 0.4078
+        },
+        {
+          "doc": "zh_hnsw",
+          "score": 0.3612
+        },
+        {
+          "doc": "pgvector",
+          "score": 0.3513
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.3428
+        }
+      ]
+    },
+    "neg_react_hooks": {
+      "group": "负例",
+      "q": "React 的 useEffect 依赖数组应该怎么写",
+      "top1_score": 0.285,
+      "results": [
+        {
+          "doc": "pgvector",
+          "score": 0.285
+        },
+        {
+          "doc": "zh_function_calling",
+          "score": 0.2583
+        },
+        {
+          "doc": "langfuse",
+          "score": 0.231
+        },
+        {
+          "doc": "browser_use",
+          "score": 0.2297
+        },
+        {
+          "doc": "haystack",
+          "score": 0.2203
+        }
+      ]
+    },
+    "neg_photoshop": {
+      "group": "负例",
+      "q": "怎么用 Photoshop 把人像从背景里抠出来",
+      "top1_score": 0.2997,
+      "results": [
+        {
+          "doc": "langfuse",
+          "score": 0.2997
+        },
+        {
+          "doc": "autogen",
+          "score": 0.2851
+        },
+        {
+          "doc": "browser_use",
+          "score": 0.2743
+        },
+        {
+          "doc": "crewai",
+          "score": 0.2553
+        },
+        {
+          "doc": "haystack",
+          "score": 0.2541
+        }
+      ]
+    },
+    "neg_rust_ownership": {
+      "group": "负例",
+      "q": "Rust 的所有权和借用规则是怎样的",
+      "top1_score": 0.3486,
+      "results": [
+        {
+          "doc": "pgvector",
+          "score": 0.3486
+        },
+        {
+          "doc": "langfuse",
+          "score": 0.3368
+        },
+        {
+          "doc": "ragas",
+          "score": 0.3015
+        },
+        {
+          "doc": "autogen",
+          "score": 0.2933
+        },
+        {
+          "doc": "graphrag",
+          "score": 0.2897
+        }
+      ]
+    },
+    "neg_cooking": {
+      "group": "负例",
+      "q": "红烧肉怎么做才好吃",
+      "top1_score": 0.2609,
+      "results": [
+        {
+          "doc": "langfuse",
+          "score": 0.2609
+        },
+        {
+          "doc": "sglang",
+          "score": 0.2384
+        },
+        {
+          "doc": "ragas",
+          "score": 0.2313
+        },
+        {
+          "doc": "ragflow",
+          "score": 0.2301
+        },
+        {
+          "doc": "mem0",
+          "score": 0.2196
+        }
+      ]
+    },
+    "neg_tcp": {
+      "group": "负例",
+      "q": "TCP 三次握手的过程是什么",
+      "top1_score": 0.3758,
+      "results": [
+        {
+          "doc": "zh_mcp",
+          "score": 0.3758
+        },
+        {
+          "doc": "autogen",
+          "score": 0.3607
+        },
+        {
+          "doc": "zh_function_calling",
+          "score": 0.3581
+        },
+        {
+          "doc": "langfuse",
+          "score": 0.3406
+        },
+        {
+          "doc": "mcp_python_sdk",
+          "score": 0.3358
+        }
+      ]
+    },
+    "neg_visa": {
+      "group": "负例",
+      "q": "怎么申请澳洲的学生签证",
+      "top1_score": 0.3513,
+      "results": [
+        {
+          "doc": "langfuse",
+          "score": 0.3513
+        },
+        {
+          "doc": "autogen",
+          "score": 0.3247
+        },
+        {
+          "doc": "dify",
+          "score": 0.3091
+        },
+        {
+          "doc": "sglang",
+          "score": 0.2988
+        }
+      ]
+    },
+    "neg_spark": {
+      "group": "负例",
+      "q": "Spark 里宽依赖和窄依赖有什么区别",
+      "top1_score": 0.3254,
+      "results": [
+        {
+          "doc": "zh_moe",
+          "score": 0.3254
+        },
+        {
+          "doc": "zh_dpo",
+          "score": 0.3203
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.3151
+        },
+        {
+          "doc": "pgvector",
+          "score": 0.3101
+        },
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.3073
+        }
+      ]
+    },
+    "neg_redis": {
+      "group": "负例",
+      "q": "Redis 持久化的 RDB 和 AOF 有什么区别",
+      "top1_score": 0.3814,
+      "results": [
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.3814
+        },
+        {
+          "doc": "qdrant",
+          "score": 0.3711
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.352
+        },
+        {
+          "doc": "mem0",
+          "score": 0.3345
+        },
+        {
+          "doc": "pgvector",
+          "score": 0.3338
+        }
+      ]
+    },
+    "neg_rope": {
+      "group": "负例",
+      "q": "Transformer 的旋转位置编码 RoPE 是怎么计算的",
+      "top1_score": 0.3399,
+      "results": [
+        {
+          "doc": "langfuse",
+          "score": 0.3399
+        },
+        {
+          "doc": "zh_dpo",
+          "score": 0.3348
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.3285
+        },
+        {
+          "doc": "autogen",
+          "score": 0.3189
+        },
+        {
+          "doc": "ragas",
+          "score": 0.3163
+        }
+      ]
+    },
+    "title_hnsw_vs_ivfflat": {
+      "group": "标题偏差",
+      "q": "HNSW 和 IVFFlat 哪个查询更快？在 pgvector 里该选哪个",
+      "top1_score": 0.717,
+      "results": [
+        {
+          "doc": "pgvector",
+          "score": 0.717
+        },
+        {
+          "doc": "zh_hnsw",
+          "score": 0.5894
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "title_paged_attention": {
+      "group": "标题偏差",
+      "q": "KV Cache 显存碎片的问题，PagedAttention 是哪个项目提出来的",
+      "top1_score": 0.6442,
+      "results": [
+        {
+          "doc": "zh_kv_cache",
+          "score": 0.6442
+        },
+        {
+          "doc": "sglang",
+          "score": 0.5883
+        },
+        {
+          "doc": "vllm",
+          "score": 0.5531
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.4715
+        },
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.4699
+        }
+      ],
+      "gold_ranks": [
+        3
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 0.3333333333333333
+    },
+    "title_mem0_longmemeval": {
+      "group": "标题偏差",
+      "q": "Agent 记忆系统在 LongMemEval 上能做到多少分",
+      "top1_score": 0.5784,
+      "results": [
+        {
+          "doc": "zh_agent_memory",
+          "score": 0.5784
+        },
+        {
+          "doc": "mem0",
+          "score": 0.575
+        },
+        {
+          "doc": "langgraph",
+          "score": 0.5066
+        }
+      ],
+      "gold_ranks": [
+        2
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 0.5
+    },
+    "title_code_agent": {
+      "group": "标题偏差",
+      "q": "智能体用写代码的方式来行动，跟 ReAct 那种调工具有什么不同",
+      "top1_score": 0.5182,
+      "results": [
+        {
+          "doc": "zh_react",
+          "score": 0.5182
+        },
+        {
+          "doc": "smolagents",
+          "score": 0.4641
+        }
+      ],
+      "gold_ranks": [
+        2
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 0.5
+    },
+    "title_ragflow_chunking": {
+      "group": "标题偏差",
+      "q": "RAG 文档分块有没有基于模板的做法",
+      "top1_score": 0.5644,
+      "results": [
+        {
+          "doc": "zh_rag_chunking",
+          "score": 0.5644
+        },
+        {
+          "doc": "ragflow",
+          "score": 0.5434
+        },
+        {
+          "doc": "zh_hybrid_search",
+          "score": 0.5255
+        }
+      ],
+      "gold_ranks": [
+        2
+      ],
+      "doc_hit": {
+        "1": false,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 0.5
+    },
+    "title_mcp_server_lines": {
+      "group": "标题偏差",
+      "q": "用 Python 写一个最简单的 MCP 服务器需要多少代码",
+      "top1_score": 0.6093,
+      "results": [
+        {
+          "doc": "mcp_python_sdk",
+          "score": 0.6093
+        },
+        {
+          "doc": "litellm",
+          "score": 0.4919
+        },
+        {
+          "doc": "autogen",
+          "score": 0.467
+        },
+        {
+          "doc": "zh_mcp",
+          "score": 0.4577
+        },
+        {
+          "doc": "openai_agents",
+          "score": 0.4162
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    },
+    "title_vllm_prefix_caching": {
+      "group": "标题偏差",
+      "q": "vLLM 支持前缀缓存和分块预填充吗",
+      "top1_score": 0.5646,
+      "results": [
+        {
+          "doc": "vllm",
+          "score": 0.5646
+        },
+        {
+          "doc": "zh_kv_cache",
+          "score": 0.5291
+        },
+        {
+          "doc": "zh_speculative",
+          "score": 0.4944
+        }
+      ],
+      "gold_ranks": [
+        1
+      ],
+      "doc_hit": {
+        "1": true,
+        "3": true,
+        "5": true
+      },
+      "answer_hit": true,
+      "answer_hits": [
+        true
+      ],
+      "rr": 1.0
+    }
+  }
+}

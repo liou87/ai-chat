@@ -1,0 +1,216 @@
+# 检索评测题目：49 条，分五组。语料见 manifest.yaml（25 个 agent/RAG 项目的 GitHub README + 14 篇中文技术文章）。
+#
+# 每条：id、group、q（用户会怎么问），正例再给 gold：答案所在文档 doc 和原文关键句 key（可以是几句备选，命中任意一句就算）。
+# 判定：检索结果里有这篇文档算"文档命中"；返回给模型的那个分块（snippet）里包含 key 才算"答案命中"——
+# 知行只能看到 snippet，文档对了但分块不对，模型照样答不出来。key 用原文短句而不是分块编号，改分块大小也不用重新标注。
+# 跨文档辨析题有两个 gold，要两篇都检索到才算命中；对比题没有唯一的答案句，只看文档、不标 key。
+# 负例没有 gold，用来看相似度分数能不能把"库里没有答案"区分出来。
+# 标注修订（2026-10-04，第一次跑完后）：逐条看了没命中的题，返回的分块确实能回答的补了备选句（7 条），答不了的保持未命中；
+# 匹配改成不区分大小写。之后改检索算法不再动标注，避免对着结果调标准。
+#
+# 五组：
+#   关键词      问题里带专有名词、参数名、缩写，考字面匹配
+#   同义改写    换一种说法、不用原文的术语，考语义理解
+#   跨文档辨析  要对比两篇文档才能回答
+#   负例        语料里没有答案（含几条话题沾边的难负例）
+#   标题偏差    问题字面上贴近某篇文档的标题，答案却在另一篇里
+
+queries:
+  # ---------- 关键词 ----------
+  - id: kw_ef_search_default
+    group: 关键词
+    q: pgvector 的 hnsw.ef_search 默认值是多少？加了过滤条件会怎样
+    gold: [{doc: pgvector, key: "of 40, only 4 rows will match on average"}]
+  - id: kw_halfvec_dims
+    group: 关键词
+    q: pgvector 的 halfvec 类型最多支持多少维
+    gold: [{doc: pgvector, key: "up to 4,000 dimensions"}]
+  - id: kw_mem0_locomo
+    group: 关键词
+    q: Mem0 新算法在 LoCoMo 上得了多少分
+    gold: [{doc: mem0, key: "92.5 on LoCoMo"}]
+  - id: kw_dpo_pi_ref
+    group: 关键词
+    q: DPO 损失函数里的 π_ref 是什么
+    gold: [{doc: zh_dpo, key: "是参考模型（通常是SFT模型）"}]
+  - id: kw_tool_choice_auto
+    group: 关键词
+    q: tool_choice 设成 auto 是什么意思
+    gold: [{doc: zh_function_calling, key: "表示模型将根据情况自动决定是否调用函数"}]
+  - id: kw_ef_construction
+    group: 关键词
+    q: HNSW 建图时 efConstruction 参数起什么作用
+    gold: [{doc: zh_hnsw, key: "将返回更多的最近邻居"}]
+  - id: kw_mcp_components
+    group: 关键词
+    q: MCP 协议里 Host、Client、Server 分别是什么
+    gold: [{doc: zh_mcp, key: ["主机（Host）、客户端（Client）和服务器（Server）", "主机（Host）指的是"]}]
+  - id: kw_smolagents_sandbox
+    group: 关键词
+    q: smolagents 的 CodeAgent 可以在 E2B 或 Docker 沙箱里执行吗
+    gold: [{doc: smolagents, key: "executing in sandboxed environments"}]
+  - id: kw_autogen_maintenance
+    group: 关键词
+    q: AutoGen 是不是已经进入 maintenance mode 了
+    gold: [{doc: autogen, key: "Maintenance Mode"}]
+  - id: kw_rrf_fusion
+    group: 关键词
+    q: 混合检索怎么用 RRF 把 BM25 和向量检索的结果合并
+    gold: [{doc: zh_hybrid_search, key: "通过 RRF 融合两者的排序列表"}]
+  - id: kw_graphrag
+    group: 关键词
+    q: GraphRAG 用 knowledge graph 来做什么
+    gold: [{doc: graphrag, key: "knowledge graph memory structures to enhance LLM outputs"}]
+  - id: kw_deepeval_pytest
+    group: 关键词
+    q: DeepEval 和 Pytest 是什么关系
+    gold: [{doc: deepeval, key: "similar to Pytest but specialized for unit testing LLM apps"}]
+
+  # ---------- 同义改写 ----------
+  - id: para_kv_cache
+    group: 同义改写
+    q: 大模型一个字一个字往外蹦的时候，怎么避免每一步都把前面的内容重新算一遍
+    gold: [{doc: zh_kv_cache, key: "计算量随 Token 长度增加仅为"}]
+  - id: para_chunk_overlap
+    group: 同义改写
+    q: 把长文档切成小段的时候，怎么防止一句关键的话被拦腰切断
+    gold: [{doc: zh_rag_chunking, key: "让相邻块有一定重叠，防止关键信息被切断"}]
+  - id: para_lora
+    group: 同义改写
+    q: 有没有办法只训练很少一部分参数，就让大模型适应一个新任务
+    gold: [{doc: zh_lora, key: ["冻结原模型+新增低秩分支", "用极少参数实现高效微调"]}]
+  - id: para_speculative
+    group: 同义改写
+    q: 先让一个小模型快速猜几个词，再让大模型一次性检查对不对，这是什么加速方法
+    gold: [{doc: zh_speculative, key: ["大模型并行验证", "用一个小而快的模型去猜测大模型接下来要输出什么"]}]
+  - id: para_moe_imbalance
+    group: 同义改写
+    q: 模型里有很多个子网络、每次只挑几个干活，这种结构容易出什么问题
+    gold: [{doc: zh_moe, key: "少数专家可能被过度使用，导致资源浪费"}]
+  - id: para_quant_storage
+    group: 同义改写
+    q: 把模型权重压到很低的精度之后，存储空间大概能省多少
+    gold: [{doc: zh_quantization, key: "模型的存储空间减少了约 75%"}]
+  - id: para_injection_defense
+    group: 同义改写
+    q: 怎么防止有人通过精心设计的输入骗 AI 说出它的内部设定
+    gold: [{doc: zh_prompt_injection, key: ["结合关键词过滤、意图识别和交叉验证等手段", "多模型交叉验证"]}]
+  - id: para_context_overflow
+    group: 同义改写
+    q: 聊天记录越来越长，超出模型一次能看的范围了怎么办
+    gold: [{doc: zh_agent_memory, key: "上下文工程策略（压缩、卸载、摘要等）"}]
+  - id: para_resume_after_crash
+    group: 同义改写
+    q: 有没有框架能让智能体程序挂掉以后从断掉的地方接着跑
+    gold: [{doc: langgraph, key: "automatically resuming from exactly where they left off"}]
+  - id: para_filter_fewer_rows
+    group: 同义改写
+    q: 向量近似搜索加了 where 条件以后结果条数变少了，怎么让它多找一些
+    gold: [{doc: pgvector, key: ["automatically scan more of the index when needed", "can help address this"]}]
+  - id: para_attention_memory
+    group: 同义改写
+    q: 推理服务是怎么高效管理注意力计算产生的那些缓存的
+    gold: [{doc: vllm, key: "Efficient management of attention key and value memory"}]
+  - id: para_react_vs_cot
+    group: 同义改写
+    q: 边想边动手、看到结果再接着想，跟只在脑子里一步步推演有什么区别
+    gold: [{doc: zh_react, key: "模型不会与外部世界进行任何交互"}]
+
+  # ---------- 跨文档辨析 ----------
+  - id: cross_langgraph_crewai
+    group: 跨文档辨析
+    q: LangGraph 和 CrewAI 在编排多智能体上各自的思路有什么不同
+    gold:
+      - {doc: langgraph}
+      - {doc: crewai}
+  - id: cross_hnsw_params
+    group: 跨文档辨析
+    q: pgvector 和 Faiss 里 HNSW 的 M 参数含义一样吗
+    gold:
+      - {doc: pgvector}
+      - {doc: zh_hnsw}
+  - id: cross_ragas_deepeval
+    group: 跨文档辨析
+    q: Ragas 和 DeepEval 这两个 LLM 评测框架定位上有什么区别
+    gold:
+      - {doc: ragas}
+      - {doc: deepeval}
+  - id: cross_vllm_sglang
+    group: 跨文档辨析
+    q: vLLM 和 SGLang 都是推理框架，各自主打什么
+    gold:
+      - {doc: vllm}
+      - {doc: sglang}
+  - id: cross_mem0_letta
+    group: 跨文档辨析
+    q: Mem0 和 Letta 都在做智能体记忆，两者有什么不一样
+    gold:
+      - {doc: mem0}
+      - {doc: letta}
+  - id: cross_lora_quant
+    group: 跨文档辨析
+    q: LoRA 和 4-bit 量化都能降低大模型的成本，原理上有什么不同
+    gold:
+      - {doc: zh_lora}
+      - {doc: zh_quantization}
+  - id: cross_mcp_function_calling
+    group: 跨文档辨析
+    q: MCP 和 Function Calling 是什么关系，能互相替代吗
+    gold:
+      - {doc: zh_mcp}
+      - {doc: zh_function_calling}
+  - id: cross_chroma_qdrant
+    group: 跨文档辨析
+    q: Chroma 和 Qdrant 这两个向量数据库用起来有什么区别
+    gold:
+      - {doc: chroma}
+      - {doc: qdrant}
+
+  # ---------- 负例 ----------
+  - {id: neg_k8s_hpa, group: 负例, q: Kubernetes 的 HPA 自动扩缩容要怎么配置指标}
+  - {id: neg_react_hooks, group: 负例, q: React 的 useEffect 依赖数组应该怎么写}
+  - {id: neg_photoshop, group: 负例, q: 怎么用 Photoshop 把人像从背景里抠出来}
+  - {id: neg_rust_ownership, group: 负例, q: Rust 的所有权和借用规则是怎样的}
+  - {id: neg_cooking, group: 负例, q: 红烧肉怎么做才好吃}
+  - {id: neg_tcp, group: 负例, q: TCP 三次握手的过程是什么}
+  - {id: neg_visa, group: 负例, q: 怎么申请澳洲的学生签证}
+  - {id: neg_spark, group: 负例, q: Spark 里宽依赖和窄依赖有什么区别}
+  - {id: neg_redis, group: 负例, q: Redis 持久化的 RDB 和 AOF 有什么区别}
+  - {id: neg_rope, group: 负例, q: Transformer 的旋转位置编码 RoPE 是怎么计算的}
+
+  # ---------- 标题偏差 ----------
+  - id: title_hnsw_vs_ivfflat
+    group: 标题偏差
+    q: HNSW 和 IVFFlat 哪个查询更快？在 pgvector 里该选哪个
+    why: 标题带 HNSW 的是 Faiss 那篇，答案在 pgvector 的 README
+    gold: [{doc: pgvector, key: ["better query performance than IVFFlat", "but has lower query performance"]}]
+  - id: title_paged_attention
+    group: 标题偏差
+    q: KV Cache 显存碎片的问题，PagedAttention 是哪个项目提出来的
+    why: 标题是 KV Cache 的是另一篇文章，答案在 vLLM 的 README
+    gold: [{doc: vllm, key: "PagedAttention"}]
+  - id: title_mem0_longmemeval
+    group: 标题偏差
+    q: Agent 记忆系统在 LongMemEval 上能做到多少分
+    why: 标题是"Agent 记忆系统"的是阿里云那篇，分数在 Mem0 的 README
+    gold: [{doc: mem0, key: "94.4 on LongMemEval"}]
+  - id: title_code_agent
+    group: 标题偏差
+    q: 智能体用写代码的方式来行动，跟 ReAct 那种调工具有什么不同
+    why: 标题是 ReAct 的是另一篇，代码智能体在 smolagents 的 README
+    gold: [{doc: smolagents, key: ["writes its actions in code", "writes its actions as Python code snippets"]}]
+  - id: title_ragflow_chunking
+    group: 标题偏差
+    q: RAG 文档分块有没有基于模板的做法
+    why: 标题是"文档切分"的是阿里云那篇，模板分块在 RAGFlow 的 README
+    gold: [{doc: ragflow, key: "Template-based chunking"}]
+  - id: title_mcp_server_lines
+    group: 标题偏差
+    q: 用 Python 写一个最简单的 MCP 服务器需要多少代码
+    why: 标题是 MCP 的是腾讯云那篇，代码示例在 Python SDK 的 README
+    gold: [{doc: mcp_python_sdk, key: "A server in 15 lines"}]
+  - id: title_vllm_prefix_caching
+    group: 标题偏差
+    q: vLLM 支持前缀缓存和分块预填充吗
+    why: 讲投机解码的文章里大段写了 vLLM，但这两个特性在 vLLM 的 README
+    gold: [{doc: vllm, key: "chunked prefill, prefix caching"}]
