@@ -57,6 +57,36 @@ SYSTEM_PROMPT = (
 )
 
 
+# 第二轮校准后改成"每个维度单独问、判不通过必须给原文证据"：一次问四个维度时评分模型会把一个维度的问题算到另一个维度上，
+# 还会把资料里的内容当成回答里的话（比如回答已经删掉"由 vLLM 提出"，它仍说回答里有）。要求逐字引用后，
+# judge.py 会核对引用是否真的出现在回答/资料里，对不上的判定作废。
+EVIDENCE_RULES = {
+    "faithful": "判 fail 时：reply_quote 必须是回答里明确把内容说成来自资料的那句话（包含\"资料里/笔记里/README 里/你收藏的…提到\"这类说法），"
+                "material_quote 填资料里与之矛盾的原文；如果是资料里根本没有，material_quote 留空。"
+                "回答没有说成来自资料的补充内容，在这个维度不算问题，不要据此判 fail。",
+    "separated": "判 fail 时：reply_quote 填一句资料外的补充内容（逐字复制），它在回答里没有被标示为补充、和资料内容混在一起讲。"
+                 "如果回答已经用\"顺带/补充/通用知识/不在你资料库里/按我的理解\"之类的话把补充部分标出来了，就判 pass。",
+    "cited": "判 fail 时：reply_quote 填标错或缺失出处的那句话（逐字复制）。没用任何资料时判 na。",
+    "complete": "判 fail 时：在 reason 里写清楚漏了什么（对比题缺了哪一边、原理题缺了什么机制），reply_quote 可以留空。"
+                "只看回答本身有没有讲到，不要因为资料里有就当回答也讲了。",
+}
+
+
+def dimension_prompt(key: str) -> str:
+    d = DIMENSIONS[key]
+    verdicts = "pass|fail|na" if d["na"] else "pass|fail"
+    return (
+        "你是严格的评审，负责评估一个个人知识库助手的回答。助手先检索了用户的资料，再根据资料回答。"
+        "你会看到：用户的问题、助手拿到的全部资料、助手的最终回答。只依据这些材料判断，不要用你自己对话题的了解去补全或纠正资料。"
+        "注意区分\"资料\"和\"回答\"：只有出现在\"助手的回答\"部分的文字才是回答说过的话。\n\n"
+        f"这次只评一个维度：【{d['label']}】\n  通过（pass）：{d['pass']}\n  不通过（fail）：{d['fail']}"
+        + (f"\n  不适用（na）：{d['na']}" if d["na"] else "")
+        + f"\n\n证据要求：{EVIDENCE_RULES[key]} 引用必须逐字复制原文，不要改写、不要概括。\n\n"
+        f"只输出 JSON：{{\"verdict\": \"{verdicts}\", \"reason\": \"一句话理由\", \"reply_quote\": \"回答原文或空字符串\", "
+        "\"material_quote\": \"资料原文或空字符串\"}"
+    )
+
+
 def render_case(item: dict) -> str:
     """把一条回答整理成评分模型看到的输入。"""
     if item["materials"]:
