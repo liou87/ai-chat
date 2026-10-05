@@ -4,6 +4,7 @@
     python -m evals.quality.judge                 给 answers.json 里全部回答打分，出报告
     python -m evals.quality.judge --only-labeled  只给人工标注过的那几条打分（调评分提示词时用，省钱）
     python -m evals.quality.judge --save-baseline 存成基线（evals/baselines/quality.json）
+    python -m evals.quality.judge --resume <results.json> --save-baseline   额度中断后只补评失败的条目
 
 环境变量：DASHSCOPE_API_KEY（必需）、DASHSCOPE_BASE_URL（国际站 https://dashscope-intl.aliyuncs.com/compatible-mode/v1，
 国内 https://dashscope.aliyuncs.com/compatible-mode/v1，账号也可能是业务空间专属地址，以百炼控制台的示例为准）、
@@ -74,6 +75,24 @@ def quote_found(quote: str, text: str) -> bool:
     return True
 
 
+def apply_evidence_check(out: dict, key: str, reply: str, materials_text: str) -> dict:
+    """
+    判不通过时核对证据。回答引用必须真的出现在回答里，对不上就作废（记为通过并标出）——防的是评分模型声称回答说过
+    其实没说的话（校准时见过：回答已删掉"由 vLLM 提出"，它仍说回答里有）。资料引用对不上只记提醒、不作废：
+    资料一侧常常需要转述，或者本来就是"资料里没有"，换 qwen3.8-flash 校准时发现这条规则把两条判对了的对照误作废了。
+    """
+    out = {k: v for k, v in out.items() if k not in ("invalidated", "material_warning")}
+    if out.get("original_verdict"):
+        out["verdict"] = out.pop("original_verdict")
+    if out["verdict"] != "fail":
+        return out
+    if out.get("material_quote") and not quote_found(out["material_quote"], materials_text):
+        out["material_warning"] = "资料引用在资料里找不到（可能是转述）"
+    if key != "complete" and not quote_found(out.get("reply_quote", ""), reply):
+        out.update({"verdict": "pass", "invalidated": "回答引用在回答里找不到", "original_verdict": "fail"})
+    return out
+
+
 async def judge_dimension(client: AsyncOpenAI, model: str, item: dict, key: str) -> dict:
     """单独评一个维度。判不通过时核对证据：回答引用必须真在回答里、资料引用必须真在资料里，对不上就作废（记为通过并标出）。"""
     d = DIMENSIONS[key]
@@ -93,19 +112,12 @@ async def judge_dimension(client: AsyncOpenAI, model: str, item: dict, key: str)
                 continue
             out = {"verdict": verdict, "reason": data.get("reason", ""),
                    "reply_quote": data.get("reply_quote") or "", "material_quote": data.get("material_quote") or ""}
-            if verdict == "fail":
-                bad = []
-                if key != "complete" and not quote_found(out["reply_quote"], item["reply"]):
-                    bad.append("回答引用在回答里找不到")
-                if out["material_quote"] and not quote_found(out["material_quote"], materials_text):
-                    bad.append("资料引用在资料里找不到")
-                if bad:
-                    out.update({"verdict": "pass", "invalidated": "、".join(bad), "original_verdict": "fail"})
-            return out
+            return apply_evidence_check(out, key, item["reply"], materials_text)
         except Exception as e:
             last_error = f"{type(e).__name__}: {e}"[:300]
             # 额度用完、key 无效这类错误重试也没用：直接终止整轮，不要让几百个请求都失败后还生成一份"结果"
-            if getattr(e, "status_code", None) in (401, 403) or "insufficient_quota" in str(e):
+            if (getattr(e, "status_code", None) in (401, 403) or "insufficient_quota" in str(e)
+                    or "budget limit" in str(e).lower()):
                 raise FatalJudgeError(last_error) from e
         await asyncio.sleep(2 * (attempt + 1))
     return {"verdict": None, "error": last_error, "reason": ""}
@@ -254,6 +266,8 @@ async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--only-labeled", action="store_true")
     parser.add_argument("--save-baseline", action="store_true")
+    parser.add_argument("--resume", help="接着一份有失败的 results.json：只补评失败的条目，合并后出报告（额度中断后用）")
+    parser.add_argument("--rescore", help="不调用模型，按当前的证据核对规则重算一份已有的 results.json（改核对规则后用，不花钱）")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -261,17 +275,39 @@ async def main():
     labels = {x["id"]: x for x in json.loads(LABELS.read_text(encoding="utf-8"))} if LABELS.exists() else {}
     controls = build_controls(all_answers)
     answers = [a for a in all_answers if a["id"] in labels] if args.only_labeled else all_answers
-    client, model = _client()
+    if args.rescore:
+        prev = json.loads(Path(args.rescore).read_text(encoding="utf-8"))
+        by_id = {a["id"]: a for a in all_answers + controls}
+        judgments = {}
+        for i, j in prev["judgments"].items():
+            if "error" in j or i not in by_id:
+                judgments[i] = j
+                continue
+            mats = "\n".join(f"{m['title']}\n{m['content']}" for m in by_id[i]["materials"])
+            judgments[i] = {k: apply_evidence_check(v, k, by_id[i]["reply"], mats) for k, v in j.items()}
+        answers = [a for a in answers if a["id"] in judgments]
+        model = prev["meta"]["model"] + "（按新核对规则重算）"
+        client = None
+    else:
+        client, model = _client()
     sem = asyncio.Semaphore(CONCURRENCY)
 
     async def run(a):
         r = await judge_one(client, model, a, sem)
         print(f"{'✗' if 'error' in r else '✓'} {a['id']}", flush=True)
         return a["id"], r
-    try:
-        judgments = dict(await asyncio.gather(*(run(a) for a in answers + controls)))
-    except FatalJudgeError as e:
-        raise SystemExit(f"评分服务不可用，已终止，没有生成报告：{e}")
+    if not args.rescore:
+        todo = answers + controls
+        judgments = {}
+        if args.resume:
+            prev = json.loads(Path(args.resume).read_text(encoding="utf-8"))
+            judgments = {i: j for i, j in prev["judgments"].items() if "error" not in j}
+            todo = [a for a in todo if a["id"] not in judgments]
+            print(f"接着上次：已有 {len(judgments)} 条，补评 {len(todo)} 条", flush=True)
+        try:
+            judgments.update(dict(await asyncio.gather(*(run(a) for a in todo))))
+        except FatalJudgeError as e:
+            raise SystemExit(f"评分服务不可用，已终止，没有生成报告：{e}")
 
     from evals.run_agent_eval import _git_commit
     meta = {"started_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "model": model, "commit": _git_commit()}
