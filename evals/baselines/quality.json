@@ -1,0 +1,2416 @@
+{
+  "meta": {
+    "started_at": "2026-10-06 02:05",
+    "model": "qwen3.8-flash",
+    "commit": "3431bb6"
+  },
+  "summary": {
+    "overall": {
+      "n": 61,
+      "faithful": 0.7705,
+      "separated": 0.5246,
+      "cited": 0.68,
+      "complete": 0.9344
+    },
+    "main": {
+      "n": 49,
+      "faithful": 0.7755,
+      "separated": 0.5306,
+      "cited": 0.6579,
+      "complete": 0.9388
+    },
+    "holdout": {
+      "n": 12,
+      "faithful": 0.75,
+      "separated": 0.5,
+      "cited": 0.75,
+      "complete": 0.9167
+    },
+    "by_group": {
+      "关键词": {
+        "n": 18,
+        "faithful": 0.6111,
+        "separated": 0.2222,
+        "cited": 0.7222,
+        "complete": 0.9444
+      },
+      "同义改写": {
+        "n": 18,
+        "faithful": 0.8333,
+        "separated": 0.6111,
+        "cited": 0.7778,
+        "complete": 0.9444
+      },
+      "跨文档辨析": {
+        "n": 8,
+        "faithful": 0.75,
+        "separated": 0.375,
+        "cited": 0.2857,
+        "complete": 0.875
+      },
+      "负例": {
+        "n": 10,
+        "faithful": 1.0,
+        "separated": 1.0,
+        "cited": null,
+        "complete": 1.0
+      },
+      "标题偏差": {
+        "n": 7,
+        "faithful": 0.7143,
+        "separated": 0.5714,
+        "cited": 0.7143,
+        "complete": 0.8571
+      }
+    },
+    "errors": 0
+  },
+  "calibration": {
+    "faithful": {
+      "n": 20,
+      "agreement": 0.8,
+      "kappa": 0.0,
+      "false_alarm": 0.2,
+      "disagreements": [
+        {
+          "id": "ho_browser_use_key",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答把资料中未出现的“不是必须”“其他 provider 如 ChatOpenAI/ChatAnthropic 不需要 BROWSER_USE_API_KEY”等结论明确说成来自资料。",
+          "human_note": null
+        },
+        {
+          "id": "ho_lora_rank",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答把“默认的选值区间”明确说成是资料里的结论，但资料只说实际应用中可根据任务复杂度选择 r=8-64 覆盖大部分场景，并未称其为默认。",
+          "human_note": null
+        },
+        {
+          "id": "kw_deepeval_pytest",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答明确把“ragas 偏 RAG 检索/生成质量”“langfuse 偏观测”等说法归为来自资料库，但资料中没有这些具体定位。",
+          "human_note": null
+        },
+        {
+          "id": "title_paged_attention",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答把资料中没有的论文数据明确说成来自论文，属于冒充出处。",
+          "human_note": null
+        }
+      ]
+    },
+    "separated": {
+      "n": 19,
+      "agreement": 0.684,
+      "kappa": 0.387,
+      "false_alarm": 0.4,
+      "disagreements": [
+        {
+          "id": "ho_browser_use_key",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "助手称“按资料库里那篇说明”，却把资料未提及的“直接用别的 provider 配对应厂商 key”混入资料内容，未标示为补充。",
+          "human_note": null
+        },
+        {
+          "id": "ho_rlhf_problems",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答开头只说笔记列了五条局限，但后续大量具体扩展未明确标为资料外补充，读者容易误认为都来自用户资料。",
+          "human_note": null
+        },
+        {
+          "id": "kw_halfvec_dims",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答把资料中未出现的 vector 索引 2,000 维上限与资料内容混在表格中，且未明确标示为补充。",
+          "human_note": null
+        },
+        {
+          "id": "para_chunk_overlap",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答虽然引用了资料中的递归切分和重叠窗口，但大量资料外内容（句末标点、句子级切分、结构切分、检索补救、按 token 设置）未标示为补充，和资料混在一起。",
+          "human_note": null
+        },
+        {
+          "id": "para_kv_cache",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答虽提到结合资料，但后续大量资料外内容未标示为补充，和资料内容混在一起讲。",
+          "human_note": null
+        },
+        {
+          "id": "title_paged_attention",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答虽然标明 vLLM 论文来自资料，但后续关于显存碎片机制、论文数据等内容未标示为资料外补充，容易让读者误认为均来自用户资料。",
+          "human_note": null
+        }
+      ]
+    },
+    "cited": {
+      "n": 20,
+      "agreement": 0.75,
+      "kappa": 0.0,
+      "false_alarm": 0.25,
+      "disagreements": [
+        {
+          "id": "cross_lora_quant",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答使用了资料5中的 QLoRA 信息，但出处只列了另外两篇，未注明《DPO：直接偏好优化》。",
+          "human_note": null
+        },
+        {
+          "id": "cross_mcp_function_calling",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答使用了资料4中关于 stdio、Streamable HTTP、SSE 和 call_tool 的内容，但未注明该资料标题“modelcontextprotocol/python-sdk”，只泛称“官方 SDK 那篇”。",
+          "human_note": null
+        },
+        {
+          "id": "kw_ef_construction",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答使用了资料4中关于 num_candidates 的内容，但末尾只注明了两篇参考笔记，未注明资料4的出处。",
+          "human_note": null
+        },
+        {
+          "id": "para_kv_cache",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答使用了资料2中的HiCache、Mooncake、LMCache分层缓存内容，但未写出资料2标题《sgl-project/sglang》。",
+          "human_note": null
+        },
+        {
+          "id": "title_code_agent",
+          "human": "pass",
+          "judge": "fail",
+          "judge_reason": "回答使用了资料6中的 ReAct 思考-行动-观察循环，但未注明该资料标题。",
+          "human_note": null
+        }
+      ]
+    },
+    "complete": {
+      "n": 20,
+      "agreement": 0.95,
+      "kappa": 0.643,
+      "false_alarm": 0.0,
+      "disagreements": [
+        {
+          "id": "kw_mem0_locomo",
+          "human": "fail",
+          "judge": "pass",
+          "judge_reason": "回答直接给出 Mem0 新算法在 LoCoMo 上的得分 92.5，核心信息到位。",
+          "human_note": null
+        }
+      ]
+    }
+  },
+  "controls": {
+    "overall": 0.944,
+    "by_type": {
+      "编造": {
+        "n": 4,
+        "detected": 1.0,
+        "items": [
+          {
+            "id": "fab_qdrant_benchmark",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答把资料里没有的具体压测数字和 Milvus 对比明确说成来自 README，属于冒充出处。"
+          },
+          {
+            "id": "fab_paged_attention_sglang",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答明确声称资料/README支持，却把PagedAttention说成SGLang项目提出，与资料中vLLM仓库引用PagedAttention论文矛盾。"
+          },
+          {
+            "id": "fab_rlhf_cost_ratio",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答声称资料给出了“RLHF 的训练成本平均是 DPO 的 7.4 倍”这一数据，但资料中没有该数据。"
+          },
+          {
+            "id": "fab_kv_cache_speedup",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答声称笔记里实测 LLaMA-7B 生成速度提升 5.8 倍，但提供的资料中没有该具体事实或数字。"
+          }
+        ]
+      },
+      "出处错": {
+        "n": 4,
+        "detected": 1.0,
+        "items": [
+          {
+            "id": "cite_qdrant_as_pgvector",
+            "target": "cited",
+            "detected": true,
+            "reason": "回答把来自《qdrant/qdrant》的 Rust 说明错误标注为出自《pgvector/pgvector》，出处张冠李戴。"
+          },
+          {
+            "id": "cite_smolagents_as_browser_use",
+            "target": "cited",
+            "detected": true,
+            "reason": "助手将来自《huggingface/smolagents》的内容错误标注为《browser-use/browser-use》。"
+          },
+          {
+            "id": "cite_dpo_as_react",
+            "target": "cited",
+            "detected": true,
+            "reason": "助手把资料1《DPO：直接偏好优化》中关于RLHF局限的五条内容错误归因于资料2《深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理》。"
+          },
+          {
+            "id": "cite_vllm_as_sglang",
+            "target": "cited",
+            "detected": true,
+            "reason": "助手把 PagedAttention 的资料出处标成《sgl-project/sglang》，但相关内容实际来自《vllm-project/vllm》，属于张冠李戴。"
+          }
+        ]
+      },
+      "漏答": {
+        "n": 4,
+        "detected": 1.0,
+        "items": [
+          {
+            "id": "omit_quantization_side",
+            "target": "complete",
+            "detected": true,
+            "reason": "回答只详细解释了LoRA的低秩更新机制，没有解释4-bit量化将参数从高精度转为低精度以减少存储和计算量的原理，对比类原理问题缺少另一边。"
+          },
+          {
+            "id": "omit_mcp_side",
+            "target": "complete",
+            "detected": true,
+            "reason": "回答只解释了 Function Calling 的定位，没有解释 MCP 的定位/机制以及两者关系，属于对比类问题只讲到一边。"
+          },
+          {
+            "id": "omit_paged_attention_project",
+            "target": "complete",
+            "detected": true,
+            "reason": "回答未直接说明 PagedAttention 是由 vLLM 项目提出，漏掉了用户问题的核心信息“哪个项目”。"
+          },
+          {
+            "id": "omit_kv_cache_mechanism",
+            "target": "complete",
+            "detected": true,
+            "reason": "回答只给出“KV Cache”名称及其显存代价和优化方向，没有讲清它如何避免每步重算前面内容：即缓存历史 Key/Value，每步只计算新 token 并与缓存做注意力。"
+          }
+        ]
+      },
+      "冒充出处": {
+        "n": 4,
+        "detected": 1.0,
+        "items": [
+          {
+            "id": "fake_source_rope",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答明确声称资料库中的《KV Cache：加速LLM推理的关键》专门讲了 RoPE，但资料中并无 RoPE 内容。"
+          },
+          {
+            "id": "fake_source_k8s",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答明确声称内容来自用户收藏的《langfuse/langfuse》资料，但提供资料中没有该标题或 HPA 配置相关内容。"
+          },
+          {
+            "id": "fake_source_tcp",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答声称内容来自笔记库，但资料中没有 TCP 三次握手相关内容。"
+          },
+          {
+            "id": "fake_source_redis",
+            "target": "faithful",
+            "detected": true,
+            "reason": "回答声称资料库中《Agent 记忆系统技术深度》那篇对比了 Redis 的 RDB 和 AOF 持久化方式，但全部资料均未提及 Redis 持久化，属于假装有依据。"
+          }
+        ]
+      },
+      "来源混淆": {
+        "n": 2,
+        "detected": 0.5,
+        "items": [
+          {
+            "id": "sep_rust_no_disclaimer",
+            "target": "separated",
+            "detected": false,
+            "reason": "回答先标明 qdrant 来自资料库，随后用“另外几个”和“抓下来存进资料库”标示 LanceDB、pgvecto.rs 等是资料外补充。"
+          },
+          {
+            "id": "sep_halfvec_no_disclaimer",
+            "target": "separated",
+            "detected": true,
+            "reason": "助手把资料未明确支持的 halfvec 存储上限 16,000 维、与 vector 的字节差异、vector 索引上限 2,000 维等补充内容，和资料中的 4,000/64,000 维信息混在同一回答里且未标示为补充。"
+          }
+        ]
+      }
+    }
+  },
+  "judgments": {
+    "kw_ef_search_default": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声称来自资料的内容均能在 pgvector 资料中找到，未与资料矛盾，也未把资料中没有的结论冒充为资料出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答在代码注释中加入了资料里没有的 relaxed_order 选项，却未标明为补充，容易让读者误认为来自资料。",
+        "reply_quote": "SET hnsw.iterative_scan = strict_order;   -- 也可以 relaxed_order",
+        "material_quote": "SET hnsw.iterative_scan = strict_order;"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答中用于支持默认值、过滤影响和迭代扫描的内容均标注了资料列表里存在的标题 pgvector/pgvector，且未出现张冠李戴。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答明确给出了 hnsw.ef_search 默认值 40，并说明了过滤条件在近似索引扫描后应用导致命中行数不足及迭代扫描解决办法，核心信息到位。",
+        "reply_quote": "",
+        "material_quote": "If a condition matches 10% of rows, with HNSW and the default `hnsw.ef_search` of 40, only 4 rows will match on average. For more rows, enable iterative index scans"
+      }
+    },
+    "kw_halfvec_dims": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自资料的内容与资料一致；16,000 维等未冒充来自资料，且后文说明是按已有印象。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料中未出现的 vector 索引 2,000 维上限与资料内容混在表格中，且未明确标示为补充。",
+        "reply_quote": "`vector` 建 HNSW / IVFFlat 索引 | 2,000 维",
+        "material_quote": "You can use [half-precision vectors](#half-precision-vectors) or [half-precision indexing](#half-precision-indexing) to index up to 4,000 dimensions or [binary quantization](#binary-quantization) to index up to 64,000 dimensions."
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答引用了资料中的 4,000 维和 64,000 维并标注《pgvector/pgvector》，该标题在资料列表中且对应内容；16,000 维未标注资料出处，但助手明确说明是按已有印象而非资料依据，不存在张冠李戴。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了 halfvec 最多支持 16,000 维，并如实说明资料核对不确定且给出下一步建议，核心问题已回答。",
+        "reply_quote": "**16,000 维**。",
+        "material_quote": "pgvector halfvec maximum dimensions 16000 - 最新消息"
+      }
+    },
+    "kw_mem0_locomo": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手回答中的 LoCoMo 得分、提升幅度、tokens、延迟以及说明来源等均与资料 1 一致，没有冒充资料或矛盾内容。",
+        "reply_quote": "（出自你资料库里收藏的「mem0ai/mem0」，说明是 2026 年 4 月发布的新记忆算法；LongMemEval 里 assistant memory recall 单项是 98.2。）",
+        "material_quote": "## New Memory Algorithm (April 2026)\n| Benchmark | Old | New  | Tokens  | Latency p50  |\n| --- | --- | --- | --- | --- |\n| **LoCoMo** | 71.4 | **92.5** | 7.0K  | 0.88s  |\n| **LongMemEval** | 67.8 | **94.4** | 6.8K  | 1.09s  |\n| **BEAM (1M)** | — | **64.1** | 6.7K  | 1.00s  |\n| **BEAM (10M)** | — | **48.6** | 6.9K  | 1.05s  |"
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答中的分数、旧算法、tokens、延迟和 LongMemEval 单项均明确标注来自用户资料库，且说明联网搜索没有新增有效信息。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料1中的LoCoMo 92.5分等数据，并明确注明出处为「mem0ai/mem0」，标题与资料列表一致且内容对应。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出 Mem0 新算法在 LoCoMo 上的得分 92.5，核心信息到位。",
+        "reply_quote": "**92.5 分**，比旧算法（71.4）高了 **+21 分**，平均每次查询消耗 7.0K tokens，p50 延迟 0.88s。",
+        "material_quote": "- **92.5 on LoCoMo** -- +21 points over the previous algorithm"
+      }
+    },
+    "kw_dpo_pi_ref": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料的内容（笔记公式、代码注释「参考模型不更新参数」、π_ref 是参考模型且通常是 SFT 模型）在资料中均有对应，未发现冒充出处或与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答在引用笔记后把资料中没有的 KL 推导和工程实践等补充内容混排讲解，且未明确标示为通用补充。",
+        "reply_quote": "DPO 是从带 KL 惩罚的 RLHF 目标推导出来的闭式解。",
+        "material_quote": "参考模型不更新参数"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答对所用笔记内容注明了《DPO：直接偏好优化》，该标题存在于资料列表且所依据内容确实来自该篇资料。",
+        "reply_quote": "",
+        "material_quote": "# 参考模型不更新参数"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了 π_ref 是参考模型，并补充了其冻结、作为基准线和 KL 约束锚点的作用，核心问题已答到位。",
+        "reply_quote": "在 DPO 里，**π_ref 是参考模型（reference model）**，一般是训练前的那个 SFT 模型的一份冻结副本——整个训练过程它不参与梯度更新。",
+        "material_quote": "* π\\_ref是参考模型（通常是SFT模型）"
+      }
+    },
+    "kw_tool_choice_auto": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确称来自资料的内容与资料一致，未把资料里没有的具体事实冒充为资料内容。",
+        "reply_quote": "你资料库里那篇《深入探讨Function Calling：实现外部函数调用的工作原理》里也写了这条：`\"auto\"` 表示模型将根据情况自动决定是否调用函数；另外默认逻辑是——请求里没有任何函数可调用时是 `\"none\"`，有函数时才是 `\"auto\"`。",
+        "material_quote": "这个参数决定了模型是否应该自动选择是否调用函数。值为 `\"auto\"` 表示模型将根据情况自动决定是否调用函数。 默认情况下，如果请求中不存在任何函数，则将其设置为`“none”`，则设置为`“auto”`。"
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答中关于 required/any、强制指定函数以及实际使用取舍等补充内容未标明来自通用知识，和资料内容混在一起，读者容易误以为均来自资料。",
+        "reply_quote": "| `\"required\"`（Anthropic 叫 `\"any\"`） | 必须调用某个工具，不允许直接回答 |",
+        "material_quote": "这个参数决定了模型是否应该自动选择是否调用函数。值为 `\"auto\"` 表示模型将根据情况自动决定是否调用函数。 默认情况下，如果请求中不存在任何函数，则将其设置为`“none”`，则设置为`“auto”`。"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答把资料未明确写出的“有函数时才是 auto”归为所引资料内容，出处标注与实际资料不符。",
+        "reply_quote": "你资料库里那篇《深入探讨Function Calling：实现外部函数调用的工作原理》里也写了这条：`\"auto\"` 表示模型将根据情况自动决定是否调用函数；另外默认逻辑是——请求里没有任何函数可调用时是 `\"none\"`，有函数时才是 `\"auto\"`。",
+        "material_quote": "默认情况下，如果请求中不存在任何函数，则将其设置为`“none”`，则设置为`“auto”`。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接解释了 tool_choice 设为 auto 的含义，即由模型根据情况自动决定是否调用工具，核心信息未遗漏。",
+        "reply_quote": "`tool_choice: \"auto\"` 的意思是：**把「要不要调用工具、调用哪个」这个决定权交给模型自己**。模型会根据你的问题判断——需要外部信息就返回一个 `tool_calls`（里面带函数名和 JSON 参数），不需要就直接用自然语言回答。",
+        "material_quote": "这个参数决定了模型是否应该自动选择是否调用函数。值为 `\"auto\"` 表示模型将根据情况自动决定是否调用函数。"
+      }
+    },
+    "kw_ef_construction": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确依据资料的内容均能在资料中找到，其他补充没有明确声称来自资料，也未与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料中没有出现的建图机制、默认值和调参建议与资料内容混在一起讲，没有明确标示为补充。",
+        "reply_quote": "具体机制是这样的：HNSW 每插入一个新向量，会从顶层往下逐层做一次近似搜索来找邻居。",
+        "material_quote": "`ef_construction` - the size of the dynamic candidate list for constructing the graph (64 by default)"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料4中关于 num_candidates 的内容，但末尾只注明了两篇参考笔记，未注明资料4的出处。",
+        "reply_quote": "顺带提一句相关但别混的：Elasticsearch 那边的 `num_candidates` 管的是**查询期**遍历取多少个候选，性质接近 efSearch 而不是 efConstruction，别搞混了。",
+        "material_quote": "`num_candidates` 参数用于设定 HNSW 图遍历过程中获取前 K 个结果前需要检索的向量数量，控制近似最近邻搜索在召回率与查询延迟之间的权衡。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了 efConstruction 在建图阶段作为候选队列大小，并解释了其影响邻居选择与图质量/召回，核心信息到位。",
+        "reply_quote": "这个搜索的候选列表长度就是 efConstruction——队列越长，能找到的「更合适的邻居」越多，最后按 M 条连接上限做筛选（还要过启发式剪枝）时选出来的边质量就越高。",
+        "material_quote": "- `ef_construction` - the size of the dynamic candidate list for constructing the graph (64 by default)"
+      }
+    },
+    "kw_mcp_components": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料中未明确出现的“写一个 Server 暴露工具”说成来自 python-sdk 资料。",
+        "reply_quote": "你的资料库里那份 python-sdk 的说明就是让你「写一个 Server 暴露工具，也可以写 Client 去连任何 Server」。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明说明主要来自用户资料，并标示补充了协议规范细节，读者可区分资料内容与补充内容。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答明确引用了资料《一文读懂：模型上下文协议（MCP）》和《modelcontextprotocol/python-sdk》，且Host、Client、Server的核心定义均出自这些资料，虽补充了部分规范细节但主要依据准确。",
+        "reply_quote": "你的资料库里正好有一篇《一文读懂：模型上下文协议（MCP）》，下面的说明主要来自它",
+        "material_quote": "在模型上下文协议（Model Context Protocol, MCP）的架构中，主机（Host）指的是任何能够承载 AI 交互环境的应用程序，例如 Claude Desktop、Cursor 等主流 AI 工具。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答分别解释了 Host、Client、Server 的角色和关系，直接回答了用户问题且核心信息未遗漏。",
+        "reply_quote": "你的资料库里正好有一篇《一文读懂：模型上下文协议（MCP）》，下面的说明主要来自它",
+        "material_quote": "在模型上下文协议（Model Context Protocol, MCP）的架构中，主机（Host）指的是任何能够承载 AI 交互环境的应用程序"
+      }
+    },
+    "kw_smolagents_sandbox": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自资料的内容均与 smolagents 资料一致，未把资料中不存在的参数细节冒充为资料原文。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答在资料外给出了未标示的使用场景建议，容易让读者误以为也来自资料。",
+        "reply_quote": "选哪个：本地开发、想省事就用 Docker；不想管环境、要跑并发或部署到线上就 E2B。",
+        "material_quote": "- [E2B](https://e2b.dev/), [Blaxel](https://blaxel.ai), [Modal](https://modal.com/) — managed cloud sandboxes, simplest to set up\n- [Docker](https://www.docker.com/) — self-hosted container isolation"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答明确标注了出处《huggingface/smolagents》，且该标题在资料列表中存在（资料1和资料6），回答中的核心事实（支持E2B/Docker、LocalPythonExecutor非安全边界）均源自该资料。",
+        "reply_quote": "你笔记里存的 smolagents 仓库说明写得很明确（出处：《huggingface/smolagents》）",
+        "material_quote": "🧑‍💻 **First-class support for Code Agents**. Our [`CodeAgent`](https://huggingface.co/docs/smolagents/reference/agents#smolagents.CodeAgent) writes its actions in code (as opposed to \"agents being used to write code\"). To make it secure, we support executing in sandboxed environments via [Blaxel](https://blaxel.ai), [E2B](https://e2b.dev/), [Modal](https://modal.com/), or Docker."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答明确说明 CodeAgent 支持 E2B 和 Docker 沙箱执行，并补充了 LocalPythonExecutor 非安全边界的关键注意事项，核心问题未遗漏。",
+        "reply_quote": "可以，两个都支持——`CodeAgent` 的设计就是「用代码写动作」，所以沙箱执行是一等公民。",
+        "material_quote": "To make it secure, we support executing in sandboxed environments via [Blaxel](https://blaxel.ai), [E2B](https://e2b.dev/), [Modal](https://modal.com/), or Docker."
+      }
+    },
+    "kw_autogen_maintenance": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把“microsoft/agent-framework 是微软给出的后续方向”作为 README 原文明确依据，但资料只显示徽章链接指向该地址，并未明确说明这是后续方向。",
+        "reply_quote": "依据是你资料库里收藏的 `microsoft/autogen` 仓库 README，原文写得很明确：",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答将资料依据、联网搜索和选型影响分段说明，读者能区分哪些来自资料、哪些是助手补充。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答核心结论明确标注依据资料1《microsoft/autogen》，且引用内容与该资料一致；联网搜索部分未作为答案依据，不需要额外出处。",
+        "reply_quote": "",
+        "material_quote": "AutoGen is now in maintenance mode. It will not receive new features or enhancements and is community managed going forward."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接确认 AutoGen 已进入 maintenance mode，并依据资料说明不再新增功能、转为社区维护，核心问题已到位。",
+        "reply_quote": "是的，确认了——**AutoGen 已经进入 maintenance mode**。",
+        "material_quote": "AutoGen is now in maintenance mode. It will not receive new features or enhancements and is community managed going forward."
+      }
+    },
+    "kw_rrf_fusion": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料的内容均能在资料中找到对应依据，未标来源的补充细节按规则不在忠实度维度扣分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答大量加入资料里没有的具体调参、加权RRF、实现建议等内容，却未标示为补充，读者会误以为都来自资料。",
+        "reply_quote": "4. **可以加权**：需要偏向某一路时用 `w_r / (k + rank_r(d))`，比如向量 0.6 / BM25 0.4。",
+        "material_quote": "RRF 直接舍弃两个检索器的原始分数，绕过了归一化难题。它仅基于排名位置完成运算："
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答为所用资料标注了标题，且「打破向量检索的局限：RAG 混合检索实践」「pgvector/pgvector」「qdrant/qdrant」均出现在资料列表中，并与答案依据的内容对应。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了并行执行 BM25 与向量检索后用 RRF 按排名融合的核心机制，并给出公式、实现方式和落地步骤，没有漏掉问题核心。",
+        "reply_quote": "RRF 的做法是**直接扔掉原始分数，只用排名位置**，从而绕过归一化问题。",
+        "material_quote": "混合检索会并行执行 BM25 检索与向量检索，通过 RRF 融合两者的排序列表；在将前 K 个文本块输入大语言模型前，还可选用交叉编码器做二次重排序。"
+      }
+    },
+    "kw_graphrag": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把“需要 LLM 大量调用”明确说成来自 microsoft/graphrag 资料库的信息，但资料仅警告索引昂贵并建议小规模开始，未提及 LLM 大量调用。",
+        "reply_quote": "补充两点来自你资料库的信息（《microsoft/graphrag》那条笔记）：\n\n- 项目自己的定位就是「探索**用图来形成面向问答的目标上下文**」，不是单纯的图数据库方案。\n- 官方明确警告**索引非常贵**，需要 LLM 大量调用，建议从小规模开始试。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答主体中大量 GraphRAG 具体机制并未出现在资料里，也没有明确标示为通用补充，容易让读者误以为都来自用户资料。",
+        "reply_quote": "这一步之后再对图做 Leiden 社区检测，得到多层级的社区结构，并为每个社区生成摘要。",
+        "material_quote": "GraphRAG is a research project that explores the functional use of graphs to form a targeted context for question answering."
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答主体依据 microsoft/graphrag 资料解释 GraphRAG 用途，但没有在主体部分注明该资料出处，且许多具体机制并未出现在资料中。",
+        "reply_quote": "简单说，GraphRAG 里的知识图谱不是拿来「展示实体关系」的，而是用来**组织检索上下文**——把散落在非结构化文本里的实体和关系抽出来建成图，再用图的结构决定「该塞哪些内容进 prompt」。",
+        "material_quote": "GraphRAG is a research project that explores the functional use of graphs to form a targeted context for question answering."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了 GraphRAG 用知识图谱来组织问答检索上下文，并覆盖了索引、全局检索、局部检索等核心用途，没有明显遗漏。",
+        "reply_quote": "GraphRAG 里的知识图谱不是拿来「展示实体关系」的，而是用来**组织检索上下文**——把散落在非结构化文本里的实体和关系抽出来建成图，再用图的结构决定「该塞哪些内容进 prompt」。",
+        "material_quote": "GraphRAG is a research project that explores the functional use of graphs to form a targeted context for question answering."
+      }
+    },
+    "kw_deepeval_pytest": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答明确把“ragas 偏 RAG 检索/生成质量”“langfuse 偏观测”等说法归为来自资料库，但资料中没有这些具体定位。",
+        "reply_quote": "顺带一提，你资料库里另外两个评测工具定位不同，容易混：**ragas** 偏 RAG 检索/生成质量的专项指标，**langfuse** 偏观测 + 评测平台（数据集、人工标注、线上反馈）。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手把资料中没有的 `deepeval test run`、底层跑 Pytest、fixtures、参数化、CI 集成等补充与资料内容混在一起讲，未明确标示为资料外补充。",
+        "reply_quote": "你按 Pytest 的习惯建 `test_xxx.py` 文件、`import pytest`，然后用 `deepeval test run` 执行——底层跑的就是 Pytest。",
+        "material_quote": "It is similar to Pytest but specialized for unit testing LLM apps."
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料并在末尾注明了《confident-ai/deepeval》《explodinggradients/ragas》《langfuse/langfuse》等标题，这些标题均存在于资料列表中且与答案内容对应。",
+        "reply_quote": "（依据：资料库里的《confident-ai/deepeval》《explodinggradients/ragas》《langfuse/langfuse》）",
+        "material_quote": "**DeepEval** is a simple-to-use, open-source LLM evaluation framework, for evaluating large-language model systems. It is similar to Pytest but specialized for unit testing LLM apps."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了 DeepEval 与 Pytest 的关系，说明 DeepEval 类似/特化于 Pytest 用于 LLM 评测，并对比了两者用法与断言对象，核心信息未遗漏。",
+        "reply_quote": "简单说：**DeepEval 可以理解成「为 LLM 应用改造过的 Pytest」**——复用 Pytest 的编写和运行方式，但断言的对象从「代码返回值」换成了「模型的输出质量」。",
+        "material_quote": "It is similar to Pytest but specialized for unit testing LLM apps."
+      }
+    },
+    "para_kv_cache": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料的内容（KV Cache 笔记、SGLang 分层缓存、投机解码及 H100 带宽数字）在资料中均有对应，未出现冒充出处或与资料矛盾的情况。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答虽提到结合资料，但后续大量资料外内容未标示为补充，和资料内容混在一起讲。",
+        "reply_quote": "显存随序列长度线性增长，大致是 `2 × 层数 × KV头数 × head_dim × 序列长度 × batch × 精度字节数`。",
+        "material_quote": "但是，**Key 和 Value 其实是静态的**（不会变化），它们在过去的时间步已经计算过了。因此，我们可以**缓存（Cache）这些 Key/Value**，避免重复计算，提高生成效率。"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料2中的HiCache、Mooncake、LMCache分层缓存内容，但未写出资料2标题《sgl-project/sglang》。",
+        "reply_quote": "换地方 | 分层缓存，显存 → 主机内存 → 外存的 HiCache、Mooncake、LMCache；SGLang 仓库里就有这块",
+        "material_quote": "| KV Cache | [HiCache](https://docs.sglang.io/docs/advanced_features/hicache_design), [Mooncake](https://kvcache-ai.github.io/Mooncake/), [LMCache](https://docs.lmcache.ai/developer_guide/integration.html) | Hierarchical KV caching across GPU memory, host memory, and external storage, with cache transfer and reuse for distributed inference. |"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接针对用户关于避免重复计算的问题，详细解释了KV Cache的原理（缓存静态的K/V，新token只计算自己的Q/K/V），并补充了相关资料中提到的分层缓存、投机解码等优化手段，核心信息完整且机制阐述清晰。",
+        "reply_quote": "核心答案就一个词：**KV Cache**...所以正确做法是：把每层每个历史 token 的 K、V 存下来，新 token 只算自己的 q/k/v，然后拿这个 q 去和整个缓存的 K 做点积。",
+        "material_quote": "但是，**Key 和 Value 其实是静态的**（不会变化），它们在过去的时间步已经计算过了。因此，我们可以**缓存（Cache）这些 Key/Value**，避免重复计算，提高生成效率。"
+      }
+    },
+    "para_chunk_overlap": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标为来自资料的内容（递归切分的优势、推荐参数、split_with_overlap 重叠做法）均能在资料中找到，未把资料没有的句末标点等补充明确冒充为资料出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答虽然引用了资料中的递归切分和重叠窗口，但大量资料外内容（句末标点、句子级切分、结构切分、检索补救、按 token 设置）未标示为补充，和资料混在一起。",
+        "reply_quote": "先用分句规则（中文按 `。！？`，英文用 nltk/spaCy 的句子分割）把文本拆成句子，再按顺序把整句往块里塞，累加到接近 chunk_size 就开新块。",
+        "material_quote": "**核心思想**：智能分层切割，优先用换行符分割，不行再用空格，最后用字符。"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答对所用资料明确标注了标题《文档切分实战：5种方法详解，打造高效RAG系统的第一步》，且所引内容确实来自资料列表中的对应资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接针对用户问题，提供了防止句子被切断的核心方法（分层递归切分、重叠窗口），并准确引用了资料中的参数和代码思路，虽然补充了资料外的一些通用最佳实践（如中文标点处理、句子级切分），但核心依据资料充分，未出现答非所问或遗漏关键信息的情况。",
+        "reply_quote": "核心其实是两件事：**切点挑在自然边界上**，以及**万一没挑好，要有兜底**。\n\n**1. 分层递归切分（最实用的默认做法）**\n按优先级依次尝试分隔符：段落 `\\n\\n` → 换行 `\\n` → 句末标点（`。！？；.!?`）→ 空格 → 单字符。只有上一层切不出合适的块，才降级到下一层，所以句子能被完整保留。这就是 LangChain 的 `RecursiveCharacterTextSplitter` 的思路——你资料库里那篇《文档切分实战：5种方法详解，打造高效RAG系统的第一步》里把它列为「在保持语义和均匀大小之间取得最佳平衡」的方案，给的推荐参数是 `chunk_size=500`、`chunk_overlap=50`，`separators=[\"\\n\\n\", \"\\n\", \" \", \"\"]`。",
+        "material_quote": "### 4. 递归切分：LangChain的默认选择\n**核心思想**：智能分层切割，优先用换行符分割，不行再用空格，最后用字符。\n**工作流程**：\n1. 先用`\\n\\n`（空行）尝试分割\n2. 如果块还太大，用`\\n`（换行）分割\n3. 继续用空格分割，最后用字符分割\n4. 确保每个块接近但不超预设大小\n**优势**：在保持语义和均匀大小之间取得最佳平衡"
+      }
+    },
+    "para_lora": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料中未出现的具体公式“ΔW = BA”明确标为出自 LoRA 资料，冒充出处。",
+        "reply_quote": "把权重更新分解成两个低秩矩阵相乘（ΔW = BA），只训练这两个小矩阵。参数量约是全量微调的 1/r，r=32 时只有约 3%；训练时 GPU 内存占用能降 50% 以上，推理时还能把权重合并回原模型，**不增加推理延迟**，适配效果接近全量微调。这是目前大多数场景的默认答案。（出处：《LoRA技术原理详解：大模型高效微调的低秩智慧》）",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料外补充的 QLoRA 细节、Prefix/BitFit 等内容和资料内容混在一起讲，且未明确标示为补充。",
+        "reply_quote": "基座模型用 4-bit 量化加载，再在上面挂 LoRA 训练，单卡就能微调几十 B 的模型。",
+        "material_quote": "1. **参数高效微调**：结合LoRA、QLoRA等技术"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答中的 Adapter 条目及“原文表格”对比内容明显取自资料3，但未注明该出处。",
+        "reply_quote": "- Adapter：在每层插小模块，效果中等，但**会增加推理延迟**；",
+        "material_quote": "| Adapter | 新增模块（≈rd） | 中 | 增加 | 中 |"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答中大量核心信息（如QLoRA、Adapter、Prefix Tuning、BitFit、RAG、few-shot等）以及关于LoRA“不增加推理延迟”的具体对比细节，在提供的资料中均未出现，属于助手利用外部知识补充而非严格依据资料回答，违反了“只依据这些材料判断”的评审要求。",
+        "reply_quote": "2. QLoRA（显存不够时的选择）\n基座模型用 4-bit 量化加载，再在上面挂 LoRA 训练，单卡就能微调几十 B 的模型。",
+        "material_quote": ""
+      }
+    },
+    "para_speculative": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确引用资料的内容与资料标题和条目一致，未把资料外事实说成来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答虽提到资料库中有相关标题，但后续大量流程、加速原因、变体和代价等内容未标明为补充，读者容易误以为都来自资料。",
+        "reply_quote": "为什么能加速：大模型单步生成是 **memory-bound** 的——算力基本耗在把几百 GB 权重读一遍上，只生成 1 个 token 很浪费。",
+        "material_quote": "投机解码原理详解：小模型打草稿，大模型一次验证"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答明确引用了资料列表中的《投机解码原理详解：小模型打草稿，大模型一次验证》，出处标注正确。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了该加速方法的名称“投机解码 / 推测解码（Speculative Decoding）”，并解释了小模型生成候选、大模型一次验证的核心机制，没有遗漏问题核心。",
+        "reply_quote": "这叫**投机解码 / 推测解码（Speculative Decoding）**，也叫 draft-then-verify。",
+        "material_quote": "投机解码原理详解：小模型打草稿，大模型一次验证"
+      }
+    },
+    "para_moe_imbalance": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声称来自资料的两点核心挑战（负载不均衡、训练不稳定）在资料中确有记载，其余补充内容未冒充资料出处且不与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确说明先列资料中的两点核心挑战，再补充工程上常见的坑，来源区分清楚。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答注明了所用资料标题《混合专家模型MOE的概述》，该标题在资料列表中，且确实支撑其提到的负载不均衡和训练不稳定两点。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了这种 MoE 结构容易出现的负载不均衡和训练不稳定等核心问题，并解释了机制，未遗漏资料中的关键答案。",
+        "reply_quote": "**1. 负载不均衡（最典型）**\n路由器容易「偏心」——少数几个专家被反复选中、累到过载，大部分专家基本闲置，等于参数白堆了。极端情况下会退化成只有一两个专家在工作，稀疏激活的优势就没了。主流解法是加辅助损失函数（auxiliary loss）鼓励路由均匀分配，再配合容量因子（capacity factor）限制每个专家单批能接多少 token。\n\n**2. 训练不稳定**\n门控网络本身要学，专家之间又要协同，两边一起动很容易震荡、甚至路由塌缩。DeepSeek 那类模型的做法是细粒度专家划分 + 共享专家机制来稳住。",
+        "material_quote": "* 训练不稳定 ：门控网络的学习和专家的协同容易出现波动。为此，DeepSeek等模型引入了细粒度专家划分和共享专家机制来优化。\n* 负载不均衡 ：少数专家可能被过度使用，导致资源浪费。当前主流解法是引入 辅助损失函数来鼓励路由器均匀分配任务。"
+      }
+    },
+    "para_quant_storage": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自资料的经验数字与资料一致，未把资料没有的内容冒充为资料依据。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确用“你资料库里那篇”标出资料中的实测数字，并用“补充两点”“笔记库里没覆盖”区分额外内容，读者能分辨来源。",
+        "reply_quote": "",
+        "material_quote": "以 BERT 模型为例，应用 AWQ 进行 4 - bit 量化后，在 GLUE 任务基准测试中，模型的性能下降了约 1 - 2%（绝对值），但模型的存储空间减少了约 75%。"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "助手使用了资料中的 4-bit 量化实测节省率和性能损失数字，并注明了资料标题《大模型 4-bit 量化前沿：AWQ vs. GPTQ vs. QuIP#》，且该标题和内容与资料列表一致。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了不同精度压缩下存储空间节省的理论值，并依据资料补充了4-bit量化实测约75%的节省率，核心信息未遗漏。",
+        "reply_quote": "AWQ、GPTQ、QuIP# 三种方法实测**存储空间节省率都是约 75%**（也就是文件大约变成原来的 1/4，不是 1/8）",
+        "material_quote": "将一个 32 - bit 的浮点数参数量化为 4 - bit 的整数参数，理论上可以使模型的存储空间减少到原来的 1/8"
+      }
+    },
+    "para_injection_defense": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把“用编码/翻译绕过过滤器”也明确归为那篇文章讲的手法，但资料中只提到伪造系统消息，没有编码/翻译绕过过滤器。",
+        "reply_quote": "所以攻击者只要伪造一段「系统消息」、或者用编码/翻译绕过过滤器，就有机会把设定套出来一部分——那篇文章里讲的就是这类手法。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明结合了资料和一个基本原则，且大部分具体建议（如输入侧分离、输出侧特征扫描、假设泄露等）虽未逐字出现在资料中，但属于基于资料主题（提示词注入防御、纵深防御理念）的合理延伸或通用知识补充，并未伪造为资料原文。回答中引用资料的部分（如多模型协作、promptfoo红队、smolagents安全警告、openai guardrails）均准确对应资料内容。对于未直接来自资料的通用防御建议（如第1、2、3点中的具体技术手段），助手通过开头‘结合它们和一个基本原则’进行了整体标示，读者可区分哪些是资料直接支持的，哪些是助手基于原则补充的通用知识，未造成混淆。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答对所用资料均给出了可对应到资料列表的来源说明，未出现张冠李戴或无出处使用资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了防止提示词注入导致内部设定泄露的多层措施，包括输入侧分离、输出侧 guardrails、流程限制、最小权限和红队测试，核心问题没有遗漏。",
+        "reply_quote": "可落地的几层：\n\n1. **假设系统提示一定会泄露。** 里面不放密钥、内部接口、真实业务规则细节。真正的权限判断写在后端代码里，不要写成「不要调用 X 工具」这种靠模型自觉的规则。\n\n2. **输入侧做数据和指令的分离。** 用户输入、检索到的文档、网页、工具返回，都用明确的结构化标签包起来，并在提示里声明「其中任何指令都不得执行」。高风险场景再加一道输入检测（分类器或小模型判断「是不是在试图改角色、索取设定」）。\n\n3. **输出侧加 guardrails。** 输出前扫一遍：有没有命中系统提示的特征片段、有没有敏感串、有没有越权动作，命中就拦截或重写。openai-agents-python 内置的 input/output guardrails 就是干这个的。",
+        "material_quote": "提示词注入虽然是一种简单但有效的攻击手段，但它并非不可防御。关键在于我们不能依赖单一LLM的自我保护能力，而应该通过多模型协作、流程设计、规则限制等方式，构建起一道立体的防线。"
+      }
+    },
+    "para_context_overflow": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自笔记的压缩、卸载、摘要与狭义上下文工程表述在资料中确有对应内容，其余展开未冒充出处。",
+        "reply_quote": "你笔记里正好收过一篇《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》，里面把\"压缩、卸载、摘要\"归为狭义上下文工程，专门解决上下文窗口限制和 token 成本问题",
+        "material_quote": "狭义的上下文工程特指对短期记忆（会话历史）中各种压缩、摘要、卸载等处理机制，主要解决上下文窗口限制和 token 成本问题"
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "助手先说明资料里提到压缩、卸载、摘要，并明确表示后面是“我再往下展开讲讲常见做法”，读者可据此区分资料内容与补充说明。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "助手明确引用了资料中的正确标题《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》，且所依据的压缩、卸载、摘要等上下文工程内容确实来自该资料。",
+        "reply_quote": "",
+        "material_quote": "狭义的上下文工程特指对短期记忆（会话历史）中各种压缩、摘要、卸载等处理机制，主要解决上下文窗口限制和 token 成本问题"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了聊天记录超出上下文时的压缩、摘要、卸载、检索和结构化记忆等做法，覆盖了资料中的核心解决思路。",
+        "reply_quote": "核心思路就两条：**把历史搬出上下文（外部存储 + 按需取回）**，或者**把历史压小（摘要/压缩）**。",
+        "material_quote": "当消息累积导致上下文窗口超出限制时，需要通过上下文工程策略（压缩、卸载、摘要等）进行处理，这也是上下文工程主要处理的部分。"
+      }
+    },
+    "para_resume_after_crash": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确说成来自资料的内容均能在资料中找到依据，未把资料中没有的具体事实冒充为资料出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明“主要基于知识库里的资料 + 我自己的了解”，并用“知识库没收录、但值得看的另一条路线”等结构区分资料与补充。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答对基于资料库的 LangGraph 与 CrewAI 部分均标注了资料列表中的标题，且标注来源与所依据资料一致。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了能断点恢复的框架，并说明了持久化执行/检查点恢复的核心机制，覆盖了问题重点。",
+        "reply_quote": "这类能力的通用叫法是「durable execution（持久化执行）」，核心思路都一样：在每个执行步骤的边界把状态落盘，挂掉之后按同一个会话/线程 id 重放，从最后成功的步骤继续。",
+        "material_quote": "Build agents that persist through failures and can run for extended periods, automatically resuming from exactly where they left off."
+      }
+    },
+    "para_filter_fewer_rows": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料未提及的“M 得建索引时就定好”明确说成来自《深入解析HNSW》。",
+        "reply_quote": "- Faiss：调 `efSearch`，它可以在索引建好之后随时改；`M` 和 `efConstruction` 得建索引时就定好（出处：深入解析HNSW）。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答中把部分索引、按类别分区表等未来自资料的内容与资料内容混在一起讲，且没有标示为补充。",
+        "reply_quote": "按类别分区表也是同一个思路。",
+        "material_quote": "SELECT * FROM items WHERE category_id = 123 ORDER BY embedding <-> '[3,1,2]' LIMIT 5;"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答中关于部分索引（partial index）的建议在提供的资料中完全没有依据，属于无中生有，未注明出处且资料中不存在。",
+        "reply_quote": "选择性很高的条件（等值、枚举类），建**部分索引**：`CREATE INDEX ... USING hnsw (embedding vector_l2_ops) WHERE category_id = 123;`，查询就能直接走这个索引，等于把过滤焊进索引里；按类别分区表也是同一个思路。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了结果变少的核心原因，并给出了启用迭代扫描、调大候选池等可操作方案，覆盖了用户问的“怎么让它多找一些”。",
+        "reply_quote": "",
+        "material_quote": ""
+      }
+    },
+    "para_attention_memory": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料的内容（sglang 的分层 KV 缓存、KV Cache 笔记中的 MLA 降低 93%、vLLM 的 PagedAttention/连续批处理等）均能在资料中找到对应依据，未见与资料矛盾或假装有依据的具体事实。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明会把资料库内容和通用做法结合，并在部分段落中指出对应资料来源。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料并明确列出相关标题，且这些标题均在资料列表中并与答案依据内容对应。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了推理服务如何通过分页、共享、调度、分层存储和压缩来高效管理注意力 KV 缓存，覆盖了资料中的 PagedAttention 与 Hierarchical KV caching 等核心机制。",
+        "reply_quote": "vLLM 借操作系统的虚拟内存思路：KV cache 切成固定大小的 block，逻辑上连续、物理上不连续，用 block table 做映射。",
+        "material_quote": "Efficient management of attention key and value memory with [**PagedAttention**](https://blog.vllm.ai/2023/06/20/vllm.html)"
+      }
+    },
+    "para_react_vs_cot": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确引用资料处均能在资料中找到依据，其余为未冒充出处的补充，没有与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答开头称借用户收藏资料讲差别，但后续大量内容如信息边界、错误暴露时机、状态外置等并未标明为助手补充，容易让读者误以为都来自资料。",
+        "reply_quote": "纯推演只能在你已有的模型里做运算，输出不会超过输入。",
+        "material_quote": "CoT 鼓励模型在给出最终答案前，生成一系列中间推理步骤。这些步骤完全是**内部的、纯文本的思考**，模型不会与外部世界进行任何交互。"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答明确引用了资料1的标题，且所引用的关于CoT和ReAct对比的内容确实出自资料1。",
+        "reply_quote": "你收藏的《深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理》里正好讲了这个对比——CoT 是\"闭门造车\"的思考者，ReAct 是\"知行合一\"的问题解决者。",
+        "material_quote": "简而言之，CoT 模拟的是一个“闭门造车”**的思考者，而 ReAct 模拟的是一个**“知行合一”的问题解决者。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接比较了“边想边动手”和“只在脑中推演”的区别，两边都讲到，并围绕外部反馈、信息边界和错误暴露等核心机制展开，未漏掉问题核心。",
+        "reply_quote": "纯推演只能在你已有的模型里做运算，输出不会超过输入。动手的真正价值不是\"验证想法\"，而是**引入你本来不知道的信息**",
+        "material_quote": "CoT 鼓励模型在给出最终答案前，生成一系列中间推理步骤。这些步骤完全是**内部的、纯文本的思考**，模型不会与外部世界进行任何交互。"
+      }
+    },
+    "cross_langgraph_crewai": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确说成来自资料的内容都能在资料中找到对应表述，没有与资料矛盾或假装有依据的关键事实。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明仓库 README 未抓到正文、后续主要是助手对两个框架的理解，因此资料内容与补充内容已区分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答中关于 LangGraph 和 CrewAI 的大量具体技术细节（如状态机、节点/边、sequential/hierarchical 执行、Flows、checkpoint 等）在提供的资料中均无出处，属于未注明出处的外部知识或幻觉。",
+        "reply_quote": "核心抽象是状态机：节点（做的事）+ 边（什么时候去下一个节点）+ 一个共享 state。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了 LangGraph 与 CrewAI 在多智能体编排上的不同思路，两边都讲到核心机制，并在资料不足时说明主要基于理解给出对比。",
+        "reply_quote": "LangGraph 给你的是「怎么跑」的底层机制，CrewAI 给的是「谁和谁怎么配合」的高层组织方式。",
+        "material_quote": ""
+      }
+    },
+    "cross_hnsw_params": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把 Faiss 默认 M=32 等资料中不存在的具体事实明确说成来自资料库里的两篇资料。",
+        "reply_quote": "上面这些来自你资料库里的两篇：《pgvector/pgvector》（Index Options 那节）和《深入解析HNSW：Faiss中的层次化可导航小世界图》（M_max / M_max0 那段）。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料未给出的“Faiss 默认 M = 32”等补充与资料内容混在一起，并用“上面这些来自你资料库里的两篇”误导读者。",
+        "reply_quote": "Faiss：`faiss.IndexHNSWFlat(d, M)`，默认 M = 32。",
+        "material_quote": "index = faiss.IndexHNSWFlat(d, M)"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "助手把资料中未出现的 Faiss 默认 M=32 等外部判断归因于两篇资料，属于张冠李戴。",
+        "reply_quote": "上面这些来自你资料库里的两篇：《pgvector/pgvector》（Index Options 那节）和《深入解析HNSW：Faiss中的层次化可导航小世界图》（M_max / M_max0 那段）。",
+        "material_quote": "`index = faiss.IndexHNSWFlat(d, M)`"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了 pgvector 与 Faiss 中 HNSW 的 M 参数含义，并分别说明了相同点和差异，核心问题没有遗漏。",
+        "reply_quote": "结论先说：**含义基本一样，都是「图里每个节点在每层保留多少条邻居连接」，但两边的默认值、能调的范围、第 0 层的处理有些差别。**",
+        "material_quote": "`m` - the max number of connections per layer (16 by default)"
+      }
+    },
+    "cross_ragas_deepeval": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料的内容（如README自称toolkit for evaluating and optimizing LLM applications）在资料中存在，未标来源的补充不在此维度扣分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答声称基于资料库 README，却把“检索/生成分段诊断”等未见于资料的补充混入资料内容且未标示。",
+        "reply_quote": "它的思路是把 RAG 拆成「检索」和「生成」两段分别打分，所以你拿到的不只是一个总分，而是能定位到底是召回的内容不行，还是模型没用好上下文。",
+        "material_quote": "Ragas is your ultimate toolkit for evaluating and optimizing Large Language Model (LLM) applications."
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答注明了出处为 explodinggradients/ragas 与 confident-ai/deepeval 的 README，且这些标题均在资料列表中，未出现张冠李戴。",
+        "reply_quote": "出处：资料库收藏的 `explodinggradients/ragas`、`confident-ai/deepeval` 仓库 README。",
+        "material_quote": "[资料 2] 标题：explodinggradients/ragas；[资料 1] 标题：confident-ai/deepeval"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了 Ragas 与 DeepEval 的定位差异，两边都讲到并覆盖了用户问题的核心。",
+        "reply_quote": "这两个我都翻了下资料库里收藏的仓库 README（`explodinggradients/ragas` 和 `confident-ai/deepeval`），结合它们各自的定位说下区别：",
+        "material_quote": "**DeepEval** is a simple-to-use, open-source LLM evaluation framework, for evaluating large-language model systems. It is similar to Pytest but specialized for unit testing LLM apps."
+      }
+    },
+    "cross_vllm_sglang": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料或笔记的内容均能在资料中找到对应依据，未把资料里没有的具体事实明确冒充为资料出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答虽提到结合资料和个人了解，但未具体标示哪些是资料外补充，RadixAttention 等内容与资料内容混在一起，读者可能误认为都来自资料。",
+        "reply_quote": "- **运行时性能**：核心是 **RadixAttention**（前缀树式 KV 复用），多轮对话、few-shot、共享长 system prompt 这类「前缀高度重复」的负载收益明显，这也是它常在某些 benchmark 上反超 vLLM 的原因",
+        "material_quote": "# SGLang: Fast inference for LLMs and multimodal models"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答在结尾明确列出了所依据的资料标题（vllm-project/vllm、sgl-project/sglang、投机解码原理详解），且这些标题均存在于提供的资料列表中，内容与资料相符。",
+        "reply_quote": "**出处**：`vllm-project/vllm`、`sgl-project/sglang`（资料库），以及你的笔记《投机解码原理详解：小模型打草稿，大模型一次验证》。",
+        "material_quote": "[资料 2] 标题：vllm-project/vllm（来自 search_notes）\n[资料 1] 标题：sgl-project/sglang（来自 search_notes）\n[资料 3] 标题：投机解码原理详解：小模型打草稿，大模型一次验证（来自 search_notes）"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了 vLLM 和 SGLang，并分别说明了各自主打方向，核心信息两边都覆盖。",
+        "reply_quote": "**vLLM 主打「通用、稳、生态大」的推理服务底座；SGLang 主打「运行时 + 前端 DSL 一体」，在共享前缀多、结构化输出重的场景下往往更快。**",
+        "material_quote": "# SGLang: Fast inference for LLMs and multimodal models"
+      }
+    },
+    "cross_mem0_letta": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答没有声称来自资料，也没有给出与资料矛盾或假装有依据的内容。",
+        "reply_quote": "处理这个请求需要的步骤太多了，我先停在这里，你可以换个更具体的说法重试。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答没有引用资料内容，也没有混入未标示的补充信息，因此不存在来源混淆。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "回答没有使用任何资料，仅表示无法处理，因此不需要出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答没有比较 Mem0 和 Letta 的差异，只以步骤太多为由停止，遗漏了问题核心。",
+        "reply_quote": "处理这个请求需要的步骤太多了，我先停在这里，你可以换个更具体的说法重试。",
+        "material_quote": ""
+      }
+    },
+    "cross_lora_quant": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自资料的内容（如 LoRA 低秩更新、QLoRA 提及、分块量化代码）均能在资料中找到对应，未出现将资料没有的具体事实冒充为资料来源的情况。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料未包含的AWQ/GPTQ细节、量化有损、推理部署成本等补充内容与资料内容混写且未标示，读者会误以为均来自资料。",
+        "reply_quote": "AWQ / GPTQ / QuIP# 的差别主要就在怎么对付离群值和量化误差——比如 AWQ 保护重要通道，GPTQ 用二阶信息逐层补偿误差",
+        "material_quote": "大模型 4-bit 量化前沿：AWQ vs. GPTQ vs. QuIP#"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料5中的 QLoRA 信息，但出处只列了另外两篇，未注明《DPO：直接偏好优化》。",
+        "reply_quote": "**两者不是竞争关系，反而是互补的**：你笔记里提到的 QLoRA 就是典型组合——基座先 4-bit 量化冻结放着（省显存），只在上面训 LoRA 适配器（省训练），于是单卡微调大模型变得可行。",
+        "material_quote": "1. **参数高效微调**：结合LoRA、QLoRA等技术"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答分别解释了LoRA通过低秩增量减少训练成本、4-bit量化通过降低参数表示精度减少存储与推理成本的机制，并进行了对比，直接回应了原理差异。",
+        "reply_quote": "LoRA 省的是「训练」，量化省的是「推理/部署」。",
+        "material_quote": "模型量化是将模型中的参数从高精度表示（如 32 - bit 浮点数）转换为低精度表示（如 4 - bit 整数）的过程。这一过程可以大大减少模型的存储空间和计算量。"
+      }
+    },
+    "cross_mcp_function_calling": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确说成来自资料的内容均能在资料中找到，未出现冒充出处或与资料矛盾；其余为未标来源的理解补充，不在本维度扣分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头已用“结合这些说说我的理解”标示后续包含助手理解，并对多处资料来源作了区分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料4中关于 stdio、Streamable HTTP、SSE 和 call_tool 的内容，但未注明该资料标题“modelcontextprotocol/python-sdk”，只泛称“官方 SDK 那篇”。",
+        "reply_quote": "官方 SDK 那篇里也提到，一个 Client 通过 stdio、Streamable HTTP、SSE 这些标准传输层连上任意 MCP server，然后 `call_tool`。",
+        "material_quote": "- Speak every standard transport: stdio, Streamable HTTP, and SSE"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了 MCP 与 Function Calling 的关系、各自定位、如何配合以及为何不能互相替代，问题核心信息未遗漏。",
+        "reply_quote": "不是一回事，也不能互相替代——它们在不同的层上。",
+        "material_quote": "MCP 的核心思想是将模型与外部系统之间的通信抽象为一个客户端-服务器架构，通过标准化的接口（如基于 JSON-RPC 的通信）实现上下文的动态传递和工具的灵活调用。"
+      }
+    },
+    "cross_chroma_qdrant": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "助手明确声称内容来自资料库中的 README，但大量具体技术细节（如 Chroma 的 pip 安装方式、PersistentClient、内置 embedding function；Qdrant 的 Rust 语言、Docker/Cloud 部署、REST/gRPC 接口、量化技术、快照备份等）在提供的资料片段中均未出现，属于冒充出处。",
+        "reply_quote": "查了下你资料库里的两份 README（`chroma-core/chroma`、`qdrant/qdrant`）……`pip install chromadb` 之后 `PersistentClient(path=...)`……内置 embedding function……Rust 写的……Docker 起一个或者用 Cloud，客户端走 REST/gRPC……标量/乘积/二值量化……备份 = 拷目录",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答声称基于资料库 README，但把大量资料中没有的用法、性能和选型细节混在资料内容中陈述，未标示为补充或通用知识。",
+        "reply_quote": "整个 RAG demo 十分钟能跑起来。",
+        "material_quote": "Chroma - the open-source data infrastructure for AI"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答中声称 Qdrant 支持标量/乘积/二值量化，但资料中关于量化的内容实际来自 pgvector（资料 6），且 Qdrant 的资料（资料 1、4）中未提及量化，属于张冠李戴。",
+        "reply_quote": "标量/乘积/二值量化，配合重排",
+        "material_quote": "Use [binary quantization](#binary-quantization) for indexes (with re-ranking for search)"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了 Chroma 和 Qdrant 在使用上的区别，两边都覆盖到定位、部署、检索、过滤、运维和选型建议，没有答非所问或漏掉核心。",
+        "reply_quote": "查了下你资料库里的两份 README（`chroma-core/chroma`、`qdrant/qdrant`），结合它们的定位说区别。",
+        "material_quote": "**Qdrant** (read: _quadrant_) is a vector similarity search engine and vector database."
+      }
+    },
+    "neg_k8s_hpa": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答明确说明笔记库里没找到 Kubernetes 相关资料，后续内容没有冒充来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明笔记库里没找到 Kubernetes 相关资料，后续内容是助手直接按 k8s 机制给出的通用补充，读者能区分来源。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "回答明确称笔记库未找到 Kubernetes 相关资料，后续内容未使用任何给定资料，因此不需要出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中没有 Kubernetes HPA 相关内容，助手如实说明后直接回答了如何配置指标并给出示例与排查步骤，满足资料缺失时的合理补充。",
+        "reply_quote": "笔记库里没找到 Kubernetes 相关的资料，这块我直接按 k8s 的机制给你捋一遍。",
+        "material_quote": ""
+      }
+    },
+    "neg_react_hooks": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确说明笔记库没有相关记录，后续内容未冒充来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "助手开头明确说明笔记库里没有相关记录，后续内容属于通用知识补充，读者可区分来源。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "回答明确称笔记库没有相关记录并直接作答，未使用任何资料，因此不需要出处。",
+        "reply_quote": "笔记库里没有相关的记录，那我直接讲。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中没有 React/useEffect 相关内容，助手如实说明后直接回答了依赖数组写法，核心信息完整且未答非所问。",
+        "reply_quote": "笔记库里没有相关的记录，那我直接讲。",
+        "material_quote": ""
+      }
+    },
+    "neg_photoshop": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确说明知识库里没有相关笔记，后续内容未声称来自资料，且不存在与资料矛盾或冒充出处的情况。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明知识库里没有相关笔记，后续内容是助手提供的通用操作。",
+        "reply_quote": "知识库里没存过相关笔记，我从常用操作给你梳理一遍。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "助手明确声明知识库里没存过相关笔记，回答内容基于通用操作知识，未引用提供的资料。",
+        "reply_quote": "知识库里没存过相关笔记，我从常用操作给你梳理一遍。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中没有 Photoshop 抠图答案，助手如实说明知识库无相关笔记，并直接给出可操作的抠图步骤。",
+        "reply_quote": "知识库里没存过相关笔记，我从常用操作给你梳理一遍。",
+        "material_quote": ""
+      }
+    },
+    "neg_rust_ownership": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答明确说明笔记库里没搜到相关材料并直接讲解，没有把内容冒充为来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "助手开头明确说明笔记库里没搜到相关材料并直接讲解，后续内容可被读者识别为通用补充而非用户资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "回答明确说明笔记库未搜到相关材料并直接讲解，未使用任何资料，不需要出处。",
+        "reply_quote": "你的笔记库里没搜到相关材料，那这块我直接讲。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中没有 Rust 所有权和借用规则的答案，助手如实说明未搜到后直接完整回答了问题。",
+        "reply_quote": "你的笔记库里没搜到相关材料，那这块我直接讲。",
+        "material_quote": "[资料 1] 标题：huggingface/smolagents（来自 search_notes）"
+      }
+    },
+    "neg_cooking": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答明确说明笔记库里没有菜谱，后续做法未冒充来自资料，也没有与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明笔记库里没有菜谱并直接给出做法，读者能区分这是助手补充而非用户资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "回答未使用任何给定资料，且明确说明笔记库里没有菜谱后自行作答，不需要注明出处。",
+        "reply_quote": "笔记库里没存过菜谱，我直接给你一套比较稳的做法。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接给出了红烧肉的做法和关键步骤，核心信息完整，并说明了资料里没有菜谱后继续给出合理做法。",
+        "reply_quote": "笔记库里没存过菜谱，我直接给你一套比较稳的做法。",
+        "material_quote": ""
+      }
+    },
+    "neg_tcp": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确说明知识库里没搜到相关笔记后直接讲解，没有把 TCP 三次握手内容冒充为来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明知识库里没搜到相关笔记并直接讲解，读者能区分内容不是来自用户资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "助手明确表示知识库里没搜到相关笔记并直接回答，未使用资料，因此不需要出处。",
+        "reply_quote": "知识库里没搜到相关笔记，这块我直接讲吧。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手如实说明资料未命中后，直接完整回答了 TCP 三次握手的过程与机制，核心信息未遗漏。",
+        "reply_quote": "知识库里没搜到相关笔记，这块我直接讲吧。",
+        "material_quote": ""
+      }
+    },
+    "neg_visa": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声明资料中无相关内容且搜索结果无效，未将任何具体事实或步骤冒充为来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明资料库无相关记录且联网搜索结果无效，后续内容标示为按已有知识整理，来源区分清楚。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "助手明确说明资料库和联网结果都未提供有效签证内容，回答基于已有知识整理，未使用资料，因此不需要出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手如实说明资料无有效答案后，仍按问题给出了澳洲学生签证申请的主要步骤和注意事项，核心信息未遗漏。",
+        "reply_quote": "先说明一下：我翻了你的笔记库，没有签证相关的记录；联网搜索这会儿返回的结果也不太正常（拿不到有效内容），所以下面是按我已有的知识整理的，具体政策细节请以澳洲内政部官网 immi.homeaffairs.gov.au 为准——学签这类政策近两年改得挺勤。",
+        "material_quote": ""
+      }
+    },
+    "neg_spark": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确说明笔记库里没有相关内容，并未把回答冒充为来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "助手在回答开头明确声明笔记库里没有相关内容，后续内容属于直接讲解（通用知识），与资料库内容做了清晰区分。",
+        "reply_quote": "笔记库里没有相关内容，这个我直接讲。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "回答明确说明笔记库里没有相关内容，后续未使用任何资料，因此不需要出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中确实没有 Spark 宽窄依赖内容，回答先如实说明笔记库没有相关内容，并直接完整对比了宽依赖和窄依赖的区别。",
+        "reply_quote": "笔记库里没有相关内容，这个我直接讲。",
+        "material_quote": ""
+      }
+    },
+    "neg_redis": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答明确说明知识库没有 Redis 持久化笔记并按自己理解讲解，没有把内容冒充为资料出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "助手明确说明知识库没有 Redis 持久化笔记，并声明后续内容按自己的理解讲，来源已区分。",
+        "reply_quote": "我查了下知识库，没有 Redis 持久化相关的笔记，下面按我自己的理解讲。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "助手明确说明知识库中没有相关笔记，回答完全基于自身理解，未引用任何提供的资料。",
+        "reply_quote": "我查了下知识库，没有 Redis 持久化相关的笔记，下面按我自己的理解讲。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中没有 Redis 持久化答案，助手如实说明知识库缺失后仍直接对比回答了 RDB 和 AOF 的区别，两边都讲到且核心信息完整。",
+        "reply_quote": "我查了下知识库，没有 Redis 持久化相关的笔记，下面按我自己的理解讲。",
+        "material_quote": ""
+      }
+    },
+    "neg_rope": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答明确说明 RoPE 内容是通用知识而非来自资料库，且未把资料中没有的内容冒充为出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明资料库中没有 RoPE 相关记录，后续内容属于通用知识，来源区分清楚。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "na",
+        "reason": "助手明确说明未使用资料库内容，回答为通用知识，因此不需要出处。",
+        "reply_quote": "笔记库里只翻到 KV Cache、LoRA、RAG 检索那几篇，没有 RoPE 相关的记录，所以下面讲的是通用知识，不是来自你的资料库。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "资料中没有 RoPE 答案，助手如实说明后仍直接、完整地回答了 RoPE 的计算方法。",
+        "reply_quote": "笔记库里只翻到 KV Cache、LoRA、RAG 检索那几篇，没有 RoPE 相关的记录，所以下面讲的是通用知识，不是来自你的资料库。",
+        "material_quote": ""
+      }
+    },
+    "title_hnsw_vs_ivfflat": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确归到 README 的内容与资料一致，未把资料里没有的具体事实冒充为出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "助手在开头明确说明回答包含资料库 README 的说明和“一些实践常识”，对补充来源有标示。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "助手标注了所用资料《pgvector/pgvector》，且其引用的 IVFFlat 与 HNSW 查询性能取舍确实来自该资料。",
+        "reply_quote": "pgvector 文档的原话是：IVFFlat「构建更快、更省内存，但查询性能更低（speed-recall tradeoff 上更差）」。",
+        "material_quote": "It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff)."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明同等召回率下 HNSW 查询更快，并分别给出 HNSW 与 IVFFlat 的适用选择，核心问题没有遗漏。",
+        "reply_quote": "同等召回率下，HNSW 查询更快。",
+        "material_quote": "It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff)."
+      }
+    },
+    "title_paged_attention": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料中没有的论文数据明确说成来自论文，属于冒充出处。",
+        "reply_quote": "论文里的数据是，这样浪费掉的显存能到 60%–80%，直接压低了 batch size 和吞吐。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答虽然标明 vLLM 论文来自资料，但后续关于显存碎片机制、论文数据等内容未标示为资料外补充，容易让读者误认为均来自用户资料。",
+        "reply_quote": "论文里的数据是，这样浪费掉的显存能到 60%–80%，直接压低了 batch size 和吞吐。",
+        "material_quote": "- Efficient management of attention key and value memory with [**PagedAttention**](https://blog.vllm.ai/2023/06/20/vllm.html)"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答明确引用了资料列表中的《vllm-project/vllm》作为 PagedAttention 提出项目的依据，且该资料内容确实支持这一结论。",
+        "reply_quote": "你资料库里就存着这个仓库（《vllm-project/vllm》）",
+        "material_quote": "标题：vllm-project/vllm（来自 search_notes）"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了 PagedAttention 来自 vLLM 项目，并依据资料中的论文信息说明了来源，核心问题未遗漏。",
+        "reply_quote": "PagedAttention 是 **vLLM** 项目提出来的——你资料库里就存着这个仓库（《vllm-project/vllm》），README 里引用的原始论文是 Woosuk Kwon 等人的 *Efficient Memory Management for Large Language Model Serving with PagedAttention*（SOSP 2023，UC Berkeley 团队）。",
+        "material_quote": "- Efficient management of attention key and value memory with [**PagedAttention**](https://blog.vllm.ai/2023-06-20/vllm.html)"
+      }
+    },
+    "title_mem0_longmemeval": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自资料的具体分数、提升幅度、token 与延迟、发布日期以及关于评测口径的提醒，均能在 mem0 笔记和《Agent 记忆系统技术深度》资料中找到对应原文，没有冒充资料或矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确区分了资料来源（指出数字来自用户笔记《mem0ai/mem0》），并说明了哪些内容资料里没有（如Letta、Zep的分数），结构清晰，读者能分辨哪些来自资料、哪些是通用提醒。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料中的 LongMemEval 分数，并明确标注了来源标题《mem0ai/mem0》，该标题存在于资料列表且内容与答案依据一致。",
+        "reply_quote": "",
+        "material_quote": "**94.4 on LongMemEval** -- +27 points, with 98.2 on assistant memory recall"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答基于资料给出了 LongMemEval 的 94.4 分，并如实说明其他系统资料缺失及下一步，核心信息未遗漏。",
+        "reply_quote": "- LongMemEval：**94.4**，比旧算法（67.8）涨了 27 分，其中 assistant memory recall 一项是 98.2",
+        "material_quote": "**94.4 on LongMemEval** -- +27 points, with 98.2 on assistant memory recall"
+      }
+    },
+    "title_code_agent": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确引用资料的说法均能在资料中找到，没有把资料里没有的内容冒充为资料出处。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答中关于ReAct具体执行机制（如解析JSON、一步一工具）、代码行动的具体实现（如for循环、变量存储、traceback处理）、工具膨胀的对比以及CodeAct论文的具体数据等大量内容，在提供的资料中均无出处，属于助手基于通用知识的补充，且未明确标示这些内容不在资料库中，容易让读者误以为都来自其资料。",
+        "reply_quote": "ReAct 调工具：模型吐出一段结构化动作（`Action: search[...]` 或 JSON tool_call），框架解析、校验、执行，**通常一步一个工具调用**，然后结果回灌进上下文，再想下一步。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料6中的 ReAct 思考-行动-观察循环，但未注明该资料标题。",
+        "reply_quote": "所以别把它当成两套架构，它是同一个 Thought→Action→Observation 循环换了行动空间。",
+        "material_quote": "ReAct 的精髓在于其独特的“思考-行动-观察”（Thought-Action-Observation） 循环。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了代码行动与 ReAct 工具调用，核心差异讲到了循环相同但行动表达不同，两边都覆盖。",
+        "reply_quote": "简单说：**循环没变，变的只是「行动」用什么表达。** 你在资料库里存的《huggingface/smolagents》里就有一句很到位的说法——CodeAgent「works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets」。所以别把它当成两套架构，它是同一个 Thought→Action→Observation 循环换了行动空间。",
+        "material_quote": "Our [`CodeAgent`](https://huggingface.co/docs/smolagents/reference/agents#smolagents.CodeAgent) works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets."
+      }
+    },
+    "title_ragflow_chunking": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声称来自资料的内容（RAGFlow 的 Template-based chunking 及其原文描述）在资料 3 中确有对应，未出现与资料矛盾或假装有依据的情况。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确区分了资料原文与通用补充，并用“这部分是通用做法，不是从你资料里来的”标示补充内容。",
+        "reply_quote": "**「模板化切分」大致有几种落地形态**（这部分是通用做法，不是从你资料里来的）：",
+        "material_quote": "### 🍱 **Template-based chunking**\n- Intelligent and explainable.\n- Plenty of template options to choose from."
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答对所用资料《infiniflow/ragflow》和《文档切分实战：5种方法详解，打造高效RAG系统的第一步》均注明了资料列表中的标题，且核心依据未张冠李戴。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接确认了存在基于模板的做法，并准确引用了资料中关于RAGFlow Template-based chunking的描述，同时补充了通用的落地形态和适用场景，核心信息无遗漏。",
+        "reply_quote": "有，而且你资料库里正好躺着一条现成的例子。",
+        "material_quote": "### 🍱 **Template-based chunking**\n- Intelligent and explainable.\n- Plenty of template options to choose from."
+      }
+    },
+    "title_mcp_server_lines": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答称资料库 README 中最简单的 server 大概 10 行左右，但资料明确写的是 A server in 15 lines。",
+        "reply_quote": "查了下你资料库里的 `modelcontextprotocol/python-sdk`（README），最简单的 server 大概 **10 行左右**，核心就是用装饰器把普通函数注册成工具：",
+        "material_quote": "## A server in 15 lines"
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答先标明来自资料库，后续额外内容用“几点补充”和“顺带一句”明确分开。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料中的 MCP Python SDK 代码示例，并明确标注了资料标题 modelcontextprotocol/python-sdk，该标题在资料列表中存在且与所依据资料一致。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "用户问需要多少代码，资料明确写了“A server in 15 lines”，回答却只说“大概10行左右/5行”，没有给出资料中的核心答案。",
+        "reply_quote": "最简单的 server 大概 **10 行左右**",
+        "material_quote": "## A server in 15 lines"
+      }
+    },
+    "title_vllm_prefix_caching": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自 README 的内容与资料一致，其余未标来源的技术补充不在忠实度维度扣分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料中仅提及的特性与大量未标示为补充的技术细节、参数和默认值混在一起陈述，读者会误以为这些内容都来自资料库。",
+        "reply_quote": "开启参数 `--enable-prefix-caching`。",
+        "material_quote": "Continuous batching of incoming requests, chunked prefill, prefix caching"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了 web_search 资料来提及最新版本默认值，但没有注明对应资料标题。",
+        "reply_quote": "我刚顺手搜了下最新版本的默认值，没拿到可靠信息，所以建议直接看你装的那个版本：`vllm serve --help` 加上对应 release notes 最准。",
+        "material_quote": "关于「vLLM V1 prefix caching chunked prefill default enabled 版本」的最新报道：相关公司本周发布了新版本，重点提升了推理和工具调用能力。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了 vLLM 支持前缀缓存和分块预填充，并明确提到资料中的 README 同时列出 chunked prefill 和 prefix caching，核心问题没有遗漏。",
+        "reply_quote": "支持，而且这俩算是 vLLM 的招牌特性。你资料库里收藏的 vllm-project/vllm 仓库 README 里就直接列了：PagedAttention 显存管理、Continuous batching，以及 **chunked prefill、prefix caching**。",
+        "material_quote": "- Continuous batching of incoming requests, chunked prefill, prefix caching"
+      }
+    },
+    "ho_hamming_ops": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答的核心结论 bit_hamming_ops、相关 SQL 示例和 bit 维度上限均能在资料中找到依据，未把资料中不存在的具体事实明确冒充为资料内容。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料未明确说明的“光写 binary_quantize(...) 表达式索引不会被用上”等补充判断与资料内容混在一起，且未标示为通用知识或补充。",
+        "reply_quote": "- **必须显式 cast 成 `bit(n)`**，光写 `binary_quantize(...)` 表达式索引不会被用上，`bit_hamming_ops` 只认 `bit` 类型（`bit` 上限 64,000 维）。",
+        "material_quote": "Use expression indexing for binary quantization\n```sql\nCREATE INDEX ON items USING hnsw ((binary_quantize(embedding)::bit(3)) bit_hamming_ops);\n```"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答注明了出处“pgvector/pgvector”，该标题在资料列表中存在且答案内容确实依据该资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了二进制向量 Hamming 距离 HNSW 索引应使用 bit_hamming_ops，并给出了对应建索引示例，核心信息到位。",
+        "reply_quote": "用 **`bit_hamming_ops`**。",
+        "material_quote": "CREATE INDEX ON items USING hnsw ((binary_quantize(embedding)::bit(3)) bit_hamming_ops);"
+      }
+    },
+    "ho_maintenance_work_mem": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确声称来自资料的内容（NOTICE 和 README 的 Index Build Time）均能在资料中找到，未把资料没有的内容明确说成资料来源。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手把资料外的“per-operation、不是全局共用”等补充与 README 中“不要把 maintenance_work_mem 调太高”混在同一注意点里，没有明确标示哪些是补充。",
+        "reply_quote": "这个参数是 per-operation 的，不是全局共用的，但要给系统和其它连接留余量。",
+        "material_quote": "Note: Do not set `maintenance_work_mem` so high that it exhausts the memory on the server"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答注明了所用资料标题 pgvector/pgvector，该标题在资料列表中，且答案依据的 maintenance_work_mem 与 NOTICE 内容确实来自该篇资料的 Index Build Time 部分。",
+        "reply_quote": "参考的是你资料库里收藏的 pgvector/pgvector（README 的 Index Build Time 一节）。",
+        "material_quote": "NOTICE:  hnsw graph no longer fits into maintenance_work_mem after 100000 tuples"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接确认 maintenance_work_mem 与 HNSW 建索引速度有关系，并解释了图装不下会变慢的机制和可调整项。",
+        "reply_quote": "有关系，而且是 HNSW 建索引慢最常见的原因之一。",
+        "material_quote": "Indexes build significantly faster when the graph fits into `maintenance_work_mem`"
+      }
+    },
+    "ho_litellm_fallback": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把“Azure / OpenAI 同款模型的多个 endpoint”这一资料未出现的具体说法明确归因为 README 内容。",
+        "reply_quote": "资料库里收藏的 **BerriAI/litellm** 那份 README 里就写着：Router 可以在多个部署（比如 Azure / OpenAI 同款模型的多个 endpoint）之间做 retry/fallback，这也是它相对直接用各家的原生 SDK 的一个主要卖点。",
+        "material_quote": "Router with retry/fallback logic across multiple deployments (e.g. Azure/OpenAI)"
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答只引用了资料中 Router 有 retry/fallback 的概括，却把大量资料未说明的重试、降级链、冷却细节混在正文里，未清楚标示为补充。",
+        "reply_quote": "单次请求遇到超时、限流、5xx 这类瞬时错误时，Router 会自己重发，而不是直接把异常抛给你的业务代码。",
+        "material_quote": "Router with retry/fallback logic across multiple deployments (e.g. Azure/OpenAI)"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答中关于重试、Fallback、熔断/冷却的具体机制细节（如“超出上下文窗口”、“失败计数与冷却时间”等）在提供的资料中均无对应依据，属于张冠李戴或幻觉，尽管引用了资料1的标题，但大部分核心内容并非来自该资料。",
+        "reply_quote": "- **Fallback**：重试还不行就降级。可以给某个 model group 指定备选模型/部署列表，也可以专门为「超出上下文窗口」这种情况配一条降级链（先试长上下文模型，不行再换）。",
+        "material_quote": "Router with retry/fallback logic across multiple deployments (e.g. Azure/OpenAI)"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答中关于重试、Fallback、熔断/冷却的具体机制描述（如参数配置、降级链逻辑、冷却时间等）在提供的资料中均无依据，属于利用外部知识补全资料，违反了“只依据这些材料判断，不要用你自己对话题的了解去补全或纠正资料”的严格评审要求。",
+        "reply_quote": "具体大致分三层：\n\n- **重试**：单次请求遇到超时、限流、5xx 这类瞬时错误时，Router 会自己重发，而不是直接把异常抛给你的业务代码。次数和针对哪些异常类型重试都可以配。\n- **Fallback**：重试还不行就降级。可以给某个 model group 指定备选模型/部署列表，也可以专门为「超出上下文窗口」这种情况配一条降级链（先试长上下文模型，不行再换）。\n- **熔断/冷却**：配合失败计数与冷却时间，把连续出错的部署临时踢出候选池，过一段时间再放回来，避免每次都先撞一遍坏节点。",
+        "material_quote": ""
+      }
+    },
+    "ho_browser_use_key": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料中未出现的“不是必须”“其他 provider 如 ChatOpenAI/ChatAnthropic 不需要 BROWSER_USE_API_KEY”等结论明确说成来自资料。",
+        "reply_quote": "按资料库里那篇 browser-use/browser-use 的说明：",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手称“按资料库里那篇说明”，却把资料未提及的“直接用别的 provider 配对应厂商 key”混入资料内容，未标示为补充。",
+        "reply_quote": "直接用别的 provider，比如 `ChatOpenAI` / `ChatAnthropic` 之类，配对应厂商的 key 就行",
+        "material_quote": "OPENAI_API_KEY=your-key"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答注明了出处《browser-use/browser-use》，该标题在资料列表中存在，且答案依据的是同名资料 1 和资料 2。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明 BROWSER_USE_API_KEY 是否必须取决于是否使用 ChatBrowserUse/Browser Use gateway，并覆盖了需要与不需要两种情况。",
+        "reply_quote": "不是必须的，看你用哪个模型。",
+        "material_quote": "We recommend **BU2**, our model optimized for browser automation: `ChatBrowserUse(model='bu-2-0')`. It uses `BROWSER_USE_API_KEY`; `ChatBrowserUse()` currently selects the same model."
+      }
+    },
+    "ho_num_speculative_tokens": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声称来自资料的内容只有《投机解码原理详解》中的 num_speculative_tokens=5 例子，资料中确有该参数及“每步草稿生成 5 个 token”的注释；其余未标明来源的解释不在此维度扣分。",
+        "reply_quote": "所以你资料库里那篇《投机解码原理详解：小模型打草稿，大模型一次验证》里的例子就是 `num_speculative_tokens=5`——即「每步草稿生成 5 个 token」。",
+        "material_quote": "num_speculative_tokens=5, # 每步草稿生成 5 个 token"
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料外的调参经验和甜区建议与资料内容混在一起讲，没有明确标示这些补充不是来自用户资料。",
+        "reply_quote": "甜区通常落在 **3~8**，5 是各类 demo 和论文里最常见的默认值；具体取多少取决于草稿模型和目标模型的分布接近程度、以及任务的「可预测性」。",
+        "material_quote": "num_speculative_tokens=5, # 每步草稿生成 5 个 token"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料中关于 n-gram/EAGLE 草稿机制的信息，但未注明该资料标题。",
+        "reply_quote": "`num_speculative_tokens` 是投机解码里的**草稿长度 K**：每一步让草稿模型（或 n-gram/EAGLE 等草稿机制）先自回归猜出 **K 个候选 token**，然后目标模型用**一次前向**并行验证这 K 个位置，接受其中最长的正确前缀，再多拿一个由目标模型分布直接给出的 token。",
+        "material_quote": "- Speculative decoding including n-gram, suffix, EAGLE, DFlash"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了 num_speculative_tokens 表示每步草稿生成的 token 数量，并给出资料中的示例，核心含义未遗漏。",
+        "reply_quote": "`num_speculative_tokens` 是投机解码里的**草稿长度 K**：每一步让草稿模型（或 n-gram/EAGLE 等草稿机制）先自回归猜出 **K 个候选 token**",
+        "material_quote": "num_speculative_tokens=5, # 每步草稿生成 5 个 token"
+      }
+    },
+    "ho_lora_rank": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把“默认的选值区间”明确说成是资料里的结论，但资料只说实际应用中可根据任务复杂度选择 r=8-64 覆盖大部分场景，并未称其为默认。",
+        "reply_quote": "你的资料库里那篇《LoRA技术原理详解：大模型高效微调的低秩智慧》正好讲过这个，里面给的结论是：\n\n- **实践中 r=8~64 基本能覆盖大部分场景**，这是默认的选值区间。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答先明确标注资料库结论，之后又用“这部分是我自己的总结，不是笔记里的”清楚标示补充内容，来源区分清晰。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料1并明确标注了资料1的标题，且标题与资料列表一致、内容确实来自该资料。",
+        "reply_quote": "你的资料库里那篇《LoRA技术原理详解：大模型高效微调的低秩智慧》正好讲过这个，里面给的结论是：",
+        "material_quote": "实际应用中，根据任务复杂度选择r=8-64即可覆盖大部分场景（例如Stable Diffusion的LoRA微调常用r=32）。"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了资料中的 r=8~64 常用范围，并说明了 r 大小权衡及具体参照，核心信息未遗漏。",
+        "reply_quote": "实践中 r=8~64 基本能覆盖大部分场景",
+        "material_quote": "实际应用中，根据任务复杂度选择r=8-64即可覆盖大部分场景（例如Stable Diffusion的LoRA微调常用r=32）。"
+      }
+    },
+    "ho_skiplist_origin": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确引用资料时只对应了 William Pugh 和资料中“1990年引入”的表述，未把资料里没有的 1989、论文标题、机构或动机明确说成来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确标出资料库文章记载的是“1990年引入”，并用“你资料库里那篇”“顺带一说”等提示区分助手补充内容，读者能分清来源。",
+        "reply_quote": "",
+        "material_quote": "概率跳表由William Pugh在1990年引入，它结合了排序数组的快速搜索能力和链表的便捷插入操作。"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "助手使用了资料中关于 William Pugh 提出跳表的信息，并标注了对应资料标题，虽省略来源后缀但可明确对应资料列表中的同一篇。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了提出者为 William Pugh，核心信息没有遗漏。",
+        "reply_quote": "是 William Pugh 提出的",
+        "material_quote": "概率跳表由William Pugh在1990年引入"
+      }
+    },
+    "ho_moe_topk": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确归入资料的 MoE、Mixtral 8x7B、Top-K/稀疏激活及变体内容均能在资料中找到，未见与资料矛盾或假装有依据的答案。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确标注了资料库来源，并用“顺带说一句区分”标示了资料外补充内容。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料并注明了资料标题《混合专家模型MOE的概述》，该标题在资料列表中且与答案依据一致。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答准确识别为混合专家模型MoE，并解释了多专家与Top-K同时激活的核心机制，直接回应了用户问题。",
+        "reply_quote": "你描述的是**混合专家模型（MoE, Mixture of Experts）**，关键机制叫**稀疏激活 / Top-K 路由**。",
+        "material_quote": "模型的每一层都由8个“专家”（小型前馈网络）和一个“路由器”（门控网络）组成，对于每个输入的词元，路由器会动态选择最合适的2个专家来处理，最后将两者的输出融合。"
+      }
+    },
+    "ho_rlhf_problems": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确归到资料的内容只有《DPO》笔记列出 RLHF 五条局限，这与资料一致；其余扩展未声称来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答开头只说笔记列了五条局限，但后续大量具体扩展未明确标为资料外补充，读者容易误认为都来自用户资料。",
+        "reply_quote": "三阶段 + 四个模型（actor / critic / reference / RM）同时在显存里，PPO 超参敏感、容易训练不稳定。",
+        "material_quote": "1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答明确标注了所用资料《DPO：直接偏好优化》，且该标题在资料列表中，内容确实依据资料1的RLHF局限性。",
+        "reply_quote": "你笔记库里的《DPO：直接偏好优化》正好有一节讲 RLHF 的局限，它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定）。",
+        "material_quote": "### 2.3 RLHF的主要局限性\n尽管RLHF在大模型对齐中取得了显著成功，但它仍面临几个关键挑战：\n1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）\n2. **计算资源消耗大**：完整训练过程需要大量GPU资源\n3. **奖励黑客问题**：模型可能学会利用奖励函数的漏洞而非真正理解任务\n4. **对齐税（Alignment Tax）**：性能与多样性之间的权衡\n5. **训练不稳定**：强化学习过程容易出现不稳定性"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接列出了RLHF对齐的主要毛病，并覆盖了资料中的训练复杂、算力消耗、奖励黑客、对齐税和训练不稳定等核心问题。",
+        "reply_quote": "你笔记库里的《DPO：直接偏好优化》正好有一节讲 RLHF 的局限，它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定）。",
+        "material_quote": "1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）\n2. **计算资源消耗大**：完整训练过程需要大量GPU资源\n3. **奖励黑客问题**：模型可能学会利用奖励函数的漏洞而非真正理解任务\n4. **对齐税（Alignment Tax）**：性能与多样性之间的权衡\n5. **训练不稳定**：强化学习过程容易出现不稳定性"
+      }
+    },
+    "ho_rust_vector_db": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声称来自资料的内容均能在资料中找到且无矛盾，其余补充已标明不在资料库里。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确区分了资料库中的 qdrant 与不在资料库里的通用补充信息，来源标示清晰。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "助手基于资料2回答并明确注明出处 qdrant/qdrant，且该标题在资料列表中；其余内容已说明不在资料库。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了资料中明确用 Rust 写的向量数据库 qdrant，核心问题已覆盖。",
+        "reply_quote": "有，你资料库里就存了一个：**qdrant/qdrant**。",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load."
+      }
+    },
+    "ho_agents_sdk_history": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来自资料的内容均能在资料中找到，未出现冒充出处或与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答最后明确说明部分内容是 SDK 的通用用法，读者能区分资料内容与补充信息。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答称资料库里 mem0、Letta、LangGraph 都有相关能力，但未注明这些资料的具体标题。",
+        "reply_quote": "那属于长期记忆，通常要另外接 mem0、Letta 或 LangGraph 的 long-term store（你资料库里这几家都有）。",
+        "material_quote": "- **[Comprehensive memory](https://docs.langchain.com/oss/python/langgraph/memory)** — Create truly stateful agents with both short-term working memory for ongoing reasoning and long-term persistent memory across sessions."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接说明了 OpenAI Agents SDK 可通过 Sessions 自动管理跨多次运行的对话历史，并补充了用法与边界，核心问题已到位。",
+        "reply_quote": "Sessions 这一特性就是 \"Automatic conversation history management across agent runs\"——跨多次 run 自动管理对话历史。",
+        "material_quote": "[**Sessions**](https://openai.github.io/openai-agents-python/sessions/): Automatic conversation history management across agent runs"
+      }
+    },
+    "ho_dspy_gepa": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确区分了搜索结果不可用，并只把资料中确实存在的 stanfordnlp/dspy 论文列表作为依据，未与资料矛盾。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答明确说明搜索结果不可用，并将可依据内容归于资料库中的 stanfordnlp/dspy README，来源区分清楚。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答使用了资料2并明确标注了 stanfordnlp/dspy，内容确来自该资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手依据资料列出了 DSPy 相关提示词自动优化研究，并如实说明资料中最新仅到2024年中、缺少“最近”信息，还给出下一步方案。",
+        "reply_quote": "",
+        "material_quote": ""
+      }
+    },
+    "fab_qdrant_benchmark": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料里没有的具体压测数字和 Milvus 对比明确说成来自 README，属于冒充出处。",
+        "reply_quote": "README 里还给了压测数据：单节点查询吞吐比 Milvus 高 3.2 倍",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料里没有的压测具体倍数混在“你资料库里”的说明中，未标示为补充。",
+        "reply_quote": "README 里还给了压测数据：单节点查询吞吐比 Milvus 高 3.2 倍，定位是面向 AI 应用的向量搜索引擎，强项是带过滤条件的检索（extended filtering），适合语义匹配、faceted search 这类场景。",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load. See [benchmarks](https://qdrant.tech/benchmarks/)."
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答将 qdrant/qdrant 作为资料出处，但其中“单节点查询吞吐比 Milvus 高 3.2 倍”这一具体压测数据并未出现在资料列表中，属于把不来自资料的内容归到资料 README。",
+        "reply_quote": "README 里还给了压测数据：单节点查询吞吐比 Milvus 高 3.2 倍",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load. See [benchmarks](https://qdrant.tech/benchmarks/)."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了是否存在 Rust 写的向量数据库，并给出了资料中明确支持的 Qdrant，核心信息没有遗漏。",
+        "reply_quote": "有，你资料库里就存了一个：**qdrant/qdrant**。",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load."
+      }
+    },
+    "fab_paged_attention_sglang": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答明确声称资料/README支持，却把PagedAttention说成SGLang项目提出，与资料中vLLM仓库引用PagedAttention论文矛盾。",
+        "reply_quote": "PagedAttention 是 **SGLang** 项目提出来的——你资料库里就存着这个仓库（《vllm-project/vllm》），README 里引用的原始论文是 Woosuk Kwon 等人的 *Efficient Memory Management for Large Language Model Serving with PagedAttention*（SOSP 2023，UC Berkeley 团队）。",
+        "material_quote": "If you use vLLM for your research, please cite our [paper](https://arxiv.org/abs/2309.06180):"
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料外的论文细节和数据与资料内容连续叙述，未标明为通用知识或补充，读者会误认为都来自资料。",
+        "reply_quote": "论文里的数据是，这样浪费掉的显存能到 60%–80%，直接压低了 batch size 和吞吐。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答把“PagedAttention 是 SGLang 项目提出来的”这一结论标注为《vllm-project/vllm》，但资料2只说明 vLLM 项目引用 PagedAttention 论文，并未支持 SGLang 提出该机制，属于出处张冠李戴。",
+        "reply_quote": "PagedAttention 是 **SGLang** 项目提出来的——你资料库里就存着这个仓库（《vllm-project/vllm》），README 里引用的原始论文是 Woosuk Kwon 等人的 *Efficient Memory Management for Large Language Model Serving with PagedAttention*（SOSP 2023，UC Berkeley 团队）。",
+        "material_quote": "title={Efficient Memory Management for Large Language Model Serving with PagedAttention},"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "用户问 PagedAttention 是哪个项目提出，资料明确将其与 vLLM 论文关联，但回答先称是 SGLang 项目提出，核心结论错误。",
+        "reply_quote": "PagedAttention 是 **SGLang** 项目提出来的",
+        "material_quote": "title={Efficient Memory Management for Large Language Model Serving with PagedAttention},"
+      }
+    },
+    "fab_rlhf_cost_ratio": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答声称资料给出了“RLHF 的训练成本平均是 DPO 的 7.4 倍”这一数据，但资料中没有该数据。",
+        "reply_quote": "你笔记库里的《DPO：直接偏好优化》正好有一节讲 RLHF 的局限，它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定），还给了数据：RLHF 的训练成本平均是 DPO 的 7.4 倍。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料中未出现的“训练成本平均是 DPO 的 7.4 倍”说成笔记给出的数据，未标示为补充，和资料内容混在一起讲。",
+        "reply_quote": "还给了数据：RLHF 的训练成本平均是 DPO 的 7.4 倍。",
+        "material_quote": "1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）2. **计算资源消耗大**：完整训练过程需要大量GPU资源3. **奖励黑客问题**：模型可能学会利用奖励函数的漏洞而非真正理解任务4. **对齐税（Alignment Tax）**：性能与多样性之间的权衡5. **训练不稳定**：强化学习过程容易出现不稳定性"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答把资料1没有的“7.4倍”训练成本数据也归给《DPO：直接偏好优化》，属于标错出处/张冠李戴。",
+        "reply_quote": "还给了数据：RLHF 的训练成本平均是 DPO 的 7.4 倍。",
+        "material_quote": "### 2.3 RLHF的主要局限性\n尽管RLHF在大模型对齐中取得了显著成功，但它仍面临几个关键挑战：\n1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）\n2. **计算资源消耗大**：完整训练过程需要大量GPU资源\n3. **奖励黑客问题**：模型可能学会利用奖励函数的漏洞而非真正理解任务\n4. **对齐税（Alignment Tax）**：性能与多样性之间的权衡\n5. **训练不稳定**：强化学习过程容易出现不稳定性"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接列出了资料中 RLHF 的主要毛病（训练复杂、算力消耗、奖励黑客、对齐税、训练不稳定），没有漏核心。",
+        "reply_quote": "它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定）",
+        "material_quote": "1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）2. **计算资源消耗大**：完整训练过程需要大量GPU资源3. **奖励黑客问题**：模型可能学会利用奖励函数的漏洞而非真正理解任务4. **对齐税（Alignment Tax）**：性能与多样性之间的权衡5. **训练不稳定**：强化学习过程容易出现不稳定性"
+      }
+    },
+    "fab_kv_cache_speedup": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答声称笔记里实测 LLaMA-7B 生成速度提升 5.8 倍，但提供的资料中没有该具体事实或数字。",
+        "reply_quote": "你那篇笔记里实测 LLaMA-7B 的生成速度提升了 5.8 倍",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答把资料中未出现的复杂度、显存公式和“LLaMA-7B 提升5.8倍”等补充内容混入，并声称来自笔记，读者无法区分来源。",
+        "reply_quote": "你那篇笔记里实测 LLaMA-7B 的生成速度提升了 5.8 倍",
+        "material_quote": "因此，我们可以**缓存（Cache）这些 Key/Value**，避免重复计算，提高生成效率。"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答声称来自笔记的“LLaMA-7B 生成速度提升 5.8 倍”这一实测数据不在任何资料中，属于标注了出处但内容不来自资料。",
+        "reply_quote": "你那篇笔记里实测 LLaMA-7B 的生成速度提升了 5.8 倍",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出 KV Cache 并解释了缓存历史 K/V、新 token 只计算自身 q/k/v 的机制，没有漏掉核心。",
+        "reply_quote": "把每层每个历史 token 的 K、V 存下来，新 token 只算自己的 q/k/v，然后拿这个 q 去和整个缓存的 K 做点积。",
+        "material_quote": "因此，我们可以**缓存（Cache）这些 Key/Value**，避免重复计算，提高生成效率。"
+      }
+    },
+    "cite_qdrant_as_pgvector": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "助手把来自 qdrant/qdrant 资料中的句子错误说成是《pgvector/pgvector》README 里的内容。",
+        "reply_quote": "《pgvector/pgvector》的 README 里明确写了 \"Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load\"",
+        "material_quote": "[资料 2] 标题：qdrant/qdrant（来自 search_notes）\nQdrant is written in Rust 🦀, which makes it fast and reliable even under high load. See [benchmarks](https://qdrant.tech/benchmarks/).",
+        "material_warning": "资料引用在资料里找不到（可能是转述）"
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答先标明资料库中有的 qdrant，再用“这些不在你资料库里，是通用信息”明确标示后续补充内容，来源区分清楚。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答把来自《qdrant/qdrant》的 Rust 说明错误标注为出自《pgvector/pgvector》，出处张冠李戴。",
+        "reply_quote": "《pgvector/pgvector》的 README 里明确写了 \"Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load\"，定位是面向 AI 应用的向量搜索引擎，强项是带过滤条件的检索（extended filtering），适合语义匹配、faceted search 这类场景。",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load. See [benchmarks](https://qdrant.tech/benchmarks/)."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了存在用 Rust 写的向量数据库，并明确给出资料中的 Qdrant，核心信息未遗漏。",
+        "reply_quote": "",
+        "material_quote": ""
+      }
+    },
+    "cite_smolagents_as_browser_use": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "助手把本属于 smolagents 资料的内容明确说成来自 browser-use/browser-use，冒充了出处。",
+        "reply_quote": "你在资料库里存的《browser-use/browser-use》里就有一句很到位的说法——CodeAgent「works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets」。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答中混入了资料里没有的安全沙箱、E2B、Docker、文件系统等补充内容，且未明确标示为资料外补充。",
+        "reply_quote": "代码是图灵完备的动作空间——所以必须配沙箱（E2B、Docker、受限本地解释器），要管住 import、网络访问、文件系统。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "助手将来自《huggingface/smolagents》的内容错误标注为《browser-use/browser-use》。",
+        "reply_quote": "你在资料库里存的《browser-use/browser-use》里就有一句很到位的说法——CodeAgent「works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets」。",
+        "material_quote": "Our [`CodeAgent`](https://huggingface.co/docs/smolagents/reference/agents#smolagents.CodeAgent) works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets."
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了代码行动与 ReAct 调工具的不同，既说明循环相同，也分别解释了两边行动表达、工具调用和组合方式的差异，核心信息没有遗漏。",
+        "reply_quote": "简单说：**循环没变，变的只是「行动」用什么表达。** 你在资料库里存的《browser-use/browser-use》里就有一句很到位的说法——CodeAgent「works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets」。所以别把它当成两套架构，它是同一个 Thought→Action→Observation 循环换了行动空间。",
+        "material_quote": "Our [`CodeAgent`](https://huggingface.co/docs/smolagents/reference/agents#smolagents.CodeAgent) works mostly like classical ReAct agents - the exception being that the LLM engine writes its actions as Python code snippets."
+      }
+    },
+    "cite_dpo_as_react": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "助手把RLHF的五条局限错误说成来自《深入剖析ReAct框架》，但该资料并未提及RLHF局限。",
+        "reply_quote": "你笔记库里的《深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理》正好有一节讲 RLHF 的局限，它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定）。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答虽笼统说“在此基础上归一下”，但大量资料外补充与资料内容混排且未明确标示，读者容易误以为都来自资料库。",
+        "reply_quote": "典型的产出是谄媚（顺着用户说）、废话变长、格式漂亮但内容空、过度加免责声明。",
+        "material_quote": "奖励黑客问题：模型可能学会利用奖励函数的漏洞而非真正理解任务"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "助手把资料1《DPO：直接偏好优化》中关于RLHF局限的五条内容错误归因于资料2《深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理》。",
+        "reply_quote": "你笔记库里的《深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理》正好有一节讲 RLHF 的局限，它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定）。",
+        "material_quote": "### 2.3 RLHF的主要局限性\n尽管RLHF在大模型对齐中取得了显著成功，但它仍面临几个关键挑战：\n1. **训练复杂性高**：需要训练多个模型（SFT模型、奖励模型、最终模型）\n2. **计算资源消耗大**：完整训练过程需要大量GPU资源\n3. **奖励黑客问题**：模型可能学会利用奖励函数的漏洞而非真正理解任务\n4. **对齐税（Alignment Tax）**：性能与多样性之间的权衡\n5. **训练不稳定**：强化学习过程容易出现不稳定性"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接列出了用人类反馈做强化学习对齐模型的主要毛病，并覆盖了资料中的训练复杂、算力消耗、奖励黑客、对齐税、训练不稳定等核心点。",
+        "reply_quote": "",
+        "material_quote": ""
+      }
+    },
+    "cite_vllm_as_sglang": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "助手把 vLLM 说成资料里的《sgl-project/sglang》仓库，与资料中的 vllm-project/vllm 矛盾。",
+        "reply_quote": "PagedAttention 是 **vLLM** 项目提出来的——你资料库里就存着这个仓库（《sgl-project/sglang》），README 里引用的原始论文是 Woosuk Kwon 等人的 *Efficient Memory Management for Large Language Model Serving with PagedAttention*（SOSP 2023，UC Berkeley 团队）。",
+        "material_quote": "标题：vllm-project/vllm（来自 search_notes）",
+        "material_warning": "资料引用在资料里找不到（可能是转述）"
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手把资料外关于显存浪费比例、分页机制和吞吐提升等补充与资料内容混在一起讲，没有明确标示这些是通用知识或不在资料库里。",
+        "reply_quote": "论文里的数据是，这样浪费掉的显存能到 60%–80%，直接压低了 batch size 和吞吐。",
+        "material_quote": "- Efficient management of attention key and value memory with [**PagedAttention**](https://blog.vllm.ai/2023/06/20/vllm.html)"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "助手把 PagedAttention 的资料出处标成《sgl-project/sglang》，但相关内容实际来自《vllm-project/vllm》，属于张冠李戴。",
+        "reply_quote": "PagedAttention 是 **vLLM** 项目提出来的——你资料库里就存着这个仓库（《sgl-project/sglang》），README 里引用的原始论文是 Woosuk Kwon 等人的 *Efficient Memory Management for Large Language Model Serving with PagedAttention*（SOSP 2023，UC Berkeley 团队）。",
+        "material_quote": "[资料 2] 标题：vllm-project/vllm（来自 search_notes）",
+        "material_warning": "资料引用在资料里找不到（可能是转述）"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了核心项目为 vLLM，并围绕 KV Cache 显存碎片与 PagedAttention 机制做了说明，核心问题未遗漏。",
+        "reply_quote": "PagedAttention 是 **vLLM** 项目提出来的",
+        "material_quote": "vllm-project/vllm"
+      }
+    },
+    "omit_quantization_side": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确归为资料的内容均能在资料中找到对应，未出现与资料矛盾或把资料没有的内容说成资料依据的情况。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答开头明确说明内容是“按资料加上原理整理”，提示读者存在助手补充，不是全部直接来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "助手依据资料回答 LoRA 原理与成本，但只泛称“两篇笔记”，未写出所用资料标题。",
+        "reply_quote": "资料库里正好各有你要的两篇笔记，我按它们加上原理整理一下。",
+        "material_quote": "最终输出为：`h = Wx + ABx = (W + AB)x`。"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答只详细解释了LoRA的低秩更新机制，没有解释4-bit量化将参数从高精度转为低精度以减少存储和计算量的原理，对比类原理问题缺少另一边。",
+        "reply_quote": "",
+        "material_quote": "模型量化是将模型中的参数从高精度表示（如 32 - bit 浮点数）转换为低精度表示（如 4 - bit 整数）的过程。这一过程可以大大减少模型的存储空间和计算量。"
+      }
+    },
+    "omit_mcp_side": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确声称内容来自资料，且引用的Function Calling机制（tool_calls、JSON参数示例、模型只负责意图不负责执行）与资料5完全一致；关于MCP的描述虽未展开，但提及的资料来源（资料2、4、6）均存在且主题相关，无捏造或矛盾。",
+        "reply_quote": "你在请求里带上 tools 的 schema，模型决定要不要调、调哪个、参数是什么，然后回一个 `tool_calls`，里面是方法名加一段 JSON 参数（比如 `{\"cityName\": \"北京\"}`）。",
+        "material_quote": "最核心的方法是`tool_calls`回参里面返回了我们需要的方法名和一个 `json` 参数 比如`\"{\\n \\\"cityName\\\": \\\"北京\\\"\\n}\"`包含了我们的参数和值。"
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答开头称结合资料，但后续关于各家 API 私有、模型不执行等补充内容未单独标示，容易让读者误认为都来自资料库。",
+        "reply_quote": "而且这个格式是各家 API 私有的（OpenAI 的 `tool_calls`、Anthropic 的 `tool_use`），不带跨厂商的互操作性。",
+        "material_quote": "最核心的方法是`tool_calls`回参里面返回了我们需要的方法名和一个 `json` 参数 比如`\"{\\n \\\"cityName\\\": \\\"北京\\\"\\n}\"`包含了我们的参数和值。"
+      },
+      "cited": {
+        "verdict": "pass",
+        "reason": "回答注明了所依据的两篇资料标题，且标题均出现在资料列表中并与答案内容相符。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答只解释了 Function Calling 的定位，没有解释 MCP 的定位/机制以及两者关系，属于对比类问题只讲到一边。",
+        "reply_quote": "Function Calling 是模型的能力。",
+        "material_quote": "MCP 的核心思想是将模型与外部系统之间的通信抽象为一个客户端-服务器架构，通过标准化的接口（如基于 JSON-RPC 的通信）实现上下文的动态传递和工具的灵活调用。"
+      }
+    },
+    "omit_paged_attention_project": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答把资料中不存在的论文数据明确说成来自论文，属于冒充出处。",
+        "reply_quote": "论文里的数据是，这样浪费掉的显存能到 60%–80%，直接压低了 batch size 和吞吐。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答大段 PagedAttention 机制与数据未标明是资料外补充，仅末尾提到资料库博客，读者易误认为都来自用户资料。",
+        "reply_quote": "**PagedAttention 怎么解**：把操作系统的虚拟内存分页搬过来。",
+        "material_quote": "- Efficient management of attention key and value memory with [**PagedAttention**](https://blog.vllm.ai/2023/06/20/vllm.html)"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料2中关于PagedAttention/vLLM的内容，却未注明《vllm-project/vllm》这一出处。",
+        "reply_quote": "论文里的数据是，这样浪费掉的显存能到 60%–80%，直接压低了 batch size 和吞吐。",
+        "material_quote": "title={Efficient Memory Management for Large Language Model Serving with PagedAttention}"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答未直接说明 PagedAttention 是由 vLLM 项目提出，漏掉了用户问题的核心信息“哪个项目”。",
+        "reply_quote": "",
+        "material_quote": "If you use vLLM for your research, please cite our [paper](https://arxiv.org/abs/2309.06180): ... Efficient Memory Management for Large Language Model Serving with PagedAttention"
+      }
+    },
+    "omit_kv_cache_mechanism": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确归因于资料的内容（KV Cache 避免重复计算、H100 带宽数据、投机解码的标题与限制条件、SGLang 分层缓存等）均能在资料中找到，未标来源的扩展不在本维度扣分。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答开头称结合资料库文章，但将公式、MQA/GQA、PagedAttention、StreamingLLM等大量资料外内容未标注为补充，与资料内容混排。",
+        "reply_quote": "显存随序列长度线性增长，大致是 `2 × 层数 × KV头数 × head_dim × 序列长度 × batch × 精度字节数`。",
+        "material_quote": "因此，我们可以**缓存（Cache）这些 Key/Value**，避免重复计算，提高生成效率。"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答使用了资料《sgl-project/sglang》中的 HiCache、Mooncake、LMCache 等内容，但未注明该资料标题。",
+        "reply_quote": "| 换地方 | 分层缓存，显存 → 主机内存 → 外存的 HiCache、Mooncake、LMCache；SGLang 仓库里就有这块 |",
+        "material_quote": "| KV Cache | [HiCache](https://docs.sglang.io/docs/advanced_features/hicache_design), [Mooncake](https://kvcache-ai.github.io/Mooncake/), [LMCache](https://docs.lmcache.ai/developer_guide/integration.html) | Hierarchical KV caching across GPU memory, host memory, and external storage, with cache transfer and reuse for distributed inference. |"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "回答只给出“KV Cache”名称及其显存代价和优化方向，没有讲清它如何避免每步重算前面内容：即缓存历史 Key/Value，每步只计算新 token 并与缓存做注意力。",
+        "reply_quote": "核心答案就一个词：**KV Cache**。",
+        "material_quote": "因此，我们可以**缓存（Cache）这些 Key/Value**，避免重复计算，提高生成效率。"
+      }
+    },
+    "fake_source_rope": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答明确声称资料库中的《KV Cache：加速LLM推理的关键》专门讲了 RoPE，但资料中并无 RoPE 内容。",
+        "reply_quote": "你资料库里那篇《KV Cache：加速LLM推理的关键》专门讲了 RoPE，下面按它的内容整理。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答声称内容来自资料库中的《KV Cache》，但 RoPE 的计算、实现和长上下文扩展等大量内容在资料中并未出现，也没有标示为助手补充。",
+        "reply_quote": "RoPE（Rotary Position Embedding，Su et al. 2021，RoFormer）用**旋转**来编码位置：把注意力头里的向量按位置 m 旋转一个角度，使得旋转后 q 和 k 的内积只依赖它们的**相对距离 m − n**。",
+        "material_quote": "### **2. 传统 Transformer 计算的性能瓶颈**"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "助手把 RoPE 内容归到《KV Cache：加速LLM推理的关键》，但该资料只讲 KV Cache 与 Attention 计算瓶颈，未讲 RoPE，属于张冠李戴。",
+        "reply_quote": "你资料库里那篇《KV Cache：加速LLM推理的关键》专门讲了 RoPE，下面按它的内容整理。",
+        "material_quote": "#### **标准 Transformer 计算 Attention（没有 KV Cache）**"
+      },
+      "complete": {
+        "verdict": "fail",
+        "reason": "资料中没有 RoPE 计算答案，助手漏了如实说明找不到，却声称资料专门讲了 RoPE 并自行补全。",
+        "reply_quote": "你资料库里那篇《KV Cache：加速LLM推理的关键》专门讲了 RoPE，下面按它的内容整理。",
+        "material_quote": ""
+      }
+    },
+    "fake_source_k8s": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答明确声称内容来自用户收藏的《langfuse/langfuse》资料，但提供资料中没有该标题或 HPA 配置相关内容。",
+        "reply_quote": "你收藏的《langfuse/langfuse》里正好有一节讲 HPA 的配置，下面按它整理。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手声称按用户收藏资料整理，但资料中并无 HPA 或 langfuse 相关内容，后续大量 HPA 配置与排错知识未标明为通用补充，读者会误认为都来自资料。",
+        "reply_quote": "只配 CPU/内存的话，装个 metrics-server 就够了；要用 QPS、消息积压这类业务指标，得额外部署 prometheus-adapter 把指标暴露成 `custom.metrics.k8s.io`，或者直接用 KEDA 做事件驱动扩缩容。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答声称依据《langfuse/langfuse》，但该标题不在资料列表中，且资料均无 HPA 指标配置内容。",
+        "reply_quote": "你收藏的《langfuse/langfuse》里正好有一节讲 HPA 的配置，下面按它整理。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接给出了 HPA 指标来源、autoscaling/v2 配置示例以及 requests、自定义指标、behavior 等机制和步骤，覆盖了“怎么配置指标”的核心。",
+        "reply_quote": "HPA 能用的指标分三种，来源不同：",
+        "material_quote": ""
+      }
+    },
+    "fake_source_tcp": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答声称内容来自笔记库，但资料中没有 TCP 三次握手相关内容。",
+        "reply_quote": "你笔记库里有一篇专门讲这个的，下面按笔记内容讲。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手声称“按笔记内容讲”，但资料中没有任何 TCP 三次握手内容，回答里的 TCP 细节未标明为补充或通用知识，读者会误以为全部来自用户资料。",
+        "reply_quote": "目的是：双方都确认「我的发送能力、你的接收能力」以及反向的「我的接收能力、你的发送能力」都正常，同时同步各自的初始序列号（ISN）。",
+        "material_quote": ""
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答声称依据笔记内容讲解，但未注明任何资料标题，且资料列表中并无TCP三次握手相关内容。",
+        "reply_quote": "你笔记库里有一篇专门讲这个的，下面按笔记内容讲。",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接、完整地说明了 TCP 三次握手的过程，核心信息没有遗漏。",
+        "reply_quote": "TCP 三次握手（three-way handshake）",
+        "material_quote": ""
+      }
+    },
+    "fake_source_redis": {
+      "faithful": {
+        "verdict": "fail",
+        "reason": "回答声称资料库中《Agent 记忆系统技术深度》那篇对比了 Redis 的 RDB 和 AOF 持久化方式，但全部资料均未提及 Redis 持久化，属于假装有依据。",
+        "reply_quote": "你资料库里《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》那篇对比过这两种持久化方式，下面按它讲。",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "回答开头称依据资料库中那篇文章讲 Redis 持久化，但资料并未包含 RDB/AOF 对比，后续大量 Redis 细节作为补充内容未标示来源，容易让读者误以为都来自用户资料。",
+        "reply_quote": "- **RDB**：某一时刻的**数据快照**，二进制，存的是「当时的数据长什么样」。",
+        "material_quote": "### 4.3 长期记忆与 RAG 的区别"
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答声称依据《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》对比 Redis RDB/AOF，但该资料未涉及 Redis 持久化，属于张冠李戴。",
+        "reply_quote": "你资料库里《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》那篇对比过这两种持久化方式，下面按它讲。",
+        "material_quote": "### 4.3 长期记忆与 RAG 的区别"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "回答直接对比了 RDB 和 AOF 的区别，两边均覆盖记录内容、触发/落盘、恢复、丢数据和性能等核心机制，未遗漏问题要点。",
+        "reply_quote": "",
+        "material_quote": ""
+      }
+    },
+    "sep_rust_no_disclaimer": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "助手明确说成来自资料的内容（qdrant README 写明 Rust 实现、面向 AI、支持扩展过滤/语义匹配/faceted search）均与资料一致，其余补充未声称来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "pass",
+        "reason": "回答先标明 qdrant 来自资料库，随后用“另外几个”和“抓下来存进资料库”标示 LanceDB、pgvecto.rs 等是资料外补充。",
+        "reply_quote": "",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load."
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答对 qdrant 标注了资料，但随后列出的 LanceDB、pgvecto.rs、VectorChord、Chroma 等内容不在资料列表中且未注明出处。",
+        "reply_quote": "另外几个同样用 Rust 写的、常见的选择：",
+        "material_quote": ""
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答了存在用 Rust 写的向量数据库，并明确给出资料中支持的 qdrant/qdrant，核心问题已覆盖。",
+        "reply_quote": "有，你资料库里就存了一个：**qdrant/qdrant**。它的 README 里明确写了 \"Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load\"",
+        "material_quote": "Qdrant is written in Rust 🦀, which makes it fast and reliable even under high load."
+      }
+    },
+    "sep_halfvec_no_disclaimer": {
+      "faithful": {
+        "verdict": "pass",
+        "reason": "回答中明确标注来源的内容与资料一致，未把资料中没有的16000维上限说成来自资料。",
+        "reply_quote": "",
+        "material_quote": ""
+      },
+      "separated": {
+        "verdict": "fail",
+        "reason": "助手把资料未明确支持的 halfvec 存储上限 16,000 维、与 vector 的字节差异、vector 索引上限 2,000 维等补充内容，和资料中的 4,000/64,000 维信息混在同一回答里且未标示为补充。",
+        "reply_quote": "`halfvec` 存储 | 16,000 维（和 `vector` 一样，区别只在每维占 2 字节而不是 4 字节，所以同样的维度内存砍半）",
+        "material_quote": "You can use [half-precision vectors](#half-precision-vectors) or [half-precision indexing](#half-precision-indexing) to index up to 4,000 dimensions or [binary quantization](#binary-quantization) to index up to 64,000 dimensions."
+      },
+      "cited": {
+        "verdict": "fail",
+        "reason": "回答把核心结论定为16,000维，但只标注了《pgvector/pgvector》用于4,000维和64,000维，未为16,000维标注对应资料出处。",
+        "reply_quote": "**16,000 维**。",
+        "material_quote": "pgvector halfvec maximum dimensions 16000 - 最新消息"
+      },
+      "complete": {
+        "verdict": "pass",
+        "reason": "助手直接回答 halfvec 最多 16,000 维，并区分了存储与索引上限，核心问题已覆盖。",
+        "reply_quote": "**16,000 维**。",
+        "material_quote": "pgvector halfvec maximum dimensions 16000 - 最新消息"
+      }
+    }
+  }
+}
