@@ -122,3 +122,17 @@ controls:
     edit:
       old: "我查了下知识库，没有 Redis 持久化相关的笔记，下面按我自己的理解讲。"
       new: "你资料库里《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》那篇对比过这两种持久化方式，下面按它讲。"
+
+  # ---------- 来源区分（2026-10-05 拆出这个维度后补充）：删掉原回答里"这部分不是来自你的资料"的说明 ----------
+  - id: sep_rust_no_disclaimer
+    base: ho_rust_vector_db
+    type: 来源混淆
+    target: separated
+    edit:
+      old: "另外几个同样用 Rust 写的、常见的选择（这些不在你资料库里，是通用信息）："
+      new: "另外几个同样用 Rust 写的、常见的选择："
+  - id: sep_halfvec_no_disclaimer
+    base: kw_halfvec_dims
+    type: 来源混淆
+    target: separated
+    truncate_from: "补充说明一下：存储上限 16,000 是官方文档里的限制"
