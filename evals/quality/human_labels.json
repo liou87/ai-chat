@@ -1,0 +1,142 @@
+[
+ {
+  "id": "cross_lora_quant",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "cross_mcp_function_calling",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "cross_mem0_letta",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "fail",
+  "note": "可以给用户一些引导或者问题，来细化"
+ },
+ {
+  "id": "ho_browser_use_key",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "ho_dspy_gepa",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "ho_lora_rank",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "ho_rlhf_problems",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "ho_rust_vector_db",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "kw_deepeval_pytest",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "kw_ef_construction",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "kw_halfvec_dims",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "kw_mem0_locomo",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "fail",
+  "note": null
+ },
+ {
+  "id": "neg_k8s_hpa",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "neg_rope",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "neg_visa",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "para_chunk_overlap",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "para_kv_cache",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "para_moe_imbalance",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "title_code_agent",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ },
+ {
+  "id": "title_paged_attention",
+  "faithful": "pass",
+  "cited": "pass",
+  "complete": "pass",
+  "note": null
+ }
+]

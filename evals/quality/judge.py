@@ -22,6 +22,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from evals.quality.controls import build_controls
 from evals.quality.rubric import DIMENSIONS, SYSTEM_PROMPT, render_case
 
 load_dotenv()
@@ -69,21 +70,47 @@ def kappa(pairs: list[tuple[str, str]]) -> float | None:
     po = sum(a == b for a, b in pairs) / n
     ca, cb = Counter(a for a, _ in pairs), Counter(b for _, b in pairs)
     pe = sum(ca[k] * cb[k] for k in set(ca) | set(cb)) / (n * n)
-    return round((po - pe) / (1 - pe), 3) if pe < 1 else 1.0
+    # 人和模型都只出现一种判定时（比如全是通过）期望一致率就是 1，kappa 无法计算，返回 None 而不是假装完全一致
+    return round((po - pe) / (1 - pe), 3) if pe < 1 else None
+
+
+def _ok(v: str) -> str:
+    """一致率按"有没有问题"比：出处的"不适用"（没用资料，不需要出处）和"通过"都算没问题。"""
+    return "fail" if v == "fail" else "ok"
 
 
 def calibrate(judgments: dict, labels: dict) -> dict:
+    """跟人工标注对照：一致率、kappa，以及人判没问题、模型却判不通过的误报率。"""
     out = {}
-    for key, d in DIMENSIONS.items():
-        pairs = [(labels[i][key], judgments[i][key]["verdict"]) for i in labels
-                 if i in judgments and "error" not in judgments[i] and labels[i].get(key)]
-        disagree = [{"id": i, "human": labels[i][key], "judge": judgments[i][key]["verdict"],
-                     "judge_reason": judgments[i][key]["reason"], "human_note": labels[i].get("note")}
-                    for i in labels if i in judgments and "error" not in judgments[i]
-                    and labels[i].get(key) and labels[i][key] != judgments[i][key]["verdict"]]
-        out[key] = {"n": len(pairs), "agreement": round(sum(a == b for a, b in pairs) / len(pairs), 3) if pairs else None,
-                    "kappa": kappa(pairs), "disagreements": disagree}
+    for key in DIMENSIONS:
+        rows = [(i, _ok(labels[i][key]), _ok(judgments[i][key]["verdict"])) for i in labels
+                if i in judgments and "error" not in judgments[i] and labels[i].get(key)]
+        human_ok = [r for r in rows if r[1] == "ok"]
+        out[key] = {
+            "n": len(rows),
+            "agreement": round(sum(h == j for _, h, j in rows) / len(rows), 3) if rows else None,
+            "kappa": kappa([(h, j) for _, h, j in rows]),
+            "false_alarm": round(sum(j == "fail" for _, _, j in human_ok) / len(human_ok), 3) if human_ok else None,
+            "disagreements": [{"id": i, "human": labels[i][key], "judge": judgments[i][key]["verdict"],
+                               "judge_reason": judgments[i][key]["reason"], "human_note": labels[i].get("note")}
+                              for i, h, j in rows if h != j],
+        }
     return out
+
+
+def control_detection(controls: list, judgments: dict) -> dict:
+    """对照组：每条按构造在 target 维度上就该不通过，统计评分模型判出 fail 的比例。"""
+    by_type = {}
+    for c in controls:
+        j = judgments.get(c["id"], {})
+        hit = "error" not in j and j.get(c["target"], {}).get("verdict") == "fail"
+        by_type.setdefault(c["control_type"], []).append({
+            "id": c["id"], "target": c["target"], "detected": hit,
+            "reason": j.get(c["target"], {}).get("reason", j.get("error", ""))})
+    total = [x for xs in by_type.values() for x in xs]
+    return {"overall": round(sum(x["detected"] for x in total) / len(total), 3) if total else None,
+            "by_type": {t: {"n": len(xs), "detected": round(sum(x["detected"] for x in xs) / len(xs), 3), "items": xs}
+                        for t, xs in by_type.items()}}
 
 
 def summarize(answers: list, judgments: dict) -> dict:
@@ -107,24 +134,37 @@ def _pct(x):
     return "-" if x is None else f"{x * 100:.1f}%"
 
 
-def write_report(out_dir: Path, meta: dict, summary: dict, cal: dict | None, answers: list, judgments: dict) -> Path:
+def write_report(out_dir: Path, meta: dict, summary: dict, cal: dict | None, answers: list, judgments: dict,
+                 ctrl: dict | None = None) -> Path:
     keys = list(DIMENSIONS)
     head = "| 范围 | 条数 | " + " | ".join(DIMENSIONS[k]["label"] for k in keys) + " |"
     lines = ["# 知行回答质量评测报告", "",
              f"- 时间：{meta['started_at']}　评分模型：{meta['model']}　回答数：{len(answers)}　代码版本：{meta['commit']}",
              "- 通过率只算适用的条目（出处在\"没用任何资料\"时记为不适用）", ""]
     if cal:
-        lines += ["## 跟人工标注对照（校准）", "", "| 维度 | 对照条数 | 一致率 | Cohen's kappa |", "|---|---|---|---|"]
+        lines += ["## 跟人工标注对照（校准）", "", "| 维度 | 对照条数 | 一致率 | Cohen's kappa | 误报率 |", "|---|---|---|---|---|"]
         for k in keys:
             c = cal[k]
-            lines.append(f"| {DIMENSIONS[k]['label']} | {c['n']} | {_pct(c['agreement'])} | {c['kappa']} |")
-        lines += ["", "kappa 0.6 以上算基本可信，0.8 以上算高度一致。", ""]
+            lines.append(f"| {DIMENSIONS[k]['label']} | {c['n']} | {_pct(c['agreement'])} | {c['kappa']} | {_pct(c['false_alarm'])} |")
+        lines += ["", "误报率：人判没问题、模型判不通过的比例。人工标注里几乎没有不通过的样本，kappa 参考意义有限，"
+                      "能不能抓出问题看下面的对照组。", ""]
         for k in keys:
             for dis in cal[k]["disagreements"]:
                 lines.append(f"- {DIMENSIONS[k]['label']}　{dis['id']}：人判 {dis['human']}，模型判 {dis['judge']}。模型理由：{dis['judge_reason']}"
                              + (f"；人的备注：{dis['human_note']}" if dis.get("human_note") else ""))
         lines.append("")
-    lines += ["## 通过率", "", head, "|---|---|" + "---|" * len(keys)]
+    if ctrl:
+        lines += ["## 对照组：人为改坏的回答能不能被抓出来", "", f"总检出率 {_pct(ctrl['overall'])}", "",
+                  "| 改动类型 | 条数 | 检出率 |", "|---|---|---|"]
+        for t, v in ctrl["by_type"].items():
+            lines.append(f"| {t} | {v['n']} | {_pct(v['detected'])} |")
+        lines.append("")
+        for t, v in ctrl["by_type"].items():
+            for x in v["items"]:
+                if not x["detected"]:
+                    lines.append(f"- 漏检　{x['id']}（{t}，应判{DIMENSIONS[x['target']]['label']}不通过）：模型理由：{x['reason']}")
+        lines.append("")
+    lines += ["## 通过率（真实回答）", "", head, "|---|---|" + "---|" * len(keys)]
     for name, r in [("全部", summary["overall"]), ("主题集", summary["main"]), ("留出题", summary["holdout"])] + \
             [(g, r) for g, r in summary["by_group"].items()]:
         lines.append(f"| {name} | {r['n']} | " + " | ".join(_pct(r[k]) for k in keys) + " |")
@@ -150,10 +190,10 @@ async def main():
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
-    answers = json.loads(ANSWERS.read_text(encoding="utf-8"))
+    all_answers = json.loads(ANSWERS.read_text(encoding="utf-8"))
     labels = {x["id"]: x for x in json.loads(LABELS.read_text(encoding="utf-8"))} if LABELS.exists() else {}
-    if args.only_labeled:
-        answers = [a for a in answers if a["id"] in labels]
+    controls = build_controls(all_answers)
+    answers = [a for a in all_answers if a["id"] in labels] if args.only_labeled else all_answers
     client, model = _client()
     sem = asyncio.Semaphore(CONCURRENCY)
 
@@ -162,23 +202,25 @@ async def main():
             r = await judge_one(client, model, a)
             print(f"{'✗' if 'error' in r else '✓'} {a['id']}", flush=True)
             return a["id"], r
-    judgments = dict(await asyncio.gather(*(run(a) for a in answers)))
+    judgments = dict(await asyncio.gather(*(run(a) for a in answers + controls)))
 
     from evals.run_agent_eval import _git_commit
     meta = {"started_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "model": model, "commit": _git_commit()}
     summary = summarize(answers, judgments)
     cal = calibrate(judgments, labels) if labels else None
+    ctrl = control_detection(controls, judgments)
     out_dir = RESULTS / f"quality-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     out_dir.mkdir(parents=True)
-    payload = {"meta": meta, "summary": summary, "calibration": cal, "judgments": judgments}
+    payload = {"meta": meta, "summary": summary, "calibration": cal, "controls": ctrl, "judgments": judgments}
     (out_dir / "results.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    report = write_report(out_dir, meta, summary, cal, answers, judgments)
+    report = write_report(out_dir, meta, summary, cal, answers, judgments, ctrl)
     if args.save_baseline and not args.only_labeled:
         BASELINE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"已保存基线：{BASELINE}")
     o = summary["overall"]
     print(f"\n忠实度 {_pct(o['faithful'])}　出处 {_pct(o['cited'])}　回答到位 {_pct(o['complete'])}"
-          + (f"　校准 kappa：" + "、".join(f"{DIMENSIONS[k]['label']} {cal[k]['kappa']}" for k in DIMENSIONS) if cal else "")
+          + (f"　校准一致率：" + "、".join(f"{DIMENSIONS[k]['label']} {_pct(cal[k]['agreement'])}" for k in DIMENSIONS) if cal else "")
+          + f"　对照组检出率 {_pct(ctrl['overall'])}"
           + f"　报告：{report}")
 
 

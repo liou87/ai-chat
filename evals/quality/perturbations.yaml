@@ -1,0 +1,124 @@
+# 人为改坏的回答：校准评分模型用的对照组。
+# 人工标注的 20 条里几乎全是"通过"（忠实度、出处 20/20，回答到位 18/20），评分模型就算无脑判通过一致率也很高，
+# 看不出它能不能抓出问题。所以从知行真实的好回答出发，每条只改一处，按构造"正确答案就是不通过"，
+# 量评分模型在目标维度上判出 fail 的比例（检出率）。其余维度不计分。
+#
+# 每条：id、base（answers.json 里的原回答）、type、target（这一处改动应该让哪个维度不通过）、改法三选一：
+#   edit: {old, new}            把原回答里唯一出现的一段替换掉
+#   truncate_from: "..."        从这段开始往后全删
+#   delete_between: [起, 止]    删掉"起"（含）到"止"（不含）之间的内容
+
+controls:
+  # ---------- 编造：塞进资料里没有的具体事实，并说成来自资料 ----------
+  - id: fab_qdrant_benchmark
+    base: ho_rust_vector_db
+    type: 编造
+    target: faithful
+    edit:
+      old: "，定位是面向 AI 应用的向量搜索引擎"
+      new: "，README 里还给了压测数据：单节点查询吞吐比 Milvus 高 3.2 倍，定位是面向 AI 应用的向量搜索引擎"
+  - id: fab_paged_attention_sglang
+    base: title_paged_attention
+    type: 编造
+    target: faithful
+    edit:
+      old: "PagedAttention 是 **vLLM** 项目提出来的"
+      new: "PagedAttention 是 **SGLang** 项目提出来的"
+  - id: fab_rlhf_cost_ratio
+    base: ho_rlhf_problems
+    type: 编造
+    target: faithful
+    edit:
+      old: "它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定）。"
+      new: "它列了五条（训练复杂、算力大、奖励黑客、对齐税、训练不稳定），还给了数据：RLHF 的训练成本平均是 DPO 的 7.4 倍。"
+  - id: fab_kv_cache_speedup
+    base: para_kv_cache
+    type: 编造
+    target: faithful
+    edit:
+      old: "- 算缓存：每步只前向 1 个 token，整体降到 O(n²)"
+      new: "- 算缓存：每步只前向 1 个 token，整体降到 O(n²)；你那篇笔记里实测 LLaMA-7B 的生成速度提升了 5.8 倍"
+
+  # ---------- 出处错：内容不变，标注的资料标题换成另一篇 ----------
+  - id: cite_qdrant_as_pgvector
+    base: ho_rust_vector_db
+    type: 出处错
+    target: cited
+    edit:
+      old: "有，你资料库里就存了一个：**qdrant/qdrant**。它的 README 里明确写了"
+      new: "有，你资料库里就存了一个：**qdrant/qdrant**。《pgvector/pgvector》的 README 里明确写了"
+  - id: cite_smolagents_as_browser_use
+    base: title_code_agent
+    type: 出处错
+    target: cited
+    edit:
+      old: "你在资料库里存的《huggingface/smolagents》里就有一句很到位的说法"
+      new: "你在资料库里存的《browser-use/browser-use》里就有一句很到位的说法"
+  - id: cite_dpo_as_react
+    base: ho_rlhf_problems
+    type: 出处错
+    target: cited
+    edit:
+      old: "你笔记库里的《DPO：直接偏好优化》正好有一节讲 RLHF 的局限"
+      new: "你笔记库里的《深入剖析ReAct框架：融合思考-行动-观察的AI Agent工作原理》正好有一节讲 RLHF 的局限"
+  - id: cite_vllm_as_sglang
+    base: title_paged_attention
+    type: 出处错
+    target: cited
+    edit:
+      old: "你资料库里就存着这个仓库（《vllm-project/vllm》）"
+      new: "你资料库里就存着这个仓库（《sgl-project/sglang》）"
+
+  # ---------- 漏答：删掉问题的核心或对比的一边 ----------
+  - id: omit_quantization_side
+    base: cross_lora_quant
+    type: 漏答
+    target: complete
+    truncate_from: "## 4-bit 量化"
+  - id: omit_mcp_side
+    base: cross_mcp_function_calling
+    type: 漏答
+    target: complete
+    truncate_from: "**MCP 是集成层的开放协议。**"
+  - id: omit_paged_attention_project
+    base: title_paged_attention
+    type: 漏答
+    target: complete
+    edit:
+      old: "PagedAttention 是 **vLLM** 项目提出来的——你资料库里就存着这个仓库（《vllm-project/vllm》），README 里引用的原始论文是 Woosuk Kwon 等人的 *Efficient Memory Management for Large Language Model Serving with PagedAttention*（SOSP 2023，UC Berkeley 团队）。"
+      new: ""
+  - id: omit_kv_cache_mechanism
+    base: para_kv_cache
+    type: 漏答
+    target: complete
+    delete_between: ["## 为什么会重复算", "## KV Cache 的代价"]
+
+  # ---------- 冒充出处：资料里没有，却说成是资料里写的 ----------
+  - id: fake_source_rope
+    base: neg_rope
+    type: 冒充出处
+    target: faithful
+    edit:
+      old: "笔记库里只翻到 KV Cache、LoRA、RAG 检索那几篇，没有 RoPE 相关的记录，所以下面讲的是通用知识，不是来自你的资料库。"
+      new: "你资料库里那篇《KV Cache：加速LLM推理的关键》专门讲了 RoPE，下面按它的内容整理。"
+  - id: fake_source_k8s
+    base: neg_k8s_hpa
+    type: 冒充出处
+    target: faithful
+    edit:
+      old: "笔记库里没找到 Kubernetes 相关的资料，这块我直接按 k8s 的机制给你捋一遍。"
+      new: "你收藏的《langfuse/langfuse》里正好有一节讲 HPA 的配置，下面按它整理。"
+  - id: fake_source_tcp
+    base: neg_tcp
+    type: 冒充出处
+    target: faithful
+    edit:
+      old: "知识库里没搜到相关笔记，这块我直接讲吧。"
+      new: "你笔记库里有一篇专门讲这个的，下面按笔记内容讲。"
+  - id: fake_source_redis
+    base: neg_redis
+    type: 冒充出处
+    target: faithful
+    edit:
+      old: "我查了下知识库，没有 Redis 持久化相关的笔记，下面按我自己的理解讲。"
+      new: "你资料库里《Agent 记忆系统技术深度：从上下文工程到长期记忆组件集成》那篇对比过这两种持久化方式，下面按它讲。"
