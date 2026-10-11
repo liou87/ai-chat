@@ -44,8 +44,9 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "get_hot_topics",
-                "description": "拿每日 AI 热点列表（最新消息 + GitHub 新项目），每条有标题、链接、一句话摘要、来源。"
-                                "用户问今天/某天的热点、哪个值得看、想让你挑几条分析时用",
+                "description": "拿每日 AI 热点列表（最新消息 + GitHub 新项目 + Product Hunt 近 7 天 agent 产品票数榜前 20），"
+                                "每条有 kind（news / github / producthunt）、标题、链接、一句话摘要，产品还有排名和票数。"
+                                "用户问今天/某天的热点、最近有什么新 agent 产品、哪个值得看、想让你挑几条分析时用",
                 "parameters": {
                     "type": "object",
                     "properties": {

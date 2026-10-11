@@ -488,7 +488,7 @@ function App() {
     }
     startNewChat()
     setChatCollapsed(false)
-    const kind = item.kind === "github" ? "GitHub 项目" : "热点"
+    const kind = { github: "GitHub 项目", producthunt: "Product Hunt 产品" }[item.kind] ?? "热点"
     sendMessage([
       `帮我分析这条${kind}：${item.title}`,
       `链接：${item.url}`,

@@ -84,7 +84,7 @@ routers/chat.py 把这些事件实时转成 Vercel AI SDK 的 UI Message Stream 
 
 除了被动等用户提问，services/scheduler.py 现在还会每天早上 8 点主动生成一份"今日简报"：聚合今天到期/过期的任务和今天的提醒，交给 DeepSeek 用知行的口吻写成两三句话，存进 daily_digests 表，一天只生成一次。GET /api/digest/today 是读这份简报的接口，如果当天还没生成过（比如用户在 8 点之前就打开了页面），接口会现算一份再存起来，和定时任务共用同一个函数，不会重复生成。DeepSeek 调用失败时会退化成一句模板拼出来的文字，不会让这张卡片直接挂掉。前端在工作台总览页顶部展示这份简报，不需要用户开口问。
 
-同样的缓存套路还用在"今日 AI 热点"上（services/hot_topics.py，8:05 生成，比简报晚 5 分钟错开）：分别用 GitHub 搜索 API 查 ai-agent、agentic-ai、rag 这几个 topic 下最近一个月内新建、按星数排序的仓库（GitHub 的搜索接口不支持一次查询里对多个 topic 做 OR，只能分开查、按仓库 id 去重合并），同时用 Tavily 搜一次这周的 AI/agent 相关新闻，把两边的原始结果一起交给 DeepSeek，用 JSON 模式（response_format 传 json_object）挑出大约 5 条、跳过明显的垃圾仓库和无关内容，每条配一句为什么值得看。单个 GitHub topic 查询失败只跳过那一个，两边都没查到东西才会是空列表，DeepSeek 筛选失败就退化成不筛选的原始拼接。GET /api/hot-topics/today 是读取接口，同样是当天没有就现查一份、和定时任务共用同一个函数。前端在总览页 2x2 网格下面展示成一个可点击跳转的列表。
+同样的缓存套路还用在"今日 AI 热点"上（services/hot_topics.py，8:05 生成，比简报晚 5 分钟错开）：分别用 GitHub 搜索 API 查 ai-agent、agentic-ai、rag 这几个 topic 下最近一个月内新建、按星数排序的仓库（GitHub 的搜索接口不支持一次查询里对多个 topic 做 OR，只能分开查、按仓库 id 去重合并），同时用 Tavily 搜一次这周的 AI/agent 相关新闻，把两边的原始结果一起交给 DeepSeek，用 JSON 模式（response_format 传 json_object）挑出大约 5 条、跳过明显的垃圾仓库和无关内容，每条配一句为什么值得看。单个 GitHub topic 查询失败只跳过那一个，两边都没查到东西才会是空列表，DeepSeek 筛选失败就退化成不筛选的原始拼接。GET /api/hot-topics/today 是读取接口，同样是当天没有就现查一份、和定时任务共用同一个函数。前端在总览页 2x2 网格下面展示成一个可点击跳转的列表。后来又加了第三组 Product Hunt 产品榜：用 Product Hunt 官方 GraphQL API（要配 PRODUCT_HUNT_TOKEN）查最近 7 天发布、按票数排序的产品。API 用的是旧的 topic 体系，没有网站上新分类里的 AI Agents（查 ai-agents 返回 null），所以查整个 artificial-intelligence topic，一页最多 20 个，翻 4 页取 80 个（实测 60 个里刚好挑出 20 个 agent，留点余量），跟新闻、仓库一起交给 DeepSeek，它按原顺序只保留 agent 类产品（自主完成任务的 agent、人和 agent 协作的平台、AI SDR/客服这类岗位型 agent、构建/运行 agent 的开发工具和基础设施，跳过模型发布、图片视频语音生成、只是用了 AI 的营销工具），给每个写一句中文摘要。链接不能直接用 API 给的 url，那是产品主页，同一个产品的几次发布共用（比如 Google 的好几次发布都是 /products/google），按链接匹配会串，所以拼成单次发布的页面 /products/<产品>/launches/<slug>，最后保持票数顺序取前 20 个、带上排名和票数。榜单本来就该每天重复出现排在前面的产品，所以这一组不参与 7 天去重；DeepSeek 失败就直接按票数取前 20、摘要用英文 tagline。热点页三组用顶部的标签页切换，一次看一组。
 
 聊天面板也在用这份简报：每次开一个新对话（没有历史消息的时候），会把今天的简报当成知行说的第一句话显示出来，让对话感觉是从"知行已经了解你今天的情况"这个地方开始的，而不是简报和聊天是两个互不相关的地方。这一步纯粹是展示层的处理——App.jsx 自己单独拉一次 /api/digest/today，拼出来的这条"消息"只放进本地渲染用的列表，不会进 useChat 的真实消息状态，所以真正发给后端的对话历史里不会带上这句话，导出对话的时候也不会包含它。开新对话或者切换历史会话之前都会先调用 useChat 的 stop()，避免上一轮还在流式生成的时候被打断后，残留的内容跟着串到新对话里。
 
@@ -130,7 +130,7 @@ AI-Chat/
 │   ├── reminders.py         提醒的增删改查，以及供调度器调用的到期检查
 │   ├── persona.py           助手的名字和性格设定，聊天和每日简报共用同一份
 │   ├── digest.py            每日简报：聚合今天的任务/提醒，交给 DeepSeek 写成简报文字，按天缓存
-│   ├── hot_topics.py        每日 AI 热点：GitHub 搜索 + Tavily 新闻，交给 DeepSeek 筛选，按天缓存
+│   ├── hot_topics.py        每日 AI 热点：GitHub 搜索 + Tavily 新闻 + Product Hunt 产品榜，交给 DeepSeek 筛选，按天缓存
 │   ├── scheduler.py         APScheduler 封装：每 60 秒扫一次到期提醒，每天 8:00/8:05 生成简报和热点
 │   └── websearch.py         Tavily 封装，没配 key 时优雅返回错误提示，不会抛异常
 │
@@ -287,7 +287,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 ## 10. 环境变量
 
-后端的 .env 文件（已经加入 gitignore）需要这几个变量：DEEPSEEK_API_KEY 是必须的；DATABASE_URL 是必须的，指向 PostgreSQL 实例（现在用的是 Supabase 的 Session pooler 连接串，格式是 postgresql+asyncpg://...），本地开发和线上环境都需要配；APP_PASSWORD_HASH 是登录密码的哈希（scripts/hash_password.py 生成）；API_KEY 可选，给脚本用的 key，不要放进前端；ALLOWED_ORIGINS 可选，不设的话用代码里写死的默认值；TAVILY_API_KEY 可选，不设置的话联网搜索这个工具会返回未配置的错误提示，不影响其他功能。
+后端的 .env 文件（已经加入 gitignore）需要这几个变量：DEEPSEEK_API_KEY 是必须的；DATABASE_URL 是必须的，指向 PostgreSQL 实例（现在用的是 Supabase 的 Session pooler 连接串，格式是 postgresql+asyncpg://...），本地开发和线上环境都需要配；APP_PASSWORD_HASH 是登录密码的哈希（scripts/hash_password.py 生成）；API_KEY 可选，给脚本用的 key，不要放进前端；ALLOWED_ORIGINS 可选，不设的话用代码里写死的默认值；TAVILY_API_KEY 可选，不设置的话联网搜索这个工具会返回未配置的错误提示，不影响其他功能；PRODUCT_HUNT_TOKEN 可选，是 Product Hunt API 的 Developer Token（在 api.producthunt.com/v2/oauth/applications 建应用拿），不设置的话热点里的 Product Hunt 那一组是空的。
 
 前端不需要任何环境变量：本地走 Vite 代理，线上同域名。
 
@@ -311,7 +311,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 因为 Vercel 上没有常驻进程，和本地常驻 uvicorn 有几处不同，代码里用 VERCEL 环境变量区分：数据库用 NullPool，每个请求用完连接就关，避免多个函数实例把 Supabase 会话模式 pooler 的连接占满；lifespan 里不启动 APScheduler，提醒到期改在 /reminders 和 /reminders/due 接口里顺手检查（前端每 20 秒轮询一次），每日简报和热点由 vercel.json 里的 cron 每天调一次 /api/cron/daily 预生成（Hobby 版 cron 一天最多一次、有 ±59 分钟误差，当天第一次打开页面时也会现生成）。函数部署在新加坡（sin1），跟 Supabase 同一地区。
 
-Vercel 项目需要配的环境变量：DEEPSEEK_API_KEY、DATABASE_URL、APP_PASSWORD_HASH、API_KEY、TAVILY_API_KEY、VOYAGE_API_KEY、CRON_SECRET（随便一段随机字符串，Vercel 调 cron 时会带上）；不要再配 VITE_API_KEY，VITE_ 开头的变量会被打包进前端 JS；用到 Notion 同步的话再加 NOTION_API_KEY、NOTION_DATABASE_ID。VITE_API_URL 在线上不要配，留空就走同域的 /api。
+Vercel 项目需要配的环境变量：DEEPSEEK_API_KEY、DATABASE_URL、APP_PASSWORD_HASH、API_KEY、TAVILY_API_KEY、VOYAGE_API_KEY、CRON_SECRET（随便一段随机字符串，Vercel 调 cron 时会带上）；不要再配 VITE_API_KEY，VITE_ 开头的变量会被打包进前端 JS；用到 Notion 同步的话再加 NOTION_API_KEY、NOTION_DATABASE_ID；热点要有 Product Hunt 产品榜的话再加 PRODUCT_HUNT_TOKEN。VITE_API_URL 在线上不要配，留空就走同域的 /api。
 
 ## 14. 已知限制和技术债
 

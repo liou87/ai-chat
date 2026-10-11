@@ -5,8 +5,16 @@ import { apiFetch } from "../api"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 
-// 每天收集一次的 AI/agent 领域热点（GitHub 新仓库 + 联网搜到的新闻，DeepSeek 挑过并写了一句话理由），
-// 点条目直接跳转原链接。顶部可以切换日期看历史，今天的可以手动重新收集。
+// 三组按标签页分开显示，一次看一组；标签上带条数
+const GROUPS = [
+  { kind: "news", label: "最新消息", eyebrow: "模型、产品、框架动态" },
+  { kind: "github", label: "GitHub 新项目", eyebrow: "最近一个月新建的 agent / RAG 项目，按星数排" },
+  { kind: "producthunt", label: "Product Hunt", eyebrow: "最近 7 天发布的 agent 产品，按票数排",
+    empty: "没有收集到 Product Hunt 产品（服务端要配置 PRODUCT_HUNT_TOKEN）" },
+]
+
+// 每天收集一次的 AI/agent 领域热点（联网搜到的新闻 + GitHub 新仓库 + Product Hunt agent 产品榜，
+// DeepSeek 挑过并写了一句话理由），点条目直接跳转原链接。顶部可以切换日期看历史，今天的可以手动重新收集。
 function HotTopicsPanel({ onAnalyze }) {
   const { colors, inputStyle, buttonStyle } = useTheme()
   const confirm = useConfirm()
@@ -36,6 +44,7 @@ function HotTopicsPanel({ onAnalyze }) {
     }
   }
   const [regenerating, setRegenerating] = useState(false)
+  const [tab, setTab] = useState("news")
 
   useEffect(() => {
     let cancelled = false
@@ -58,7 +67,7 @@ function HotTopicsPanel({ onAnalyze }) {
   }
 
   const regenerate = async () => {
-    if (!(await confirm({ title: "重新收集今天的热点", message: "会重新搜索 GitHub 和新闻并让 DeepSeek 筛选，覆盖今天已有的结果，会消耗一次 Tavily 和 DeepSeek 额度。", confirmText: "重新收集" }))) return
+    if (!(await confirm({ title: "重新收集今天的热点", message: "会重新搜索新闻、GitHub 和 Product Hunt 并让 DeepSeek 筛选，覆盖今天已有的结果，会消耗一次 Tavily 和 DeepSeek 额度。", confirmText: "重新收集" }))) return
     setRegenerating(true)
     setError(null)
     try {
@@ -105,10 +114,29 @@ function HotTopicsPanel({ onAnalyze }) {
       )}
 
       {!loading && !regenerating && !error && items.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <TopicGroup eyebrow="模型、产品、框架动态" title="最新消息" items={items.filter(it => kindOf(it) === "news")} saveState={saveState} onCollect={collect} onAnalyze={onAnalyze} />
-          <TopicGroup eyebrow="最近一个月新建的 agent / RAG 项目" title="GitHub 新项目" items={items.filter(it => kindOf(it) === "github")} saveState={saveState} onCollect={collect} onAnalyze={onAnalyze} />
-        </div>
+        <>
+          <div role="tablist" style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+            {GROUPS.map(g => (
+              <button
+                key={g.kind}
+                role="tab"
+                aria-selected={tab === g.kind}
+                onClick={() => setTab(g.kind)}
+                style={{
+                  padding: "4px 12px", borderRadius: 999, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                  border: `1px solid ${tab === g.kind ? colors.btnDark : colors.cardBorder}`,
+                  background: tab === g.kind ? colors.btnDark : colors.cardBg,
+                  color: tab === g.kind ? colors.btnDarkText : colors.textSecondary,
+                }}
+              >
+                {g.label} {items.filter(it => kindOf(it) === g.kind).length}
+              </button>
+            ))}
+          </div>
+          {GROUPS.filter(g => g.kind === tab).map(g => (
+            <TopicGroup key={g.kind} group={g} items={items.filter(it => kindOf(it) === g.kind)} saveState={saveState} onCollect={collect} onAnalyze={onAnalyze} />
+          ))}
+        </>
       )}
     </div>
   )
@@ -117,22 +145,29 @@ function HotTopicsPanel({ onAnalyze }) {
 // 以前存的热点没有 kind 字段，按链接判断
 const kindOf = (it) => it.kind ?? (it.url?.includes("github.com") ? "github" : "news")
 
-function TopicGroup({ eyebrow, title, items, saveState, onCollect, onAnalyze }) {
+function TopicGroup({ group, items, saveState, onCollect, onAnalyze }) {
   const { colors, panelCardStyle, buttonStyle } = useTheme()
-  if (items.length === 0) return null
   return (
     <div style={{ ...panelCardStyle, padding: "18px 22px 6px" }}>
-      <div style={{ fontSize: 12, color: colors.textMuted }}>{eyebrow}</div>
-      <div style={{ fontSize: 17, fontWeight: 700, color: colors.text, margin: "2px 0 4px" }}>{title} · {items.length}</div>
+      <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>{group.eyebrow}</div>
+      {items.length === 0 && (
+        <div style={{ fontSize: 13.5, color: colors.textMuted, padding: "10px 0 14px" }}>{group.empty || "这一组没有收集到内容"}</div>
+      )}
       {items.map((it, i) => {
-        // 附加信息：新闻显示来源网站和发布日期，仓库显示星数
-        const meta = kindOf(it) === "github"
+        // 附加信息：新闻显示来源网站和发布日期，仓库显示星数，产品显示票数
+        const kind = kindOf(it)
+        const meta = kind === "github"
           ? (it.stars != null ? `★ ${it.stars}` : "GitHub")
-          : [it.source, it.published_date ? formatShort(it.published_date, { withTime: false }) : null].filter(Boolean).join(" · ")
+          : kind === "producthunt"
+            ? (it.votes != null ? `▲ ${it.votes.toLocaleString()}` : "Product Hunt")
+            : [it.source, it.published_date ? formatShort(it.published_date, { withTime: false }) : null].filter(Boolean).join(" · ")
         const state = saveState[it.url]
         const failed = state && state !== "saving" && state !== "saved"
         return (
           <div key={it.url || i} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 0", borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
+            {it.rank != null && (
+              <span style={{ width: 22, flexShrink: 0, fontSize: 13, color: colors.textMuted, fontVariantNumeric: "tabular-nums", paddingTop: 2 }}>{it.rank}</span>
+            )}
             <a href={it.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, textDecoration: "none" }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
                 <span style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{it.title}</span>

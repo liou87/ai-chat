@@ -38,7 +38,7 @@
 ```bash
 py -3.10 -m venv .venv
 ./.venv/Scripts/pip install -r requirements.txt
-# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / APP_PASSWORD_HASH（python scripts/hash_password.py 生成）/ TAVILY_API_KEY / VOYAGE_API_KEY，API_KEY 可选（给脚本用），需要 Notion 同步的话再配置 NOTION_API_KEY 和 NOTION_DATABASE_ID
+# 在 .env 文件中配置 DEEPSEEK_API_KEY / DATABASE_URL / APP_PASSWORD_HASH（python scripts/hash_password.py 生成）/ TAVILY_API_KEY / VOYAGE_API_KEY，API_KEY 可选（给脚本用），需要 Notion 同步的话再配置 NOTION_API_KEY 和 NOTION_DATABASE_ID，热点里要有 Product Hunt 产品榜的话再配置 PRODUCT_HUNT_TOKEN
 # 时区用 APP_TIMEZONE 配置（IANA 名字，默认 Australia/Sydney），提醒、每日简报、"今天"的判断都按它算，要跟浏览器所在时区一致
 # DATABASE_URL 形如 postgresql+asyncpg://user:pass@host:5432/dbname，需要数据库已支持 pgvector
 ./.venv/Scripts/python.exe -m alembic upgrade head    # 首次运行先建表
