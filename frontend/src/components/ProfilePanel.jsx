@@ -63,9 +63,9 @@ function ProfilePanel({ refreshKey }) {
 
   return (
     <div>
-      <PageHeader eyebrow="核心记忆 · 知行每次对话都会带上这些信息" title="关于我" />
+      <PageHeader title="关于我" />
       <div style={{ fontSize: 13.5, color: colors.textSecondary, lineHeight: 1.7, marginBottom: 18 }}>
-        跟知行聊天时提到自己的情况，它会自动记下来，并在聊天里提示「已记住」，可以随时撤销。你也可以在这里直接补充或修改。
+        这些是知行的核心记忆，每次对话都会带上。跟知行聊天时提到自己的情况，它会自动记下来，并在聊天里提示「已记住」，可以随时撤销。你也可以在这里直接补充或修改。
       </div>
       {actionError && <div style={{ marginBottom: 12 }}><LoadError message={actionError} /></div>}
       {error && <LoadError message={error} onRetry={fetchFacts} />}
@@ -76,7 +76,7 @@ function ProfilePanel({ refreshKey }) {
           {CATEGORIES.map(([key, label, hint]) => (
             <div key={key} style={{ ...panelCardStyle, padding: "16px 20px 12px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>{label}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{label}</span>
                 <span style={{ fontSize: 12, color: colors.textMuted }}>{hint}</span>
               </div>
               {facts.filter(f => f.category === key).map(f => (
@@ -107,7 +107,7 @@ function FactRow({ fact, onSave, onDelete }) {
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${colors.borderLight}` }}>
+    <div className="zx-reveal-host" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${colors.borderLight}` }}>
       {editing ? (
         <input
           value={draft}
@@ -129,7 +129,7 @@ function FactRow({ fact, onSave, onDelete }) {
         </button>
       )}
       <Badge tone={fact.source === "agent" ? "ink" : "neutral"}>{fact.source === "agent" ? "知行记的" : "你写的"}</Badge>
-      <button onClick={onDelete} style={iconButtonStyle} title="删除" aria-label={`删除：${fact.content}`}>×</button>
+      <button onClick={onDelete} className="zx-reveal" style={iconButtonStyle} title="删除" aria-label={`删除：${fact.content}`}>×</button>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { PRIORITY_LABEL, PRIORITY_TONE, byPriorityThenDue, formatMinutes, isOver
 import LoadError from "./LoadError"
 import { Badge, ProgressBar, Modal } from "./ui"
 import { TaskFormModal } from "./TaskPanel"
+import { Checkbox } from "./controls"
 
 // 主区域窄于这个宽度，两列卡片改成单列
 const SINGLE_COLUMN_BELOW = 760
@@ -213,19 +214,16 @@ function DigestBanner({ digest, onRetry, onRegenerate }) {
 }
 
 // 卡片外壳：左上眉标 + 标题，右上一两个文字链接
-function Card({ eyebrow, title, links = [], extra, children }) {
+function Card({ title, links = [], extra, children }) {
   const { colors, panelCardStyle } = useTheme()
   return (
-    <div style={{ ...panelCardStyle, padding: "18px 22px", display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: colors.textMuted }}>{eyebrow}</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: colors.text, marginTop: 2 }}>{title}</div>
-        </div>
+    <div style={{ ...panelCardStyle, padding: "16px 22px 18px", display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 8 }}>
+        <div style={{ minWidth: 0, fontSize: 16, fontWeight: 600, color: colors.text }}>{title}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexShrink: 0 }}>
           {extra}
           {links.map(l => (
-            <button key={l.label} onClick={l.onClick} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 14, color: colors.ink, fontFamily: "inherit" }}>
+            <button key={l.label} onClick={l.onClick} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 13, color: colors.ink, fontFamily: "inherit" }}>
               {l.label}
             </button>
           ))}
@@ -247,17 +245,23 @@ function KeyTasksCard({ loaded, keyTasks, pendingCount, doneToday, goals, onTogg
   const goalTitles = Object.fromEntries(goals.map(g => [g.id, g.title]))
   const total = doneToday + pendingCount
   return (
-    <Card eyebrow="今日重点" title="关键任务" links={[{ label: "+ 新增", onClick: onAdd }, { label: "查看全部", onClick: onViewAll }]}>
+    <Card title="关键任务" links={[{ label: "+ 新增", onClick: onAdd }, { label: "查看全部", onClick: onViewAll }]}>
       {loaded && keyTasks.length === 0 && <Empty>没有待办了，可以点「+ 新增」加一条</Empty>}
       {keyTasks.map((t, i) => {
         const overdue = isOverdue(t)
-        const meta = [goalTitles[t.goal_id], t.estimate_minutes ? `${t.estimate_minutes} 分钟` : null, t.due_at ? `截止 ${formatShort(t.due_at)}${overdue ? "（已延期）" : ""}` : null].filter(Boolean)
+        const meta = [goalTitles[t.goal_id], t.estimate_minutes ? `${t.estimate_minutes} 分钟` : null].filter(Boolean)
+        const due = t.due_at ? `截止 ${formatShort(t.due_at)}${overdue ? "（已延期）" : ""}` : null
         return (
           <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", borderBottom: i < keyTasks.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
-            <input type="checkbox" checked={false} onChange={() => onToggle(t)} aria-label={`完成：${t.title}`} style={{ width: 18, height: 18, accentColor: colors.ink, cursor: "pointer", flexShrink: 0 }} />
+            <Checkbox checked={false} onChange={() => onToggle(t)} ariaLabel={`完成：${t.title}`} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{t.title}</div>
-              {meta.length > 0 && <div style={{ fontSize: 12, color: overdue ? colors.dangerInk : colors.textMuted, marginTop: 3 }}>{meta.join(" · ")}</div>}
+              {(meta.length > 0 || due) && (
+                <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 3 }}>
+                  {meta.join(" · ")}{meta.length > 0 && due ? " · " : ""}
+                  {due && <span style={{ color: overdue ? colors.dangerInk : undefined }}>{due}</span>}
+                </div>
+              )}
             </div>
             <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{PRIORITY_LABEL[t.priority] ?? "中"}</Badge>
           </div>
@@ -350,7 +354,7 @@ function ScheduleCard({ loaded, tasks, reminders, onToggle, onChanged, onViewAll
   )
 
   return (
-    <Card eyebrow="今日安排" title="当前与下一项" extra={planButton} links={[{ label: "全部提醒", onClick: onViewAll }]}>
+    <Card title="今日安排" extra={planButton} links={[{ label: "全部提醒", onClick: onViewAll }]}>
       {planError && <div style={{ marginBottom: 8 }}><LoadError message={planError} /></div>}
 
       {loaded && items.length === 0 && (
@@ -454,7 +458,7 @@ function GoalsCard({ loaded, goals, limit, onOpen }) {
   const order = { phase: 0, month: 1, week: 2 }
   const roots = goals.filter(g => g.parent_id == null).sort((a, b) => order[a.tier] - order[b.tier]).slice(0, limit)
   return (
-    <Card eyebrow="当前阶段" title="目标与下一里程碑" links={[{ label: "规划中心", onClick: onOpen }]}>
+    <Card title="目标" links={[{ label: "规划中心", onClick: onOpen }]}>
       {loaded && roots.length === 0 && <Empty>还没有目标，去「规划中心」建一个</Empty>}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(roots.length, 1)}, minmax(0, 1fr))`, gap: 10 }}>
         {roots.map(g => (
@@ -500,7 +504,7 @@ function WeekCard({ tasks, journal, onReview }) {
     { value: formatMinutes(minutes), label: "累计时长" },
   ]
   return (
-    <Card eyebrow="本周 · 从周一算起" title="本周概览" extra={<span style={{ fontSize: 13, color: colors.textMuted }}>{weekRange(since)}</span>}>
+    <Card title="本周概览" extra={<span style={{ fontSize: 13, color: colors.textMuted }}>{weekRange(since)}</span>}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 14 }}>
         {cells.map(c => (
           <div key={c.label} style={{ background: colors.neutralSoft, borderRadius: 6, padding: "12px 6px", textAlign: "center" }}>

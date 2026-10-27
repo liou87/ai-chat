@@ -7,6 +7,8 @@ import { ModuleIcon } from "../icons"
 import { formatShort } from "../datetime"
 import { notificationPermission, requestNotificationPermission, REMINDERS_CHANGED_EVENT } from "../notify"
 import LoadError from "./LoadError"
+import { PageHeader, Modal, Field } from "./ui"
+import { DateTimeInput } from "./controls"
 
 const byTime = (a, b) => new Date(a.remind_at) - new Date(b.remind_at)
 
@@ -14,7 +16,7 @@ const byTime = (a, b) => new Date(a.remind_at) - new Date(b.remind_at)
 // 到期后的顶部条幅和系统通知由 ReminderBanner 负责，这里是"管理"视图。
 // 总览页的"今日安排"卡片是 WorkbenchPanel 自己画的，这里只有单模块全页视图。
 function ReminderPanel({ refreshKey }) {
-  const { colors, inputStyle, darkButtonStyle } = useTheme()
+  const { colors, inputStyle, buttonStyle, darkButtonStyle } = useTheme()
   const confirm = useConfirm()
   const [reminders, setReminders] = useState([])
   const [loading, setLoading] = useState(false)
@@ -23,6 +25,7 @@ function ReminderPanel({ refreshKey }) {
   const [message, setMessage] = useState("")
   const [remindAt, setRemindAt] = useState("")
   const [adding, setAdding] = useState(false)
+  const [showForm, setShowForm] = useState(false)
   const [permission, setPermission] = useState(notificationPermission)
 
   const fetchReminders = async () => {
@@ -70,6 +73,7 @@ function ReminderPanel({ refreshKey }) {
     if (ok) {
       setMessage("")
       setRemindAt("")
+      setShowForm(false)
     }
   }
 
@@ -93,30 +97,32 @@ function ReminderPanel({ refreshKey }) {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-        <input
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          placeholder="提醒内容"
-          aria-label="提醒内容"
-          style={{ ...inputStyle, flex: "2 1 200px" }}
-        />
-        <input
-          type="datetime-local"
-          value={remindAt}
-          onChange={e => setRemindAt(e.target.value)}
-          aria-label="提醒时间"
-          style={{ ...inputStyle, flex: "1 1 180px" }}
-        />
-        <button
-          onClick={addReminder}
-          disabled={!canAdd}
-          title={addHint}
-          style={{ ...darkButtonStyle, whiteSpace: "nowrap", ...(!canAdd ? disabledStyle : {}) }}
+      <PageHeader
+        title="提醒"
+        action={<button onClick={() => setShowForm(true)} style={darkButtonStyle}>+ 新建提醒</button>}
+      />
+      {showForm && (
+        <Modal
+          title="新建提醒"
+          onClose={() => setShowForm(false)}
+          footer={
+            <>
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setShowForm(false)} style={buttonStyle}>取消</button>
+              <button onClick={addReminder} disabled={!canAdd} title={addHint} style={{ ...darkButtonStyle, ...(!canAdd ? disabledStyle : {}) }}>
+                {adding ? "添加中..." : "保存"}
+              </button>
+            </>
+          }
         >
-          {adding ? "添加中..." : "+ 新建提醒"}
-        </button>
-      </div>
+          <Field label="提醒内容">
+            <input value={message} onChange={e => setMessage(e.target.value)} placeholder="比如：给妈妈打电话" style={inputStyle} />
+          </Field>
+          <Field label="提醒时间" hint="到时间后页面顶部会弹出提示，开了系统通知的话也会发通知">
+            <DateTimeInput value={remindAt} onChange={setRemindAt} ariaLabel="提醒时间" />
+          </Field>
+        </Modal>
+      )}
 
       {permission === "default" && (
         <div style={{ fontSize: 12.5, color: colors.textSecondary, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -176,6 +182,7 @@ function ReminderRow({ r, onAcknowledge, onDelete }) {
   const read = r.fired && r.acknowledged
   return (
     <div
+      className="zx-reveal-host"
       style={{
         display: "flex",
         alignItems: "center",
@@ -195,7 +202,7 @@ function ReminderRow({ r, onAcknowledge, onDelete }) {
       {unread && onAcknowledge && (
         <button onClick={() => onAcknowledge(r)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.warningText }}>知道了</button>
       )}
-      <button onClick={() => onDelete(r)} style={iconButtonStyle} title="删除" aria-label={`删除提醒：${r.message}`}>×</button>
+      <button onClick={() => onDelete(r)} className="zx-reveal" style={iconButtonStyle} title="删除" aria-label={`删除提醒：${r.message}`}>×</button>
     </div>
   )
 }

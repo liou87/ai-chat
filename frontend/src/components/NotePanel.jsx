@@ -1,13 +1,13 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { moduleAccents, radiusSm, disabledStyle } from "../theme"
-import { isSubmitEnter } from "../keyboard"
 import { useConfirm } from "../confirm"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import NoteContent from "./NoteContent"
-import { Masonry } from "./ui"
+import { Masonry, PageHeader } from "./ui"
+import { SearchInput } from "./controls"
 
 const SEARCH_TOP_K = 5
 
@@ -71,15 +71,19 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
   const emptyReview = { done: "", blocker: "", tomorrow: "", ratings: { energy: null, stress: null, satisfaction: null, focus: null } }
   const [review, setReview] = useState(emptyReview)
 
+  const loadSeq = useRef(0)
   const load = async (request) => {
+    const seq = ++loadSeq.current
     setLoading(true)
     try {
-      setNotes(await request())
+      const data = await request()
+      if (seq !== loadSeq.current) return
+      setNotes(data)
       setError(null)
     } catch (e) {
-      setError(e.message)
+      if (seq === loadSeq.current) setError(e.message)
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }
 
@@ -190,10 +194,10 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
     if (await mutate(() => apiFetch(`/notes/${id}`, { method: "PATCH", body: changes }))) setEditingId(null)
   }
 
-  // 清空搜索框就自动回到完整列表，不用再按一次"搜"
-  const onSearchChange = (value) => {
-    setSearchQuery(value)
-    if (!value.trim() && activeQuery) fetchNotes()
+  // SearchInput 停止输入后、回车或清空时调用：有词就搜，空了回到完整列表
+  const onSearch = (query) => {
+    if (query) runSearch(query)
+    else if (activeQuery) fetchNotes()
   }
 
   const syncNotion = async () => {
@@ -216,30 +220,34 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
   return (
     <div>
       <div>
-      {/* 搜索和操作按钮排成一行，按钮按内容宽度，主按钮近黑 */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        <input
+      {/* 标题区右侧放主操作和次要操作，跟其他页面一致；搜索框单独一行 */}
+      <PageHeader
+        title={category === "journal" ? "日记" : "笔记"}
+        action={
+          <div style={{ display: "flex", gap: 8 }}>
+            {category === "journal" && (
+              <button onClick={onRequestWeeklyReview} style={buttonStyle}>生成本周复盘</button>
+            )}
+            {category === "note" && (
+              <button onClick={syncNotion} disabled={syncing} style={{ ...buttonStyle, cursor: syncing ? "wait" : "pointer", opacity: syncing ? 0.6 : 1 }}>
+                {syncing ? "同步中..." : "同步 Notion"}
+              </button>
+            )}
+            <button onClick={() => setShowForm(true)} disabled={showForm} style={{ ...darkButtonStyle, ...(showForm ? disabledStyle : {}) }}>
+              + {category === "journal" ? "写今天的日记" : "新建笔记"}
+            </button>
+          </div>
+        }
+      />
+      <div style={{ display: "flex", marginBottom: 16 }}>
+        <SearchInput
           value={searchQuery}
-          onChange={e => onSearchChange(e.target.value)}
-          onKeyDown={e => isSubmitEnter(e) && refresh()}
-          placeholder={category === "journal" ? "语义搜索日记..." : "语义搜索笔记..."}
-          aria-label="语义搜索"
-          style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+          onChange={setSearchQuery}
+          onSearch={onSearch}
+          busy={loading && Boolean(searchQuery.trim())}
+          placeholder={category === "journal" ? "按意思搜索日记，比如「压力大的那几天」" : "按意思搜索笔记，不用记得原话"}
+          ariaLabel="语义搜索"
         />
-        <button onClick={refresh} style={buttonStyle}>搜</button>
-        {category === "journal" && (
-          <button onClick={onRequestWeeklyReview} style={buttonStyle}>生成本周复盘</button>
-        )}
-        {category === "note" && (
-          <button onClick={syncNotion} disabled={syncing} style={{ ...buttonStyle, cursor: syncing ? "wait" : "pointer", opacity: syncing ? 0.6 : 1 }}>
-            {syncing ? "同步中..." : "同步 Notion"}
-          </button>
-        )}
-        {!showForm && (
-          <button onClick={() => setShowForm(true)} style={darkButtonStyle}>
-            + {category === "journal" ? "写今天的日记" : "新建笔记"}
-          </button>
-        )}
       </div>
       {syncStatus && (
         <div style={{ fontSize: 12, margin: "-8px 0 12px", color: syncStatus.isError ? colors.danger : colors.textMuted }}>
@@ -324,7 +332,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
       {activeQuery && !loading && !error && (
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8, display: "flex", gap: 8 }}>
           <span>与「{activeQuery}」最相关的 {notes.length} 条</span>
-          <button onClick={() => { setSearchQuery(""); fetchNotes() }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.primary }}>
+          <button onClick={() => { setSearchQuery(""); fetchNotes() }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.ink }}>
             清除搜索
           </button>
         </div>
@@ -335,6 +343,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
       {notes.map(n => (
         <div
           key={n.id}
+          className="zx-reveal-host"
           style={{
             padding: "16px 20px",
             background: colors.cardBg,
@@ -361,12 +370,12 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               <span style={{ fontSize: 11.5, color: colors.textMuted }}>{noteDateText(n)}</span>
               {n.source !== "notion" && n.category === "note" && editingId !== n.id && (
-                <button onClick={() => setEditingId(n.id)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.textSecondary }} aria-label={`编辑：${n.title}`}>
+                <button onClick={() => setEditingId(n.id)} className="zx-reveal" style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.textSecondary }} aria-label={`编辑：${n.title}`}>
                   编辑
                 </button>
               )}
               {n.source !== "notion" && (
-                <button onClick={() => deleteNote(n)} style={iconButtonStyle} title="删除" aria-label={`删除：${n.title}`}>×</button>
+                <button onClick={() => deleteNote(n)} className="zx-reveal" style={iconButtonStyle} title="删除" aria-label={`删除：${n.title}`}>×</button>
               )}
             </div>
           </div>

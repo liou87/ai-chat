@@ -4,6 +4,7 @@ import { useTheme } from "../ThemeContext"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import { PageHeader, Badge } from "./ui"
+import { Checkbox, Select } from "./controls"
 
 const TYPE_LABEL = { llm: "模型调用", tool_call: "调用工具", tool_result: "工具结果", final: "最终回复" }
 const PAYLOAD_PREVIEW = 1200   // 工具结果可能很长（比如检索返回的片段），展开前只显示这么多字
@@ -15,7 +16,7 @@ const fmtTokens = (n) => !n ? "" : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : Str
 // 每一步花了多久、用了多少 token。可以只看出错的、只看点踩的、按工具筛；从聊天里点"查看轨迹"会直接展开对应那一轮。
 // 有问题的轮次可以标成评测用例候选（第四层：线上问题回流进评测集）
 function TracePanel({ target, onTargetConsumed }) {
-  const { colors, inputStyle, buttonStyle, panelCardStyle } = useTheme()
+  const { colors, buttonStyle, panelCardStyle } = useTheme()
   const [turns, setTurns] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -59,24 +60,20 @@ function TracePanel({ target, onTargetConsumed }) {
   return (
     <div>
       <PageHeader
-        eyebrow="每一轮对话里知行做了什么：调用了哪些工具、花了多久、用了多少 token"
         title="执行轨迹"
         action={<button onClick={fetchTurns} style={buttonStyle}>刷新</button>}
       />
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: colors.textSecondary, cursor: "pointer" }}>
-          <input type="checkbox" checked={errorsOnly} onChange={e => setErrorsOnly(e.target.checked)} style={{ accentColor: colors.ink }} />
-          只看出错的
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: colors.textSecondary, cursor: "pointer" }}>
-          <input type="checkbox" checked={downOnly} onChange={e => setDownOnly(e.target.checked)} style={{ accentColor: colors.ink }} />
-          只看点踩的
-        </label>
-        <select value={tool} onChange={e => setTool(e.target.value)} aria-label="按工具筛选" style={{ ...inputStyle, width: "auto", fontSize: 13 }}>
-          <option value="">全部工具</option>
-          {knownTools.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <Checkbox checked={errorsOnly} onChange={e => setErrorsOnly(e.target.checked)} label="只看出错的" size={16} />
+        <Checkbox checked={downOnly} onChange={e => setDownOnly(e.target.checked)} label="只看点踩的" size={16} />
+        <Select
+          value={tool}
+          onChange={setTool}
+          ariaLabel="按工具筛选"
+          options={[{ value: "", label: "全部工具" }, ...knownTools.map(t => ({ value: t, label: t }))]}
+          style={{ width: 200, fontSize: 13 }}
+        />
         <span style={{ fontSize: 12.5, color: colors.textMuted }}>最近 {turns.length} 轮</span>
       </div>
 

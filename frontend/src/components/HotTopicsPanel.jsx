@@ -5,6 +5,7 @@ import { apiFetch } from "../api"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import { Masonry } from "./ui"
+import { Select } from "./controls"
 
 // 三组按标签页分开显示，一次看一组；标签上带条数
 const GROUPS = [
@@ -17,7 +18,7 @@ const GROUPS = [
 // 每天收集一次的 AI/agent 领域热点（联网搜到的新闻 + GitHub 新仓库 + Product Hunt agent 产品榜，
 // DeepSeek 挑过并写了一句话理由），点条目直接跳转原链接。顶部可以切换日期看历史，今天的可以手动重新收集。
 function HotTopicsPanel({ onAnalyze }) {
-  const { colors, inputStyle, buttonStyle } = useTheme()
+  const { colors, buttonStyle } = useTheme()
   const confirm = useConfirm()
   const [dates, setDates] = useState([])
   const [day, setDay] = useState("today")   // "today" 或者 "YYYY-MM-DD"
@@ -88,10 +89,13 @@ function HotTopicsPanel({ onAnalyze }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-        <select value={day} onChange={e => switchDay(e.target.value)} aria-label="选择日期" style={{ ...inputStyle, width: "auto" }}>
-          <option value="today">今天</option>
-          {historyDates.map(d => <option key={d} value={d}>{formatShort(d, { withTime: false })}</option>)}
-        </select>
+        <Select
+          value={day}
+          onChange={switchDay}
+          ariaLabel="选择日期"
+          options={[{ value: "today", label: "今天" }, ...historyDates.map(d => ({ value: d, label: formatShort(d, { withTime: false }) }))]}
+          style={{ width: 130 }}
+        />
         {data?.created_at && !loading && (
           <span style={{ fontSize: 12, color: colors.textMuted }}>{formatShort(data.created_at)} 收集</span>
         )}

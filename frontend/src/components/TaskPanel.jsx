@@ -7,6 +7,7 @@ import { isSubmitEnter } from "../keyboard"
 import { toInputValue, formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import { PageHeader, Badge, Modal, Field, Segmented } from "./ui"
+import { Checkbox, DateTimeInput, Select } from "./controls"
 import { useElementWidth } from "../hooks"
 import { PRIORITY_OPTIONS, PRIORITY_LABEL, PRIORITY_TONE, byPriorityThenDue, formatMinutes, isOverdue } from "../taskMeta"
 
@@ -145,7 +146,6 @@ function TaskPanel({ refreshKey }) {
   return (
     <div>
       <PageHeader
-        eyebrow="按优先级排序"
         title="任务"
         action={<button onClick={() => setEditing("new")} style={darkButtonStyle}>+ 新增任务</button>}
       />
@@ -163,8 +163,7 @@ function TaskPanel({ refreshKey }) {
       {status}
 
       <div ref={listRef} style={{ ...panelCardStyle, padding: "18px 22px 8px" }}>
-        <div style={{ fontSize: 12, color: colors.textMuted }}>优先处理</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: colors.text, margin: "2px 0 6px" }}>待办事项 · {pending.length}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: colors.text, marginBottom: 4 }}>待办事项 · {pending.length}</div>
         {!loading && !error && pending.length === 0 && (
           <div style={{ color: colors.textMuted, padding: "14px 0 18px", fontSize: 14 }}>
             {tasks.length === 0 ? "还没有任务，点右上角「新增任务」开始" : "全部完成了"}
@@ -205,13 +204,7 @@ function TaskRow({ t, goalTitle, last, table, onOpen, onToggleDone }) {
   const { colors } = useTheme()
   const overdue = isOverdue(t)
   const checkbox = (
-    <input
-      type="checkbox"
-      checked={t.done}
-      onChange={onToggleDone}
-      style={{ accentColor: colors.ink, cursor: "pointer", width: 18, height: 18, flexShrink: 0, margin: 0 }}
-      aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
-    />
+    <Checkbox checked={t.done} onChange={onToggleDone} ariaLabel={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`} />
   )
   const titleStyle = {
     fontSize: 15,
@@ -326,18 +319,20 @@ export function TaskFormModal({ task, goals, onSubmit, onDelete, onClose }) {
         </div>
         <div style={{ flex: 1.4 }}>
           <Field label="计划开始">
-            <input type="datetime-local" value={plannedStart} onChange={e => setPlannedStart(e.target.value)} style={inputStyle} />
+            <DateTimeInput value={plannedStart} onChange={setPlannedStart} placeholder="可选" ariaLabel="计划开始" />
           </Field>
         </div>
       </div>
       <Field label="截止时间" hint="计划开始 + 预计时长会在总览的「今日安排」里显示成时间块">
-        <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} style={inputStyle} />
+        <DateTimeInput value={dueAt} onChange={setDueAt} placeholder="可选" ariaLabel="截止时间" defaultTime="18:00" />
       </Field>
       <Field label="所属目标">
-        <select value={goalId} onChange={e => setGoalId(e.target.value)} style={inputStyle}>
-          <option value="">不挂靠目标</option>
-          {goals.map(g => <option key={g.id} value={g.id}>{TIER_LABEL[g.tier]}目标：{g.title}</option>)}
-        </select>
+        <Select
+          value={goalId}
+          onChange={setGoalId}
+          ariaLabel="所属目标"
+          options={[{ value: "", label: "不挂靠目标" }, ...goals.map(g => ({ value: String(g.id), label: `${TIER_LABEL[g.tier]}目标：${g.title}` }))]}
+        />
       </Field>
     </Modal>
   )

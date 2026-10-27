@@ -2,7 +2,7 @@ import { Children, useEffect, useRef } from "react"
 import { useTheme } from "../ThemeContext"
 import { radiusMd, fontSerif } from "../theme"
 
-// 单模块页面共用的小组件，风格参考"个人成长工作台"：灰色小字眉标 + 大号粗体标题 + 右上角近黑主按钮，
+// 单模块页面共用的小组件，风格参考"个人成长工作台"：大号衬线标题 + 右上角墨绿主按钮（页面标题要比卡片标题明显重一档），
 // 内容放在白卡片里，进度条和标签用墨绿
 
 // 页面标题区：eyebrow 是标题上方的灰色小字，action 是右侧的主操作按钮
@@ -12,7 +12,7 @@ export function PageHeader({ eyebrow, title, action }) {
     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
       <div style={{ minWidth: 0 }}>
         {eyebrow && <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>{eyebrow}</div>}
-        <h1 style={{ margin: 0, fontFamily: fontSerif, fontSize: 26, fontWeight: 600, letterSpacing: 0, color: colors.text }}>{title}</h1>
+        <h1 style={{ margin: 0, fontFamily: fontSerif, fontSize: 28, fontWeight: 700, letterSpacing: 0, color: colors.text }}>{title}</h1>
       </div>
       {action}
     </div>

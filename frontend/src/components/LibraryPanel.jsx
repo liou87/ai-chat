@@ -8,6 +8,7 @@ import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import NoteViewerModal from "./NoteViewerModal"
 import { PageHeader, Badge, Modal, Field, Masonry } from "./ui"
+import { SearchInput } from "./controls"
 
 const SOURCE_LABEL = { hot_topic: "热点收藏", web: "网页", github: "GitHub", pdf: "PDF" }
 const FILTERS = [["all", "全部"], ["hot_topic", "热点收藏"], ["web", "网页"], ["github", "GitHub"], ["pdf", "PDF"]]
@@ -25,7 +26,7 @@ const plainPreview = (text) => (text || "")
 // 资料库：收藏的热点、导入的网页和 GitHub 仓库、上传的 PDF。跟笔记共用一套向量检索，
 // 知行回答问题时会一起搜到。导入要抓取正文、分块算向量，通常 5–15 秒，期间显示进度提示
 function LibraryPanel({ refreshKey }) {
-  const { colors, inputStyle, buttonStyle, darkButtonStyle, panelCardStyle, iconButtonStyle } = useTheme()
+  const { colors, buttonStyle, darkButtonStyle, panelCardStyle, iconButtonStyle } = useTheme()
   const confirm = useConfirm()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -55,17 +56,19 @@ function LibraryPanel({ refreshKey }) {
     fetchItems()
   }, [refreshKey])
 
-  const search = async () => {
-    const q = query.trim()
-    if (!q) { setResults(null); return }
+  // 边输入边搜：只认最后一次请求的结果，前面慢回来的旧结果丢掉
+  const searchSeq = useRef(0)
+  const search = async (q) => {
+    const seq = ++searchSeq.current
+    if (!q) { setResults(null); setSearching(false); return }
     setSearching(true)
     try {
       const hits = await apiFetch("/notes/search", { params: { query: q, category: "library", top_k: 8 } })
-      setResults(hits)
+      if (seq === searchSeq.current) setResults(hits)
     } catch (e) {
       setNotice({ text: `搜索失败：${e.message}`, isError: true })
     } finally {
-      setSearching(false)
+      if (seq === searchSeq.current) setSearching(false)
     }
   }
 
@@ -131,7 +134,6 @@ function LibraryPanel({ refreshKey }) {
   return (
     <div>
       <PageHeader
-        eyebrow="收藏的文章、仓库、网页和 PDF，知行回答问题时会一起检索"
         title="资料库"
         action={
           <div style={{ display: "flex", gap: 8 }}>
@@ -145,22 +147,14 @@ function LibraryPanel({ refreshKey }) {
       {importing && <div style={{ fontSize: 13, color: colors.ink, marginBottom: 12 }}>{importing}</div>}
       {notice && <div style={{ fontSize: 13, color: notice.isError ? colors.danger : colors.textMuted, marginBottom: 12 }}>{notice.text}</div>}
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        <input
-          value={query}
-          onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) setResults(null) }}
-          onKeyDown={e => isSubmitEnter(e) && search()}
-          placeholder="语义搜索资料库…"
-          aria-label="语义搜索资料库"
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <button onClick={search} style={buttonStyle}>{searching ? "搜索中…" : "搜"}</button>
+      <div style={{ display: "flex", marginBottom: 12 }}>
+        <SearchInput value={query} onChange={setQuery} onSearch={search} busy={searching} placeholder="按意思搜索资料库，知行回答问题时也会检索这些资料" ariaLabel="语义搜索资料库" />
       </div>
 
       {results ? (
         <div style={{ fontSize: 12.5, color: colors.textMuted, marginBottom: 12, display: "flex", gap: 10 }}>
           <span>与「{query.trim()}」最相关的 {results.length} 条</span>
-          <button onClick={() => { setQuery(""); setResults(null) }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12.5, color: colors.ink }}>清除搜索</button>
+          <button onClick={() => { setQuery(""); search("") }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12.5, color: colors.ink }}>清除搜索</button>
         </div>
       ) : (
         <div role="tablist" style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
@@ -203,13 +197,13 @@ function LibraryPanel({ refreshKey }) {
 
       <Masonry>
         {shown.map(item => (
-          <div key={item.id} style={{ ...panelCardStyle, padding: "16px 20px" }}>
+          <div key={item.id} className="zx-reveal-host" style={{ ...panelCardStyle, padding: "16px 20px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
               <button onClick={() => setViewing(item.id)} title="查看全文" style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
                 <div style={{ fontSize: 15.5, fontWeight: 700, color: colors.text, lineHeight: 1.4 }}>{item.title}</div>
               </button>
               <Badge tone="ink">{SOURCE_LABEL[item.source] ?? item.source}</Badge>
-              <button onClick={() => remove(item)} style={iconButtonStyle} title="删除" aria-label={`删除：${item.title}`}>×</button>
+              <button onClick={() => remove(item)} className="zx-reveal" style={iconButtonStyle} title="删除" aria-label={`删除：${item.title}`}>×</button>
             </div>
             <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
               {item.domain && <span>{item.domain}</span>}

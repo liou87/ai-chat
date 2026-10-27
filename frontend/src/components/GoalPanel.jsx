@@ -5,7 +5,8 @@ import { useConfirm } from "../confirm"
 import { disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import LoadError from "./LoadError"
-import { PageHeader, Badge, ProgressBar, Modal, Field, Masonry } from "./ui"
+import { PageHeader, Badge, ProgressBar, Modal, Field, Masonry, Segmented } from "./ui"
+import { DateTimeInput, Select } from "./controls"
 import { daysUntil, formatShort } from "../datetime"
 
 const TIER_LABEL = { phase: "阶段目标", month: "月目标", week: "周目标" }
@@ -102,7 +103,6 @@ function GoalPanel({ refreshKey }) {
   return (
     <div>
       <PageHeader
-        eyebrow="阶段目标 · 月目标 · 周目标"
         title="目标与规划"
         action={<button onClick={() => setEditing("new")} style={darkButtonStyle}>+ 新增目标</button>}
       />
@@ -269,21 +269,23 @@ function GoalFormModal({ goal, goals, onSubmit, onDelete, onClose }) {
       ) : (
         <div style={{ display: "flex", gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <Field label="层级">
-              <select value={tier} onChange={e => { setTier(e.target.value); setParentId("") }} style={inputStyle}>
-                <option value="phase">阶段目标</option>
-                <option value="month">月目标</option>
-                <option value="week">周目标</option>
-              </select>
+            <Field label="层级" group>
+              <Segmented
+                value={tier}
+                onChange={v => { setTier(v); setParentId("") }}
+                options={[{ value: "phase", label: "阶段" }, { value: "month", label: "月" }, { value: "week", label: "周" }]}
+              />
             </Field>
           </div>
           {parentTier && (
             <div style={{ flex: 1.4 }}>
               <Field label="上级目标" hint={parentOptions.length === 0 ? `还没有${TIER_LABEL[parentTier]}，可以先不挂` : undefined}>
-                <select value={parentId} onChange={e => setParentId(e.target.value)} style={inputStyle}>
-                  <option value="">不挂上级（可选）</option>
-                  {parentOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
+                <Select
+                  value={parentId}
+                  onChange={setParentId}
+                  ariaLabel="上级目标"
+                  options={[{ value: "", label: "不挂上级（可选）" }, ...parentOptions.map(p => ({ value: String(p.id), label: p.title }))]}
+                />
               </Field>
             </div>
           )}
@@ -296,7 +298,7 @@ function GoalFormModal({ goal, goals, onSubmit, onDelete, onClose }) {
         <input value={description} onChange={e => setDescription(e.target.value)} placeholder="可选，比如：完成两次有效完整模考" style={inputStyle} />
       </Field>
       <Field label="截止日期" hint="可选，填了会在总览页显示倒计时">
-        <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} style={inputStyle} />
+        <DateTimeInput value={targetDate} onChange={setTargetDate} withTime={false} placeholder="可选" ariaLabel="截止日期" />
       </Field>
       <Field label="状态" group>
         <input value={status} onChange={e => setStatus(e.target.value)} placeholder="可选，比如：正常、轻度迟缓" maxLength={20} aria-label="状态" style={inputStyle} />

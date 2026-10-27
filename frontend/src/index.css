@@ -20,8 +20,73 @@ code {
 }
 
 [data-theme="dark"] code {
-  background: #2a2c35;
+  background: #28302c;
   color: #ececec;
+}
+
+/* controls.jsx 的复选框：原生 input 透明叠在自己画的方框上，键盘聚焦时方框外显示焦点环 */
+.zx-check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.zx-check input:focus-visible + span {
+  outline: 2px solid #7fb5a3;
+  outline-offset: 2px;
+}
+
+/* 下拉和时间列表的选项：悬停浅灰底，键盘聚焦描边 */
+.zx-option {
+  background: transparent;
+}
+.zx-option:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+.zx-option:focus-visible {
+  outline: 2px solid #7fb5a3;
+  outline-offset: -2px;
+}
+
+/* 日历的标题、星期行跟随中文排版，不用库默认的粗体大号 */
+.zx-daypicker .rdp-caption_label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.zx-daypicker .rdp-weekday {
+  font-size: 12px;
+  font-weight: 400;
+}
+.zx-daypicker .rdp-day_button {
+  font-size: 13px;
+}
+
+/* 聊天收起后的边缘标签、空对话的建议问题：悬停时轻微提亮，让人知道能点 */
+.zx-chat-tab:hover,
+.zx-suggestion:hover {
+  filter: brightness(0.96);
+}
+[data-theme="dark"] .zx-chat-tab:hover,
+[data-theme="dark"] .zx-suggestion:hover {
+  filter: brightness(1.15);
+}
+
+/* 删除、编辑这类次要操作：平时隐藏，鼠标移到卡片上或键盘聚焦到卡片里才出现；触屏没有悬停，一直显示 */
+.zx-reveal {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.zx-reveal-host:hover .zx-reveal,
+.zx-reveal-host:focus-within .zx-reveal {
+  opacity: 1;
+}
+@media (hover: none) {
+  .zx-reveal {
+    opacity: 1;
+  }
 }
 
 /* 知行头像"回复中"状态：嘴部三个点交替呼吸，暗示在思考/输出，不用动画库 */

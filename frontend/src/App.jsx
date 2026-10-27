@@ -76,6 +76,13 @@ function toolStatusText(part) {
 // 离底部多近算"在底部"：在底部时新内容自动跟随，往上翻了就不再强行拉回去
 const STICK_THRESHOLD = 40
 const WEEKLY_REVIEW_PROMPT = "请帮我生成这周的复盘总结"
+// 新对话还没说话时，输入框上方给几句可以直接点的话，让人知道知行能做什么
+const CHAT_SUGGESTIONS = [
+  "帮我把今天的待办排一下",
+  "明天早上 9 点提醒我投简历",
+  "这周过得怎么样，帮我复盘一下",
+  "我资料库里讲 agent 记忆的文章说了什么",
+]
 const SESSION_BUCKETS = ["今天", "昨天", "最近 7 天", "更早"]
 
 // ---- 布局尺寸 ----
@@ -83,7 +90,8 @@ const SESSION_BUCKETS = ["今天", "昨天", "最近 7 天", "更早"]
 const RAIL_COMPACT_BELOW = 1280
 const RAIL_WIDTH = 176
 const RAIL_WIDTH_COMPACT = 60
-const COLLAPSE_HANDLE_WIDTH = 18
+// 聊天收起后贴在右边缘的竖向小标签（知行头像 + 名字），点一下展开
+const COLLAPSED_TAB_WIDTH = 40
 // 聊天面板可以拖动左边缘调宽，宽度记在本机浏览器里（只是个人偏好，存不进去也不影响使用）
 const CHAT_WIDTH_DEFAULT = 380
 const CHAT_WIDTH_MIN = 300
@@ -150,7 +158,7 @@ function App() {
   const [chatWidth, setChatWidth] = useState(loadChatWidth)
   const [resizingChat, setResizingChat] = useState(false)
   // 实际宽度还要受窗口限制：窗口变窄时自动收窄，保证主区域至少留 MAIN_MIN_WIDTH
-  const maxChatWidthForWindow = Math.min(CHAT_WIDTH_MAX, windowWidth - railWidth - COLLAPSE_HANDLE_WIDTH - MAIN_MIN_WIDTH)
+  const maxChatWidthForWindow = Math.min(CHAT_WIDTH_MAX, windowWidth - railWidth - MAIN_MIN_WIDTH)
   const effectiveChatWidth = Math.max(CHAT_WIDTH_MIN, Math.min(chatWidth, maxChatWidthForWindow))
   const clampChatWidth = (w) => Math.round(Math.max(CHAT_WIDTH_MIN, Math.min(w, maxChatWidthForWindow)))
 
@@ -502,8 +510,8 @@ function App() {
   const lastMessage = messages[messages.length - 1]
   const showThinking = loading && !(lastMessage?.role === "assistant" && lastMessage.parts.some(p => (p.type === "text" && p.text) || p.type.startsWith("tool-")))
 
-  // 单模块页面统一用参考图风格：居中限宽的内容栏、白卡片、墨绿强调色（模块色只留在侧栏）。
-  // 任务和目标页标题区右侧的"新增"按钮要打开组件内部的弹窗，所以由组件自己渲染标题区；
+  // 单模块页面统一用参考图风格：居中限宽的内容栏、白卡片、墨绿强调色。
+  // 标题区右侧有"新增"按钮、按钮要打开组件内部表单的页面（任务、目标、笔记、日记、提醒、资料库），由组件自己渲染标题区；
   // 其它几页标题区由 ModulePage 统一画。内容栏都是 1280，条目类页面用瀑布流卡片墙铺开
   const renderMain = () => {
     const ink = colors.ink
@@ -522,13 +530,13 @@ function App() {
         )
       case "notes":
         return (
-          <ModulePage eyebrow="知识库 · 支持语义搜索" title="笔记">
+          <ModulePage>
             <NotePanel refreshKey={workbenchRefreshKey} category="note" accent={ink} />
           </ModulePage>
         )
       case "journal":
         return (
-          <ModulePage eyebrow="每日复盘 · 周复盘" title="日记">
+          <ModulePage>
             <NotePanel
               refreshKey={workbenchRefreshKey}
               category="journal"
@@ -539,7 +547,7 @@ function App() {
         )
       case "reminders":
         return (
-          <ModulePage eyebrow="到期后顶部弹出，并发系统通知" title="提醒">
+          <ModulePage>
             <ReminderPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
@@ -563,7 +571,7 @@ function App() {
         )
       case "hotTopics":
         return (
-          <ModulePage eyebrow="AI / agent 领域，每天自动收集一次" title="今日热点">
+          <ModulePage title="今日热点">
             <HotTopicsPanel onAnalyze={onAnalyzeTopic} />
           </ModulePage>
         )
@@ -668,29 +676,36 @@ function App() {
             }}
           >
             <div style={{ width: 26, height: 26, borderRadius: 13, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>我</div>
-            {!railCompact && <span style={{ fontSize: 13, color: activeView === "profile" ? "#fff" : railIconColor }}>我的工作台</span>}
+            {!railCompact && <span style={{ fontSize: 13, color: activeView === "profile" ? "#fff" : railIconColor }}>关于我</span>}
           </button>
         </nav>
 
         {/* 主区域：总览网格，或某个模块的宽松全页视图 */}
         {renderMain()}
 
-        {/* 折叠把手 */}
-        <button
-          onClick={() => setChatCollapsed(c => !c)}
-          style={{ width: COLLAPSE_HANDLE_WIDTH, flexShrink: 0, border: "none", borderLeft: `1px solid ${colors.border}`, padding: 0, background: colors.chatBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-          title={chatCollapsed ? "展开聊天" : "收起聊天"}
-          aria-label={chatCollapsed ? "展开聊天" : "收起聊天"}
-          aria-expanded={!chatCollapsed}
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: chatCollapsed ? "rotate(180deg)" : "none" }}>
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
+        {chatCollapsed && (
+          <button
+            onClick={() => setChatCollapsed(false)}
+            title="展开聊天"
+            aria-label="展开聊天"
+            aria-expanded={false}
+            className="zx-chat-tab"
+            style={{
+              width: COLLAPSED_TAB_WIDTH, flexShrink: 0, border: "none", borderLeft: `1px solid ${colors.border}`, background: colors.chatBg,
+              cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, paddingTop: 14, fontFamily: "inherit",
+            }}
+          >
+            <AssistantAvatar active={loading} size={24} />
+            <span style={{ writingMode: "vertical-rl", fontFamily: fontSerif, fontSize: 13.5, fontWeight: 600, color: colors.text, letterSpacing: 2 }}>{PERSONA_NAME}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        )}
 
         {/* 右侧聊天面板，固定停靠、可折叠 */}
         {!chatCollapsed && (
-          <aside style={{ width: effectiveChatWidth, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg, position: "relative" }}>
+          <aside style={{ width: effectiveChatWidth, flexShrink: 0, display: "flex", flexDirection: "column", background: colors.chatBg, position: "relative", borderLeft: `1px solid ${colors.border}` }}>
             {/* 左边缘的拖动条：拖动调宽，双击恢复默认宽度 */}
             <div
               role="separator"
@@ -726,6 +741,11 @@ function App() {
                 </button>
                 <button onClick={() => setOpenMenu(m => m === "more" ? null : "more")} style={iconBtnStyle} title="更多" aria-label="更多" aria-expanded={openMenu === "more"}>
                   <ModuleIcon name="more" color={colors.textSecondary} size={15} strokeWidth={2.4} />
+                </button>
+                <button onClick={() => setChatCollapsed(true)} style={iconBtnStyle} title="收起聊天" aria-label="收起聊天" aria-expanded={true}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16M8 10l2 2-2 2" />
+                  </svg>
                 </button>
               </div>
 
@@ -828,6 +848,21 @@ function App() {
                     })()}
                   </div>
                 ))}
+                {messages.length === 0 && !loading && !historyLoadError && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: colors.textMuted }}>可以这样问我</div>
+                    {CHAT_SUGGESTIONS.map(q => (
+                      <button
+                        key={q}
+                        onClick={() => sendMessage(q)}
+                        className="zx-suggestion"
+                        style={{ textAlign: "left", border: `1px solid ${colors.border}`, background: colors.surface, color: colors.textSecondary, borderRadius: 999, padding: "6px 12px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {showThinking && <div style={{ color: colors.textMuted, fontSize: 13 }}>{PERSONA_NAME}正在思考…</div>}
                 {status === "error" && <div style={{ color: colors.danger, fontSize: 13 }}>请求失败，请稍后再试</div>}
                 {historyLoadError && <div style={{ color: colors.danger, fontSize: 13 }}>会话加载失败：{historyLoadError}</div>}
