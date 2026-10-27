@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font: 14px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: 14px/145% 'Noto Sans SC', system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
@@ -16,7 +16,7 @@ code {
   font-size: 13px;
   border-radius: 4px;
   padding: 2px 6px;
-  background: #f4f3ec;
+  background: #eef1ec;
 }
 
 [data-theme="dark"] code {

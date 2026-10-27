@@ -4,6 +4,7 @@ import { useConfirm } from "../confirm"
 import { apiFetch } from "../api"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
+import { Masonry } from "./ui"
 
 // 三组按标签页分开显示，一次看一组；标签上带条数
 const GROUPS = [
@@ -148,11 +149,13 @@ const kindOf = (it) => it.kind ?? (it.url?.includes("github.com") ? "github" : "
 function TopicGroup({ group, items, saveState, onCollect, onAnalyze }) {
   const { colors, panelCardStyle, buttonStyle } = useTheme()
   return (
-    <div style={{ ...panelCardStyle, padding: "18px 22px 6px" }}>
-      <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>{group.eyebrow}</div>
+    <div>
+      <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>{group.eyebrow}</div>
       {items.length === 0 && (
-        <div style={{ fontSize: 13.5, color: colors.textMuted, padding: "10px 0 14px" }}>{group.empty || "这一组没有收集到内容"}</div>
+        <div style={{ ...panelCardStyle, fontSize: 13.5, color: colors.textMuted, padding: "16px 20px" }}>{group.empty || "这一组没有收集到内容"}</div>
       )}
+      {/* 每条一张卡片，瀑布流排开；按钮放在摘要下面，窄卡片里标题不会被挤 */}
+      <Masonry>
       {items.map((it, i) => {
         // 附加信息：新闻显示来源网站和发布日期，仓库显示星数，产品显示票数
         const kind = kindOf(it)
@@ -164,42 +167,43 @@ function TopicGroup({ group, items, saveState, onCollect, onAnalyze }) {
         const state = saveState[it.url]
         const failed = state && state !== "saving" && state !== "saved"
         return (
-          <div key={it.url || i} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 0", borderBottom: i < items.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
+          <div key={it.url || i} style={{ ...panelCardStyle, padding: "16px 20px", display: "flex", gap: 12, alignItems: "flex-start" }}>
             {it.rank != null && (
               <span style={{ width: 22, flexShrink: 0, fontSize: 13, color: colors.textMuted, fontVariantNumeric: "tabular-nums", paddingTop: 2 }}>{it.rank}</span>
             )}
-            <a href={it.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, textDecoration: "none" }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>{it.title}</span>
-                {meta && <span style={{ fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{meta}</span>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <a href={it.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: colors.text, lineHeight: 1.45 }}>{it.title}</div>
+                {meta && <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 3 }}>{meta}</div>}
+                {it.summary && <div style={{ fontSize: 13.5, color: colors.textSecondary, marginTop: 6, lineHeight: 1.55 }}>{it.summary}</div>}
+                {failed && <div style={{ fontSize: 12, color: colors.danger, marginTop: 4 }}>收藏失败：{state}</div>}
+              </a>
+              <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+                <button
+                  onClick={() => onAnalyze(it)}
+                  title="新开一个对话，让知行读原文并结合你的情况分析"
+                  style={{ ...buttonStyle, padding: "4px 10px", fontSize: 12.5, color: colors.ink, cursor: "pointer" }}
+                >
+                  问知行
+                </button>
+                <button
+                  onClick={() => onCollect(it)}
+                  disabled={state === "saving" || state === "saved"}
+                  title={state === "saved" ? "已在资料库里" : "收藏进资料库，知行以后能检索到"}
+                  style={{
+                    ...buttonStyle, padding: "4px 10px", fontSize: 12.5,
+                    color: state === "saved" ? colors.ink : colors.textSecondary,
+                    cursor: state === "saving" ? "wait" : state === "saved" ? "default" : "pointer",
+                  }}
+                >
+                  {state === "saving" ? "收藏中…" : state === "saved" ? "已收藏" : "收藏"}
+                </button>
               </div>
-              {it.summary && <div style={{ fontSize: 13.5, color: colors.textSecondary, marginTop: 5, lineHeight: 1.55 }}>{it.summary}</div>}
-              {failed && <div style={{ fontSize: 12, color: colors.danger, marginTop: 4 }}>收藏失败：{state}</div>}
-            </a>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <button
-              onClick={() => onAnalyze(it)}
-              title="新开一个对话，让知行读原文并结合你的情况分析"
-              style={{ ...buttonStyle, padding: "4px 10px", fontSize: 12.5, color: colors.ink, cursor: "pointer" }}
-            >
-              问知行
-            </button>
-            <button
-              onClick={() => onCollect(it)}
-              disabled={state === "saving" || state === "saved"}
-              title={state === "saved" ? "已在资料库里" : "收藏进资料库，知行以后能检索到"}
-              style={{
-                ...buttonStyle, padding: "4px 10px", fontSize: 12.5, flexShrink: 0,
-                color: state === "saved" ? colors.ink : colors.textSecondary,
-                cursor: state === "saving" ? "wait" : state === "saved" ? "default" : "pointer",
-              }}
-            >
-              {state === "saving" ? "收藏中…" : state === "saved" ? "已收藏" : "收藏"}
-            </button>
             </div>
           </div>
         )
       })}
+      </Masonry>
     </div>
   )
 }

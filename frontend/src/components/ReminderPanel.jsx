@@ -137,14 +137,14 @@ function ReminderPanel({ refreshKey }) {
       {dueUnread.length > 0 && (
         <>
           <GroupLabel colors={colors} first>到期未读 · {dueUnread.length}</GroupLabel>
-          {dueUnread.map(r => <ReminderRow key={r.id} r={r} onAcknowledge={acknowledge} onDelete={deleteReminder} />)}
+          <RowGrid>{dueUnread.map(r => <ReminderRow key={r.id} r={r} onAcknowledge={acknowledge} onDelete={deleteReminder} />)}</RowGrid>
         </>
       )}
 
       {upcoming.length > 0 && (
         <>
           <GroupLabel colors={colors} first={dueUnread.length === 0}>待触发 · {upcoming.length}</GroupLabel>
-          {upcoming.map(r => <ReminderRow key={r.id} r={r} onDelete={deleteReminder} />)}
+          <RowGrid>{upcoming.map(r => <ReminderRow key={r.id} r={r} onDelete={deleteReminder} />)}</RowGrid>
         </>
       )}
 
@@ -154,11 +154,16 @@ function ReminderPanel({ refreshKey }) {
             <GroupLabel colors={colors} first={dueUnread.length === 0 && upcoming.length === 0}>已读 · {done.length}</GroupLabel>
             <button onClick={clearDone} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 12, color: colors.textMuted, marginTop: dueUnread.length === 0 && upcoming.length === 0 ? 0 : 10 }}>清空</button>
           </div>
-          {done.map(r => <ReminderRow key={r.id} r={r} onDelete={deleteReminder} />)}
+          <RowGrid>{done.map(r => <ReminderRow key={r.id} r={r} onDelete={deleteReminder} />)}</RowGrid>
         </>
       )}
     </div>
   )
+}
+
+// 提醒条目高度一样，用按行对齐的网格就行：宽的时候一行放几条，不用一条拉满整行
+function RowGrid({ children }) {
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 8 }}>{children}</div>
 }
 
 function GroupLabel({ children, colors, first }) {
@@ -176,7 +181,6 @@ function ReminderRow({ r, onAcknowledge, onDelete }) {
         alignItems: "center",
         gap: 8,
         padding: "12px 14px",
-        marginBottom: 8,
         borderRadius: 10,
         border: `1px solid ${colors.cardBorder}`,
         background: colors.cardBg,

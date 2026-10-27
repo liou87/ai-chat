@@ -3,7 +3,7 @@ import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { PERSONA_NAME } from "../persona"
 import { useElementWidth } from "../hooks"
-import { disabledStyle } from "../theme"
+import { disabledStyle, fontSerif } from "../theme"
 import { formatShort, daysUntil, startOfWeek, isToday } from "../datetime"
 import { PRIORITY_LABEL, PRIORITY_TONE, byPriorityThenDue, formatMinutes, isOverdue } from "../taskMeta"
 import LoadError from "./LoadError"
@@ -12,6 +12,8 @@ import { TaskFormModal } from "./TaskPanel"
 
 // 主区域窄于这个宽度，两列卡片改成单列
 const SINGLE_COLUMN_BELOW = 760
+// 主区域够宽（比如聊天栏收起）时，第一行排三张卡、目标独占一行，不然两侧会空出一大块
+const THREE_COLUMN_AT = 1160
 const KEY_TASK_COUNT = 3
 const WEEKDAYS = "日一二三四五六"
 
@@ -36,6 +38,7 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest,
   const containerRef = useRef(null)
   const width = useElementWidth(containerRef)
   const singleColumn = width > 0 && width < SINGLE_COLUMN_BELOW
+  const threeColumn = width >= THREE_COLUMN_AT
 
   const [data, setData] = useState({ tasks: [], goals: [], reminders: [], journal: [] })
   const [loaded, setLoaded] = useState(false)
@@ -91,13 +94,29 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest,
   const keyTasks = pending.slice(0, KEY_TASK_COUNT)
   const now = new Date()
 
+  // 两种布局里卡片的排列不同，元素本身一样
+  const keyTasksCard = (
+    <KeyTasksCard
+      loaded={loaded}
+      keyTasks={keyTasks}
+      pendingCount={pending.length}
+      doneToday={tasks.filter(t => t.done && isToday(t.updated_at)).length}
+      goals={goals}
+      onToggle={toggleDone}
+      onAdd={() => setAdding(true)}
+      onViewAll={() => onNavigate("tasks")}
+    />
+  )
+  const scheduleCard = <ScheduleCard loaded={loaded} tasks={tasks} reminders={reminders} onToggle={toggleDone} onChanged={fetchAll} onViewAll={() => onNavigate("reminders")} />
+  const weekCard = <WeekCard tasks={tasks} journal={journal} onReview={onRequestWeeklyReview} />
+
   const headline = pending.length === 0
     ? `${greeting()}，今天的待办都清空了。`
     : `${greeting()}，今天先完成最重要的${["", "一", "两", "三"][Math.min(KEY_TASK_COUNT, pending.length)]}件事。`
 
   return (
     <div ref={containerRef} style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", background: colors.pageBg }}>
-      <div style={{ maxWidth: 1080, margin: "0 auto", padding: singleColumn ? "24px 16px 40px" : "32px 32px 48px", boxSizing: "border-box" }}>
+      <div style={{ maxWidth: 1440, margin: "0 auto", padding: singleColumn ? "24px 16px 40px" : "32px 32px 48px", boxSizing: "border-box" }}>
 
         {/* 问候标题 + 右侧倒计时胶囊 */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, marginBottom: 20, flexWrap: "wrap" }}>
@@ -105,7 +124,7 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest,
             <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
               {now.getMonth() + 1}月{now.getDate()}日 · 星期{WEEKDAYS[now.getDay()]}
             </div>
-            <h1 style={{ margin: 0, fontSize: singleColumn ? 24 : 30, fontWeight: 700, letterSpacing: -0.4, lineHeight: 1.3, color: colors.text }}>{headline}</h1>
+            <h1 style={{ margin: 0, fontFamily: fontSerif, fontSize: singleColumn ? 24 : 30, fontWeight: 600, letterSpacing: 0, lineHeight: 1.35, color: colors.text }}>{headline}</h1>
           </div>
           <Countdowns goals={goals} pendingCount={pending.length} />
         </div>
@@ -115,24 +134,27 @@ function WorkbenchPanel({ refreshKey, digest, onRetryDigest, onRegenerateDigest,
         {error && <div style={{ marginBottom: 16 }}><LoadError message={error} onRetry={fetchAll} /></div>}
         {actionError && <div style={{ marginBottom: 16 }}><LoadError message={actionError} /></div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: singleColumn ? "1fr" : "1fr 1fr", gap: 16, marginBottom: 16 }}>
-          <KeyTasksCard
-            loaded={loaded}
-            keyTasks={keyTasks}
-            pendingCount={pending.length}
-            doneToday={tasks.filter(t => t.done && isToday(t.updated_at)).length}
-            goals={goals}
-            onToggle={toggleDone}
-            onAdd={() => setAdding(true)}
-            onViewAll={() => onNavigate("tasks")}
-          />
-          <ScheduleCard loaded={loaded} tasks={tasks} reminders={reminders} onToggle={toggleDone} onChanged={fetchAll} onViewAll={() => onNavigate("reminders")} />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: singleColumn ? "1fr" : "1.6fr 1fr", gap: 16 }}>
-          <GoalsCard loaded={loaded} goals={goals} onOpen={() => onNavigate("goals")} />
-          <WeekCard tasks={tasks} journal={journal} onReview={onRequestWeeklyReview} />
-        </div>
+        {threeColumn ? (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16, marginBottom: 16, alignItems: "start" }}>
+              {keyTasksCard}
+              {scheduleCard}
+              {weekCard}
+            </div>
+            <GoalsCard loaded={loaded} goals={goals} limit={5} onOpen={() => onNavigate("goals")} />
+          </>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: singleColumn ? "1fr" : "1fr 1fr", gap: 16, marginBottom: 16, alignItems: "start" }}>
+              {keyTasksCard}
+              {scheduleCard}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: singleColumn ? "1fr" : "1.6fr 1fr", gap: 16, alignItems: "start" }}>
+              <GoalsCard loaded={loaded} goals={goals} limit={3} onOpen={() => onNavigate("goals")} />
+              {weekCard}
+            </div>
+          </>
+        )}
       </div>
 
       {adding && <TaskFormModal task={null} goals={goals} onSubmit={addTask} onClose={() => setAdding(false)} />}
@@ -177,7 +199,7 @@ function DigestBanner({ digest, onRetry, onRegenerate }) {
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
           {PERSONA_NAME} · 今日建议{generatedAt && ` · ${generatedAt} 生成`}
         </div>
-        <div style={{ fontSize: 14.5, color: colors.text, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: fontSerif, fontSize: 15.5, color: colors.text, lineHeight: 1.6 }}>
           {loading ? "生成中..." : error ? <LoadError message={error} onRetry={onRetry} /> : (data?.content || "今天还没有建议")}
         </div>
       </div>
@@ -426,11 +448,11 @@ function FreeRow({ slot }) {
   )
 }
 
-// 目标与下一里程碑：顶层目标排成一行小卡片（最多三个，不折行，免得把旁边的卡片撑高），点进目标页
-function GoalsCard({ loaded, goals, onOpen }) {
+// 目标与下一里程碑：顶层目标排成一行小卡片（最多 limit 个，不折行，免得把旁边的卡片撑高；独占一行时可以多放几个），点进目标页
+function GoalsCard({ loaded, goals, limit, onOpen }) {
   const { colors } = useTheme()
   const order = { phase: 0, month: 1, week: 2 }
-  const roots = goals.filter(g => g.parent_id == null).sort((a, b) => order[a.tier] - order[b.tier]).slice(0, 3)
+  const roots = goals.filter(g => g.parent_id == null).sort((a, b) => order[a.tier] - order[b.tier]).slice(0, limit)
   return (
     <Card eyebrow="当前阶段" title="目标与下一里程碑" links={[{ label: "规划中心", onClick: onOpen }]}>
       {loaded && roots.length === 0 && <Empty>还没有目标，去「规划中心」建一个</Empty>}
@@ -439,7 +461,7 @@ function GoalsCard({ loaded, goals, onOpen }) {
           <button
             key={g.id}
             onClick={onOpen}
-            style={{ textAlign: "left", fontFamily: "inherit", cursor: "pointer", background: colors.cardBg, border: `1px solid ${colors.cardBorder}`, borderLeft: `3px solid ${colors.ink}`, borderRadius: 6, padding: "12px 14px", display: "flex", flexDirection: "column", minHeight: 150 }}
+            style={{ textAlign: "left", fontFamily: "inherit", cursor: "pointer", background: colors.cardBg, border: `1px solid ${colors.cardBorder}`, borderLeft: `3px solid ${colors.ink}`, borderRadius: 6, padding: "12px 14px", display: "flex", flexDirection: "column", minHeight: 120 }}
           >
             <div style={{ fontSize: 15, fontWeight: 700, color: colors.text, lineHeight: 1.35 }}>{g.title}</div>
             {g.description && (

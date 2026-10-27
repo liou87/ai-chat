@@ -20,7 +20,7 @@ import AssistantAvatar from "./components/AssistantAvatar"
 import { PERSONA_NAME } from "./persona"
 import ReminderBanner from "./components/ReminderBanner"
 import { useTheme } from "./ThemeContext"
-import { moduleAccents, railIconColor } from "./theme"
+import { railIconColor, fontSans, fontSerif } from "./theme"
 import { ModuleIcon } from "./icons"
 import { isSubmitEnter } from "./keyboard"
 import { useConfirm } from "./confirm"
@@ -44,6 +44,7 @@ const TOOL_LABELS = {
   create_task: "新建任务",
   list_tasks: "查看任务",
   complete_task: "完成任务",
+  update_task: "修改任务",
   delete_task: "删除任务",
   save_note: "保存笔记",
   search_notes: "检索知识库",
@@ -57,6 +58,7 @@ const TOOL_LABELS = {
   get_weekly_review: "生成周复盘",
   set_reminder: "设置提醒",
   list_reminders: "查看提醒",
+  update_reminder: "修改提醒",
   cancel_reminder: "取消提醒",
   web_search: "联网搜索",
   get_hot_topics: "查看 AI 热点",
@@ -110,14 +112,14 @@ const INPUT_MAX_HEIGHT = 160
 
 // 图标栏的导航项：总览 + 六个模块，点哪个主区域就切到哪个视图
 const NAV_ITEMS = [
-  { key: "overview", label: "总览", icon: "overview", accent: null },
-  { key: "goals", label: "目标", icon: "goals", accent: moduleAccents.goals },
-  { key: "tasks", label: "任务", icon: "tasks", accent: moduleAccents.tasks },
-  { key: "notes", label: "笔记", icon: "notes", accent: moduleAccents.notes },
-  { key: "library", label: "资料库", icon: "library", accent: moduleAccents.library },
-  { key: "journal", label: "日记", icon: "journal", accent: moduleAccents.journal },
-  { key: "reminders", label: "提醒", icon: "reminders", accent: moduleAccents.reminders },
-  { key: "hotTopics", label: "热点", icon: "hotTopics", accent: moduleAccents.hotTopics },
+  { key: "overview", label: "总览", icon: "overview" },
+  { key: "goals", label: "目标", icon: "goals" },
+  { key: "tasks", label: "任务", icon: "tasks" },
+  { key: "notes", label: "笔记", icon: "notes" },
+  { key: "library", label: "资料库", icon: "library" },
+  { key: "journal", label: "日记", icon: "journal" },
+  { key: "reminders", label: "提醒", icon: "reminders" },
+  { key: "hotTopics", label: "热点", icon: "hotTopics" },
 ]
 
 function App() {
@@ -502,7 +504,7 @@ function App() {
 
   // 单模块页面统一用参考图风格：居中限宽的内容栏、白卡片、墨绿强调色（模块色只留在侧栏）。
   // 任务和目标页标题区右侧的"新增"按钮要打开组件内部的弹窗，所以由组件自己渲染标题区；
-  // 其它几页标题区由 ModulePage 统一画。笔记、日记、提醒、热点偏阅读，内容栏窄一点
+  // 其它几页标题区由 ModulePage 统一画。内容栏都是 1280，条目类页面用瀑布流卡片墙铺开
   const renderMain = () => {
     const ink = colors.ink
     switch (activeView) {
@@ -520,13 +522,13 @@ function App() {
         )
       case "notes":
         return (
-          <ModulePage eyebrow="知识库 · 支持语义搜索" title="笔记" width={860}>
+          <ModulePage eyebrow="知识库 · 支持语义搜索" title="笔记">
             <NotePanel refreshKey={workbenchRefreshKey} category="note" accent={ink} />
           </ModulePage>
         )
       case "journal":
         return (
-          <ModulePage eyebrow="每日复盘 · 周复盘" title="日记" width={860}>
+          <ModulePage eyebrow="每日复盘 · 周复盘" title="日记">
             <NotePanel
               refreshKey={workbenchRefreshKey}
               category="journal"
@@ -537,31 +539,31 @@ function App() {
         )
       case "reminders":
         return (
-          <ModulePage eyebrow="到期后顶部弹出，并发系统通知" title="提醒" width={860}>
+          <ModulePage eyebrow="到期后顶部弹出，并发系统通知" title="提醒">
             <ReminderPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
       case "profile":
         return (
-          <ModulePage width={960}>
+          <ModulePage>
             <ProfilePanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
       case "traces":
         return (
-          <ModulePage width={960}>
+          <ModulePage>
             <TracePanel target={traceTarget} onTargetConsumed={clearTraceTarget} />
           </ModulePage>
         )
       case "library":
         return (
-          <ModulePage width={900}>
+          <ModulePage>
             <LibraryPanel refreshKey={workbenchRefreshKey} />
           </ModulePage>
         )
       case "hotTopics":
         return (
-          <ModulePage eyebrow="AI / agent 领域，每天自动收集一次" title="今日热点" width={860}>
+          <ModulePage eyebrow="AI / agent 领域，每天自动收集一次" title="今日热点">
             <HotTopicsPanel onAnalyze={onAnalyzeTopic} />
           </ModulePage>
         )
@@ -590,7 +592,7 @@ function App() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif", background: colors.pageBg, color: colors.text, userSelect: resizingChat ? "none" : undefined, cursor: resizingChat ? "col-resize" : undefined }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: fontSans, background: colors.pageBg, color: colors.text, userSelect: resizingChat ? "none" : undefined, cursor: resizingChat ? "col-resize" : undefined }}>
       <ReminderBanner refreshKey={workbenchRefreshKey} onChange={() => setWorkbenchRefreshKey(k => k + 1)} />
       {viewingNote && <NoteViewerModal noteId={viewingNote} onClose={() => setViewingNote(null)} />}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
@@ -604,12 +606,12 @@ function App() {
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
-            {!railCompact && <span style={{ fontSize: 14.5, fontWeight: 600, color: "#fff" }}>{PERSONA_NAME}</span>}
+            {!railCompact && <span style={{ fontFamily: fontSerif, fontSize: 14.5, fontWeight: 600, color: "#fff" }}>{PERSONA_NAME}</span>}
           </div>
 
           {NAV_ITEMS.map(item => {
             const active = activeView === item.key
-            const activeColor = item.accent ?? colors.primary
+            const activeColor = colors.railAccent
             return (
               <button
                 key={item.key}
@@ -662,7 +664,7 @@ function App() {
             style={{
               display: "flex", alignItems: "center", justifyContent: railCompact ? "center" : undefined, gap: 10,
               padding: railCompact ? "6px 0" : "6px 10px", marginTop: 4, width: "100%", border: "none", borderRadius: 8, cursor: "pointer",
-              background: activeView === "profile" ? colors.primary + "33" : "transparent",
+              background: activeView === "profile" ? colors.railAccent + "26" : "transparent",
             }}
           >
             <div style={{ width: 26, height: 26, borderRadius: 13, background: colors.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>我</div>
@@ -714,7 +716,7 @@ function App() {
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: "auto" }}>
                   <AssistantAvatar active={loading} size={24} />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{PERSONA_NAME}</span>
+                  <span style={{ fontFamily: fontSerif, fontSize: 14, fontWeight: 600, color: colors.text }}>{PERSONA_NAME}</span>
                 </div>
                 <button onClick={startNewChat} style={iconBtnStyle} title="新对话" aria-label="新对话">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -995,10 +997,10 @@ function RailButton({ label, icon, active, compact, onClick }) {
       style={{
         width: "100%", height: 34, borderRadius: 8, border: "none", cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: compact ? "center" : undefined, gap: 10, padding: compact ? 0 : "0 10px",
-        background: active ? colors.primary + "33" : "transparent",
+        background: active ? colors.railAccent + "26" : "transparent",
       }}
     >
-      <ModuleIcon name={icon} color={active ? "#fff" : railIconColor} size={15} />
+      <ModuleIcon name={icon} color={active ? colors.railAccent : railIconColor} size={15} />
       {!compact && <span style={{ fontSize: 13.5, color: active ? "#fff" : railIconColor }}>{label}</span>}
     </button>
   )

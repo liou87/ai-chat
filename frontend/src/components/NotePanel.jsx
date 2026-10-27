@@ -7,6 +7,7 @@ import { useConfirm } from "../confirm"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import NoteContent from "./NoteContent"
+import { Masonry } from "./ui"
 
 const SEARCH_TOP_K = 5
 
@@ -330,19 +331,19 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
       )}
       {!loading && !error && notes.length === 0 && <div style={{ color: colors.textMuted }}>{activeQuery ? "没有搜到相关内容" : "暂无内容"}</div>}
 
+      <Masonry>
       {notes.map(n => (
         <div
           key={n.id}
           style={{
             padding: "16px 20px",
             background: colors.cardBg,
-            marginBottom: 10,
             borderRadius: 10,
             border: `1px solid ${colors.cardBorder}`,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
               <strong style={{ fontSize: 15.5, color: colors.text }}>{n.title}</strong>
               {n.source === "notion" && (
                 <span style={{
@@ -376,6 +377,7 @@ function NotePanel({ refreshKey, category, onRequestWeeklyReview, accent }) {
           )}
         </div>
       ))}
+      </Masonry>
     </div>
   )
 }

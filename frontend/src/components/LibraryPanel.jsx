@@ -7,7 +7,7 @@ import { isSubmitEnter } from "../keyboard"
 import { formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import NoteViewerModal from "./NoteViewerModal"
-import { PageHeader, Badge, Modal, Field } from "./ui"
+import { PageHeader, Badge, Modal, Field, Masonry } from "./ui"
 
 const SOURCE_LABEL = { hot_topic: "热点收藏", web: "网页", github: "GitHub", pdf: "PDF" }
 const FILTERS = [["all", "全部"], ["hot_topic", "热点收藏"], ["web", "网页"], ["github", "GitHub"], ["pdf", "PDF"]]
@@ -201,7 +201,7 @@ function LibraryPanel({ refreshKey }) {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <Masonry>
         {shown.map(item => (
           <div key={item.id} style={{ ...panelCardStyle, padding: "16px 20px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -222,7 +222,7 @@ function LibraryPanel({ refreshKey }) {
             </div>
           </div>
         ))}
-      </div>
+      </Masonry>
 
       {showLinkModal && <LinkModal busy={!!importing} onSubmit={addLink} onClose={() => setShowLinkModal(false)} />}
       {viewing && <NoteViewerModal noteId={viewing} onClose={() => setViewing(null)} />}

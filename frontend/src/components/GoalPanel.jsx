@@ -5,7 +5,7 @@ import { useConfirm } from "../confirm"
 import { disabledStyle } from "../theme"
 import { isSubmitEnter } from "../keyboard"
 import LoadError from "./LoadError"
-import { PageHeader, Badge, ProgressBar, Modal, Field } from "./ui"
+import { PageHeader, Badge, ProgressBar, Modal, Field, Masonry } from "./ui"
 import { daysUntil, formatShort } from "../datetime"
 
 const TIER_LABEL = { phase: "阶段目标", month: "月目标", week: "周目标" }
@@ -114,11 +114,11 @@ function GoalPanel({ refreshKey }) {
         <div style={{ color: colors.textMuted, fontSize: 14 }}>还没有目标，点右上角「新增目标」开始</div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16, alignItems: "start" }}>
+      <Masonry gap={16}>
         {roots.map(g => (
           <GoalCard key={g.id} goal={g} byParent={byParent} tasksOf={tasksOf} onOpen={setEditing} />
         ))}
-      </div>
+      </Masonry>
 
       {editing && (
         <GoalFormModal

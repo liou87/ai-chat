@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react"
+import { Children, useEffect, useRef } from "react"
 import { useTheme } from "../ThemeContext"
-import { radiusMd } from "../theme"
+import { radiusMd, fontSerif } from "../theme"
 
 // 单模块页面共用的小组件，风格参考"个人成长工作台"：灰色小字眉标 + 大号粗体标题 + 右上角近黑主按钮，
 // 内容放在白卡片里，进度条和标签用墨绿
@@ -12,9 +12,21 @@ export function PageHeader({ eyebrow, title, action }) {
     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
       <div style={{ minWidth: 0 }}>
         {eyebrow && <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>{eyebrow}</div>}
-        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.3, color: colors.text }}>{title}</h1>
+        <h1 style={{ margin: 0, fontFamily: fontSerif, fontSize: 26, fontWeight: 600, letterSpacing: 0, color: colors.text }}>{title}</h1>
       </div>
       {action}
+    </div>
+  )
+}
+
+// 瀑布流卡片墙：按宽度自动分列（每列至少 columnWidth），长短不一的卡片紧密堆叠，不会像按行对齐的网格那样留空洞。
+// 用 CSS 多列实现，顺序是先排满第一列再排第二列；每张卡片 breakInside: avoid，不会被拆到两列
+export function Masonry({ columnWidth = 340, gap = 14, children }) {
+  return (
+    <div style={{ columnWidth, columnGap: gap }}>
+      {Children.toArray(children).map(child => (
+        <div key={child.key} style={{ breakInside: "avoid", marginBottom: gap }}>{child}</div>
+      ))}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { apiFetch } from "../api"
 import { useTheme } from "../ThemeContext"
 import { useConfirm } from "../confirm"
@@ -7,9 +7,14 @@ import { isSubmitEnter } from "../keyboard"
 import { toInputValue, formatShort } from "../datetime"
 import LoadError from "./LoadError"
 import { PageHeader, Badge, Modal, Field, Segmented } from "./ui"
+import { useElementWidth } from "../hooks"
 import { PRIORITY_OPTIONS, PRIORITY_LABEL, PRIORITY_TONE, byPriorityThenDue, formatMinutes, isOverdue } from "../taskMeta"
 
 const TIER_LABEL = { phase: "阶段", month: "月", week: "周" }
+// 列表卡片宽于这个值时，任务行拆成表格列（任务 | 目标 | 计划开始 | 预计 | 截止 | 优先级），宽度用来放信息，
+// 不会出现标题在最左、优先级标签在最右、中间空一大段的情况；窄的时候退回标题 + 一行附加信息
+const TABLE_AT = 720
+const TABLE_COLUMNS = "24px minmax(0, 2.2fr) minmax(0, 1.3fr) 108px 64px 150px 40px"
 // 任务面板：既可以让用户直接在界面上增删改任务，
 // 也会在 agent 通过工具改动任务后（refreshKey 变化）自动刷新，
 // 保证"聊天里说的"和"面板上看到的"始终一致。
@@ -25,6 +30,8 @@ function TaskPanel({ refreshKey }) {
   const [actionError, setActionError] = useState(null)  // 新建/修改/删除失败
   const [editing, setEditing] = useState(null)      // null | "new" | 任务对象
   const [showDone, setShowDone] = useState(false)
+  const listRef = useRef(null)
+  const table = useElementWidth(listRef) >= TABLE_AT
 
   const fetchTasks = async () => {
     setLoading(true)
@@ -88,6 +95,7 @@ function TaskPanel({ refreshKey }) {
       t={t}
       goalTitle={goalTitles[t.goal_id]}
       last={last}
+      table={table}
       onOpen={() => setEditing(t)}
       onToggleDone={() => toggleDone(t)}
     />
@@ -154,7 +162,7 @@ function TaskPanel({ refreshKey }) {
 
       {status}
 
-      <div style={{ ...panelCardStyle, padding: "18px 22px 8px" }}>
+      <div ref={listRef} style={{ ...panelCardStyle, padding: "18px 22px 8px" }}>
         <div style={{ fontSize: 12, color: colors.textMuted }}>优先处理</div>
         <div style={{ fontSize: 17, fontWeight: 700, color: colors.text, margin: "2px 0 6px" }}>待办事项 · {pending.length}</div>
         {!loading && !error && pending.length === 0 && (
@@ -162,6 +170,7 @@ function TaskPanel({ refreshKey }) {
             {tasks.length === 0 ? "还没有任务，点右上角「新增任务」开始" : "全部完成了"}
           </div>
         )}
+        {table && pending.length > 0 && <TableHeader />}
         {pending.map((t, i) => renderRow(t, i === pending.length - 1))}
       </div>
 
@@ -176,9 +185,61 @@ function TaskPanel({ refreshKey }) {
   )
 }
 
-function TaskRow({ t, goalTitle, last, onOpen, onToggleDone }) {
+function TableHeader() {
+  const { colors } = useTheme()
+  const cell = { fontSize: 12, color: colors.textMuted }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: TABLE_COLUMNS, gap: 12, padding: "10px 0 8px", borderBottom: `1px solid ${colors.borderLight}` }}>
+      <span />
+      <span style={cell}>任务</span>
+      <span style={cell}>目标</span>
+      <span style={cell}>计划开始</span>
+      <span style={cell}>预计</span>
+      <span style={cell}>截止</span>
+      <span style={cell}>优先级</span>
+    </div>
+  )
+}
+
+function TaskRow({ t, goalTitle, last, table, onOpen, onToggleDone }) {
   const { colors } = useTheme()
   const overdue = isOverdue(t)
+  const checkbox = (
+    <input
+      type="checkbox"
+      checked={t.done}
+      onChange={onToggleDone}
+      style={{ accentColor: colors.ink, cursor: "pointer", width: 18, height: 18, flexShrink: 0, margin: 0 }}
+      aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
+    />
+  )
+  const titleStyle = {
+    fontSize: 15,
+    fontWeight: 600,
+    color: t.done ? colors.textMuted : colors.text,
+    textDecoration: t.done ? "line-through" : "none",
+  }
+
+  if (table) {
+    // 表格行：整行可点开编辑（复选框除外），每列只放一种信息，延期只把截止那一格标红
+    const cell = { fontSize: 13, color: colors.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: TABLE_COLUMNS, gap: 12, alignItems: "center", padding: "12px 0", borderBottom: last ? "none" : `1px solid ${colors.borderLight}` }}>
+        {checkbox}
+        <button onClick={onOpen} title="点击编辑" style={{ ...titleStyle, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {t.title}
+        </button>
+        <span style={cell} title={goalTitle}>{goalTitle ?? ""}</span>
+        <span style={cell}>{t.planned_start && !t.done ? formatShort(t.planned_start) : ""}</span>
+        <span style={cell}>{t.estimate_minutes ? `${t.estimate_minutes} 分钟` : ""}</span>
+        <span style={{ ...cell, color: overdue ? colors.dangerInk : cell.color }} title={overdue ? "已延期" : undefined}>
+          {t.due_at ? `${formatShort(t.due_at)}${overdue ? " 延期" : ""}` : ""}
+        </span>
+        <span>{!t.done && <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{PRIORITY_LABEL[t.priority] ?? "中"}</Badge>}</span>
+      </div>
+    )
+  }
+
   // 附加信息：所属目标 · 计划开始 · 预计时长 · 截止时间，有什么显示什么
   const meta = [
     goalTitle,
@@ -189,26 +250,13 @@ function TaskRow({ t, goalTitle, last, onOpen, onToggleDone }) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: last ? "none" : `1px solid ${colors.borderLight}` }}>
-      <input
-        type="checkbox"
-        checked={t.done}
-        onChange={onToggleDone}
-        style={{ accentColor: colors.ink, cursor: "pointer", width: 18, height: 18, flexShrink: 0 }}
-        aria-label={t.done ? `标记为未完成：${t.title}` : `完成：${t.title}`}
-      />
+      {checkbox}
       <button
         onClick={onOpen}
         title="点击编辑"
         style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
       >
-        <div style={{
-          fontSize: 15,
-          fontWeight: 600,
-          color: t.done ? colors.textMuted : colors.text,
-          textDecoration: t.done ? "line-through" : "none",
-        }}>
-          {t.title}
-        </div>
+        <div style={titleStyle}>{t.title}</div>
         {meta.length > 0 && (
           <div style={{ fontSize: 12, color: overdue ? colors.dangerInk : colors.textMuted, marginTop: 3 }}>
             {meta.join(" · ")}
