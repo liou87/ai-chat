@@ -347,14 +347,94 @@ cases:
 
   - id: multi_turn_change_reminder_time
     category: 多轮
-    why: 第二轮只说"改成 9 点"，要沿用上一轮的日期和事项
+    why: 第二轮只说"改成 9 点"，要沿用上一轮的日期和事项，而且是改那一条，不能另建一条让 8 点、9 点各响一次
     turns:
       - say: 提醒我明天早上 8 点跑步
       - say: 改成 9 点吧
         expect:
-          - tool: set_reminder
+          - tool: update_reminder
             args:
               remind_at: {datetime: "2026-10-07 09:00"}
+          - no_tool: set_reminder
+          # 种子数据 2 条 + 跑步 1 条
+          - db: {table: reminders, count: 3}
+
+  # ---------- 修改 ----------
+  # 都断言数据库最终状态：只看调没调 update_* 不够，新建一条再不删旧的也会让用户收到两份
+  - id: update_task_reschedule
+    category: 修改
+    say: 简历修改推到下周一下午 6 点
+    expect:
+      - tool: update_task
+        args:
+          task_id: {ref: "task:简历修改"}
+          due_at: {datetime: "2026-10-12 18:00"}
+      - no_tool: create_task
+      - db: {table: tasks, where: {title: 简历修改}, count: 1}
+
+  - id: update_task_priority
+    category: 修改
+    say: 把买牛奶改成高优先级
+    expect:
+      - tool: update_task
+        args:
+          task_id: {ref: "task:买牛奶"}
+          priority: high
+      - db: {table: tasks, where: {title: 买牛奶, priority: high}, exists: true}
+
+  - id: update_task_rename
+    category: 修改
+    say: LangGraph 那个任务改名叫「准备 LangGraph 和 RAG 面试题」
+    expect:
+      - tool: update_task
+        args:
+          task_id: {ref: "task:准备 LangGraph 面试题"}
+      - db: {table: tasks, where: {title: 准备 LangGraph 和 RAG 面试题}, exists: true}
+      - db: {table: tasks, where: {title: 准备 LangGraph 面试题}, exists: false}
+
+  - id: update_task_clear_due
+    category: 修改
+    why: 清空字段要走 clear_fields，不能把任务删了重建
+    say: LangGraph 面试题那个任务不设截止时间了
+    expect:
+      - tool: update_task
+      - no_tool: create_task
+      - db: {table: tasks, where: {title: 准备 LangGraph 面试题, due_at: null}, count: 1}
+
+  - id: update_reminder_time
+    category: 修改
+    why: 只说了几点，要沿用原来的日期（周六）
+    say: 交房租的提醒改到 10 点
+    expect:
+      - tool: update_reminder
+        args:
+          reminder_id: {ref: "reminder:交房租"}
+          remind_at: {datetime: "2026-10-10 10:00"}
+      - no_tool: set_reminder
+      - db: {table: reminders, count: 2}
+
+  - id: update_task_ambiguous
+    category: 修改
+    why: 两个任务都带"简历"，改之前要先问是哪个
+    setup:
+      tasks:
+        - title: 简历投递 Atlassian
+    say: 把简历那个任务推到周五
+    expect:
+      - no_tool: update_task
+      - reply_has: "哪(一)?(个|条)|是指|还是"
+
+  - id: update_reminder_to_past
+    category: 修改
+    why: 现在是早上 10 点，改到今天 8 点已经过了，要先跟用户确认
+    say: 组会提醒改到今天早上 8 点
+    expect:
+      - no_call:
+          tool: update_reminder
+          args:
+            remind_at: {datetime: "2026-10-06 08:00"}
+      - db: {table: reminders, where: {message: 组会, remind_at: 2026-10-07 14:00:00}, exists: true}
+      - reply_has: "已经过|过去|确认|是不是|还是"
 
   # ---------- 热点分析 ----------
   - id: analyze_hot_topic_button
@@ -520,14 +600,16 @@ cases:
 
   - id: multi_turn_correction
     category: 多轮（难）
-    why: 用户纠正日期，要沿用上一轮的时间和事项
+    why: 用户纠正日期，要沿用上一轮的时间和事项，改上一轮那条，不能留着周五那条
     turns:
       - say: 提醒我周五下午 3 点去取快递
       - say: 不对，是周六
         expect:
-          - tool: set_reminder
+          - tool: update_reminder
             args:
               remind_at: {datetime: "2026-10-10 15:00"}
+          - no_tool: set_reminder
+          - db: {table: reminders, count: 3}
 
   # ---------- 效率 ----------
   - id: efficiency_reminder

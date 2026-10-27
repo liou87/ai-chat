@@ -223,7 +223,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 按模块拆在 services/tools/ 目录下几个文件里，每个文件是自己模块的 TOOLS 列表，services/tools/__init__.py 汇总。
 
-任务相关：create_task 建任务（可以选填 goal_id 挂靠某个目标），list_tasks 按状态查任务，complete_task 标记完成，delete_task 删除。
+任务相关：create_task 建任务（可以选填 goal_id 挂靠某个目标），list_tasks 按状态查任务，complete_task 标记完成，update_task 原地修改（改期、优先级、标题、挂靠目标、预计时长，clear_fields 清空某个字段，返回改前改后的值），delete_task 删除。
 
 目标相关：create_goal 建目标，tier 参数是 phase/month/week 三选一，month 和 week 必须指定一个类型对的上级目标，类型不对会报错；list_goals 查询，可以按层级筛选；update_goal_progress 更新某个目标的进度百分比和状态描述。
 
@@ -231,7 +231,7 @@ Notion 同步（services/notes/notion.py）是只读导入：先通过数据库 
 
 日记相关：add_journal_entry 记一条日记，标题会自动生成成"日记 加日期"的格式；用户如果是在做每日复盘，模型会优先用 done/blocker/tomorrow 三个引导字段和 energy/stress/satisfaction/focus 四个 1-5 评分字段分别填，而不是揉进一段自由文本，content 字段只用来放不属于这几个问题的自由记录，两种可以同时给。get_weekly_review 拿近 7 天任务、日记、笔记的聚合数据，本身不生成总结。
 
-提醒相关：set_reminder 设置提醒，list_reminders 查询所有提醒，cancel_reminder 取消。
+提醒相关：set_reminder 设置提醒，list_reminders 查询所有提醒，update_reminder 原地改时间或内容（改到以后的时间会重置已触发状态，改到过去的时间直接报错），cancel_reminder 取消。
 
 搜索：web_search 调用 Tavily 联网搜索，没配置 key 的时候会返回一条错误提示而不是让整个流程崩掉。
 

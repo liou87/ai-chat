@@ -50,6 +50,24 @@ async def acknowledge_reminder(db: AsyncSession, reminder_id: int) -> Optional[d
     return _serialize(r)
 
 
+async def update_reminder(db: AsyncSession, reminder_id: int, message: Optional[str] = None,
+                          remind_at: Optional[datetime] = None) -> Optional[dict]:
+    """原地改时间或内容，id 不变。改到以后的时间就重置 fired/acknowledged，已经响过的提醒到新时间还会再响。"""
+    r = await db.get(Reminder, reminder_id)
+    if r is None:
+        return None
+    if message is not None and message.strip():
+        r.message = message.strip()
+    if remind_at is not None:
+        r.remind_at = clock.to_local(remind_at)
+        if r.remind_at > clock.now():
+            r.fired = False
+            r.acknowledged = False
+    await db.commit()
+    await db.refresh(r)
+    return _serialize(r)
+
+
 async def cancel_reminder(db: AsyncSession, reminder_id: int) -> bool:
     r = await db.get(Reminder, reminder_id)
     if r is None:

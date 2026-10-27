@@ -81,3 +81,39 @@ cases:
           fact_id: {ref: "fact:回答简洁，先给结论再展开"}
       - only_tools: [update_fact]
       - max_llm_calls: 2
+
+  # ---------- 修改 ----------
+  - id: ho_update_task_postpone_relative
+    category: 修改
+    why: 「往后挪两天」要在原截止时间（周五 18:00）上加，不是从今天算
+    say: 简历修改往后挪两天
+    expect:
+      - tool: update_task
+        args:
+          task_id: {ref: "task:简历修改"}
+          due_at: {datetime: "2026-10-11 18:00"}
+      - no_tool: create_task
+      - db: {table: tasks, where: {title: 简历修改}, count: 1}
+
+  - id: ho_update_reminder_earlier
+    category: 修改
+    why: 「提前半小时」在原时间（明天 14:00）上减
+    say: 组会的提醒提前半小时
+    expect:
+      - tool: update_reminder
+        args:
+          reminder_id: {ref: "reminder:组会"}
+          remind_at: {datetime: "2026-10-07 13:30"}
+      - no_tool: set_reminder
+      - db: {table: reminders, count: 2}
+
+  - id: ho_multi_turn_reschedule_new_task
+    category: 修改
+    why: 第二轮改的是上一轮刚建的任务，要改那一条，不能再建一条
+    turns:
+      - say: 加个任务：周四前交周报
+      - say: 算了，改成周五
+        expect:
+          - tool: update_task
+          - no_tool: create_task
+          - db: {table: tasks, where: {title: 交周报}, count: 1}

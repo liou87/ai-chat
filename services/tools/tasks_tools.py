@@ -51,6 +51,37 @@ async def _complete_task(db: AsyncSession, args: dict) -> dict:
     return task
 
 
+# update_task 能改的字段里，哪些可以被清空（标题和优先级不能空）
+CLEARABLE_FIELDS = ("due_at", "planned_start", "goal_id", "estimate_minutes")
+
+
+async def _update_task(db: AsyncSession, args: dict) -> dict:
+    changes = {}
+    for field in ("title", "priority", "estimate_minutes", "goal_id"):
+        if args.get(field) is not None:
+            changes[field] = args[field]
+    # 时间格式不对要报错，不能像 _parse_time 那样当成没填：那样会把原来的截止时间清掉
+    for field in ("due_at", "planned_start"):
+        if args.get(field):
+            try:
+                changes[field] = datetime.fromisoformat(args[field])
+            except ValueError:
+                return {"error": f"{field} 格式不对，需要 ISO 8601，例如 2026-09-20T18:00:00"}
+    for field in args.get("clear_fields") or []:
+        if field in CLEARABLE_FIELDS:
+            changes[field] = None
+    if not changes:
+        return {"error": "没有要改的字段"}
+    task = await db.get(Task, int(args["task_id"]))
+    if task is None:
+        return {"error": f"未找到 id 为 {args['task_id']} 的任务"}
+    # 先序列化旧值：同一个 session 里 service 拿到的是同一个对象，改完就看不到原来的了
+    before = tasks_service._serialize(task)
+    after = await tasks_service.update_task(db, task.id, changes)
+    changed = {k: [before[k], after[k]] for k in changes if before[k] != after[k]}
+    return {"task": after, "changed": changed}
+
+
 async def _delete_task(db: AsyncSession, args: dict) -> dict:
     """不直接删：返回待确认结果，前端弹确认卡片，用户确认后才执行（见 services/confirm.py）"""
     task = await db.get(Task, int(args["task_id"]))
@@ -139,6 +170,38 @@ TOOLS = [
             },
         },
         "handler": _complete_task,
+    },
+    {
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "update_task",
+                "description": "修改已有任务：改截止时间（改期、推迟）、计划开始时间、优先级、标题、挂靠的目标、预计时长。"
+                                "原地修改，不要新建一条再删旧的；只填要改的字段。如果不知道任务 id，先调用 list_tasks 查出来",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "task_id": {"type": "integer", "description": "任务 id"},
+                        "title": {"type": "string", "description": "新标题，用户要改名时才填"},
+                        "due_at": {
+                            "type": "string",
+                            "description": "新的截止时间，ISO 8601，例如 2026-09-20T18:00:00。用户只说了日期没说几点时沿用原来的钟点",
+                        },
+                        "planned_start": {"type": "string", "description": "新的计划开始时间，ISO 8601"},
+                        "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "新的优先级"},
+                        "estimate_minutes": {"type": "integer", "description": "新的预计时长（分钟）"},
+                        "goal_id": {"type": "integer", "description": "改挂到哪个目标下（目标 id）"},
+                        "clear_fields": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": list(CLEARABLE_FIELDS)},
+                            "description": "要清空的字段，比如用户说「不设截止时间了」就填 [\"due_at\"]，「不挂那个目标了」填 [\"goal_id\"]",
+                        },
+                    },
+                    "required": ["task_id"],
+                },
+            },
+        },
+        "handler": _update_task,
     },
     {
         "schema": {
