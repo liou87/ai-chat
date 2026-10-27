@@ -153,7 +153,7 @@ TOOLS = [
             "type": "function",
             "function": {
                 "name": "get_weekly_review",
-                "description": "获取近 7 天的任务完成情况、日记、新增笔记的聚合数据，用于生成周复盘总结",
+                "description": "获取近 7 天的任务完成情况、日记、新增笔记，以及月目标/周目标进度和日记评分周均值的聚合数据，用于生成周复盘总结",
                 "parameters": {"type": "object", "properties": {}},
             },
         },
